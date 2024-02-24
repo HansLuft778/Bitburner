@@ -1,4 +1,4 @@
 /** @param {NS} ns */
 export async function main(ns, hostname) {
-	await ns.hack(hostname)
+    await ns.hack(hostname);
 }
