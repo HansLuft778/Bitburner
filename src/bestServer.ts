@@ -74,7 +74,7 @@ export function getBestServer(ns: NS): string {
     return servers[0].name;
 }
 
-export function getBestServerListCheap(ns: NS): Server[] {
+export function getBestServerListCheap(ns: NS, shouldPrint: boolean): Server[] {
     const serverList = serverScanner(ns);
 
     const servers: Server[] = [];
@@ -101,16 +101,9 @@ export function getBestServerListCheap(ns: NS): Server[] {
         return (b.score || 0) - (a.score || 0);
     });
 
-    return servers;
-}
+    if (shouldPrint) printTable(ns, servers);
 
-function sliceIntoChunks(arr: any[], chunkSize: number) {
-    const res = [];
-    for (let i = 0; i < arr.length; i += chunkSize) {
-        const chunk = arr.slice(i, i + chunkSize);
-        res.push(chunk);
-    }
-    return res;
+    return servers;
 }
 
 export function printTable(ns: NS, array: Server[]) {

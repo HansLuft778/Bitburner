@@ -1,11 +1,11 @@
-/** @param {NS} ns */
-export async function main(ns) {
+import { NS } from "@ns";
+
+export async function main(ns: NS) {
     ns.tail();
     await hackServer(ns, "foodnstuff", "hacker", 0.8);
 }
 
-/** @param {NS} ns */
-export async function hackServer(ns, target, host, threshold) {
+export async function hackServer(ns: NS, target: string, host: string, threshold: number) {
     const safetyMarginMs = 200;
 
     const serverMaxMoney = ns.getServerMaxMoney(target);

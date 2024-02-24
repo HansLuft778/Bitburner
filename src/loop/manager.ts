@@ -25,11 +25,12 @@ export async function main(ns: NS) {
     // steps: WGWH-WGWH-..
     while (true) {
         // find the server with the most available money
-        const target: string = getBestServerListCheap(ns)[0].name;
+        const target: string = getBestServerListCheap(ns, true)[0].name;
         ns.print("target: " + target);
 
         if (lastTarget != target) {
             nukeAll(ns);
+            ns.print("found new best Server: " + target);
         }
         lastTarget = target;
 
@@ -46,62 +47,6 @@ export async function main(ns: NS) {
         await hackServer(ns, target, "foodnstuff", 0.5);
     }
 }
-
-function openPorts(ns: NS, target: string) {
-    if (ns.fileExists("BruteSSH.exe")) ns.brutessh(target);
-    if (ns.fileExists("FTPCrack.exe")) ns.ftpcrack(target);
-    if (ns.fileExists("HTTPWorm.exe")) ns.httpworm(target);
-    if (ns.fileExists("SQLInject.exe")) ns.sqlinject(target);
-}
-
-// function nukeAll(ns: NS, hosts: string[]) {
-//     for (let i = 0; i < hosts.length; i++) {
-//         // check if the host is hackable
-//         if (
-//             ns.getServerNumPortsRequired(hosts[i]) <= getNumHacks(ns) &&
-//             ns.getServerRequiredHackingLevel(hosts[i]) <= ns.getHackingLevel()
-//         ) {
-//             ns.print(cyan + "------------" + hosts[i] + "------------" + reset);
-
-//             openPorts(ns, hosts[i]);
-//             ns.nuke(hosts[i]);
-
-//             // copy all scripts to the server
-//             ns.scp("/src/loop/hack.js", hosts[i]);
-//             ns.scp("/src/loop/grow.js", hosts[i]);
-//             ns.scp("/src/loop/weaken.js", hosts[i]);
-
-//             const serverGrowTime = ns.getGrowTime(hosts[i]);
-//             const serverHackTime = ns.getHackTime(hosts[i]);
-//             const serverWeakTime = ns.getWeakenTime(hosts[i]);
-
-//             ns.print(
-//                 "hack-time: " + serverHackTime + " grow-time: " + serverGrowTime + " weaken-time: " + serverWeakTime,
-//             );
-
-//             // grow
-//             const serverMaxMoney = ns.getServerMaxMoney(hosts[i]);
-//             const serverCurMoney = ns.getServerMoneyAvailable(hosts[i]);
-//             let serverMoneyMultiplier = serverMaxMoney / serverCurMoney;
-//             if (isNaN(serverMoneyMultiplier)) serverMoneyMultiplier = 1;
-
-//             const serverGrowThreads = ns.growthAnalyze(hosts[i], serverMoneyMultiplier);
-
-//             ns.print("max Money: " + serverMaxMoney + " current Money: " + serverCurMoney);
-//             ns.print("mult: " + serverMoneyMultiplier + " grow threads: " + serverGrowThreads);
-
-//             // weaken
-//             const serverSecLvl = ns.getServerSecurityLevel(hosts[i]);
-//             const serverWeakenThreads = (serverSecLvl - ns.getServerMinSecurityLevel(hosts[i])) / 0.05;
-//             const serverWeakenEffect = ns.weakenAnalyze(serverWeakenThreads);
-
-//             ns.print("min sec: " + ns.getServerMinSecurityLevel(hosts[i]) + " cur sec lvl: " + serverSecLvl);
-//             ns.print("weaken threads: " + serverWeakenThreads + " weaken effect: " + serverWeakenEffect);
-//         } else {
-//             continue;
-//         }
-//     }
-// }
 
 /**
  notes:

@@ -1,4 +1,6 @@
 import { NS } from "@ns";
+import { HostsManager } from "../HostsManager";
+
 
 export async function main(ns: NS) {
     ns.tail();
@@ -20,6 +22,9 @@ export async function weakenServer(ns: NS, target: string, host: string) {
             " weaken threads: " +
             serverWeakenThreads /*+ " effect: " + serverWeakenEffect*/,
     );
+
+    const hosts: string[] = ["foodnstuff", "sigma-cosmetics"]
+    const mngr = new HostsManager(ns);
 
     // exec weaken.js with num of threads
     const weakenRam = 1.75;

@@ -61,7 +61,7 @@ export function openPorts(ns: NS, target: string) {
     if (ns.fileExists("SQLInject.exe")) ns.sqlinject(target);
 }
 
-export function getTimeH(timestamp: number) {
+export function getTimeH(timestamp?: number) {
     if (timestamp == undefined || timestamp == null) timestamp = Date.now();
 
     const date = new Date(timestamp);

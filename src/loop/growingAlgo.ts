@@ -1,11 +1,11 @@
-/** @param {NS} ns */
-export async function main(ns) {
+import { NS } from "@ns";
+
+export async function main(ns: NS) {
     ns.tail();
     await growServer(ns, "foodnstuff", "hacker");
 }
 
-/** @param {NS} ns */
-export async function growServer(ns, target, host) {
+export async function growServer(ns: NS, target: string, host: string) {
     ns.print(target + " " + host);
 
     const safetyMarginMs = 200;
