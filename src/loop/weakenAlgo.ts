@@ -1,17 +1,16 @@
-/** @param {NS} ns */
-export async function main(ns) {
+import { NS } from "@ns";
+
+export async function main(ns: NS) {
     ns.tail();
     await weakenServer(ns, "foodnstuff", "hacker");
 }
 
-/** @param {NS} ns */
-export async function weakenServer(ns, target, host) {
+export async function weakenServer(ns: NS, target: string, host: string) {
     const safetyMarginMs = 200;
 
     // weaken
     const serverSecLvl = ns.getServerSecurityLevel(target);
     const serverWeakenThreads = Math.ceil((serverSecLvl - ns.getServerMinSecurityLevel(target)) / 0.05);
-    //const serverWeakenEffect = ns.weakenAnalyze(serverWeakenThreads) //todo: debug, remove in prod
 
     ns.print(
         "min sec: " +
@@ -28,13 +27,13 @@ export async function weakenServer(ns, target, host) {
     const freeRam = maxRam - ns.getServerUsedRam(host);
 
     const threadSpace = Math.floor(freeRam / weakenRam);
-    ns.print("freeRam:" + freeRam + " maxRam: " + maxRam + " threadSpace " + threadSpace);
+    ns.print("freeRam: " + freeRam + " maxRam: " + maxRam + " threadSpace " + threadSpace);
 
-    const happen = serverWeakenThreads / threadSpace;
-    ns.print("will weaken in " + happen + " steps");
+    const weakenThreadsPerRun = serverWeakenThreads / threadSpace;
+    ns.print("will weaken in " + weakenThreadsPerRun + " steps");
 
     let howMany = 0;
-    for (let i = 0; i < Math.floor(happen); i++) {
+    for (let i = 0; i < Math.floor(weakenThreadsPerRun); i++) {
         const weakenTime = ns.getWeakenTime(target);
         ns.exec("weaken.js", host, threadSpace, target);
         await ns.sleep(weakenTime + safetyMarginMs);

@@ -1,12 +1,12 @@
 import { NS } from "@ns";
 
-import { serverScanner, isHackable } from "/src/lib.js";
+import { serverScanner, isHackable } from "./lib.js";
 
 interface Server {
     name: string;
-    maxMoney: number;
-    hackingChance: number;
-    weakeningTime: number;
+    maxMoney?: number;
+    hackingChance?: number;
+    weakeningTime?: number;
     score: number;
 }
 
@@ -30,10 +30,8 @@ export function getBestServerList(ns: NS, shouldPrint: boolean) {
             const hackingChance = ns.hackAnalyzeChance(serverList[i]);
             const weakeningTime = ns.getWeakenTime(serverList[i]);
 
-            // filter server if it has no money or the hacking level is above 2/3 of the players hacking level
-            if (maxMoney < 1 || ns.getServerRequiredHackingLevel(serverList[i]) > ns.getHackingLevel()) {
-                continue;
-            }
+            // filter server with no money or the hacking level above players hacking level
+            if (maxMoney < 1 || ns.getServerRequiredHackingLevel(serverList[i]) > ns.getHackingLevel()) continue;
 
             // const score = (maxMoney / (weakeningTime + 3)) * hackingChance * (1 / weakeningTime)
             // const score = ns.formatNumber(((maxMoney / (weakeningTime)) * hackingChance) / 1000)
@@ -60,56 +58,50 @@ export function getBestServerList(ns: NS, shouldPrint: boolean) {
 
             servers.push(server);
         }
-
-        servers.sort((a, b) => {
-            return b.score - a.score;
-        });
     }
+
+    servers.sort((a, b) => {
+        return (b.score || 0) - (a.score || 0);
+    });
 
     if (shouldPrint) printTable(ns, servers);
 
     return servers;
 }
 
-export function getBestServer(ns: NS) {
+export function getBestServer(ns: NS): string {
     const servers = getBestServerList(ns, false);
     return servers[0].name;
 }
 
-export function findBestServer(ns: NS) {
-    // for now only finds the server with the highest max money, this is not optimal
+export function getBestServerListCheap(ns: NS): Server[] {
     const serverList = serverScanner(ns);
 
-    let maxMoney = 0;
-    const topTen: string[] = [];
-    const stats: number[] = [];
+    const servers: Server[] = [];
 
-    serverList.forEach((server) => {
-        if (isHackable(ns, server)) {
-            const serverMaxMoney = ns.getServerMaxMoney(server);
-            const hackTime = ns.getHackTime(server);
-            const growTime = ns.getGrowTime(server);
-            const weakenTime = ns.getWeakenTime(server);
+    for (let i = 0; i < serverList.length; i++) {
+        const serverName = serverList[i];
+        if (!isHackable(ns, serverName)) continue;
 
-            if (serverMaxMoney > maxMoney) {
-                maxMoney = serverMaxMoney;
-                topTen.push(server);
+        const maxMoney = ns.getServerMaxMoney(serverName);
 
-                stats.push(serverMaxMoney);
-                stats.push(hackTime);
-                stats.push(growTime);
-                stats.push(weakenTime);
+        // filter server with no money or the hacking level above players hacking level
+        if (maxMoney < 1 || ns.getServerRequiredHackingLevel(serverList[i]) > ns.getHackingLevel()) continue;
 
-                if (topTen.length > 10) {
-                    topTen.shift();
-                    stats.splice(0, 4);
-                }
-            }
-        }
+        let score = maxMoney / ns.getServerMinSecurityLevel(serverName) / 1000000;
+
+        const server: Server = {
+            name: serverName,
+            score: score,
+        };
+        servers.push(server);
+    }
+
+    servers.sort((a, b) => {
+        return (b.score || 0) - (a.score || 0);
     });
-    const statSplit = sliceIntoChunks(stats, 4);
 
-    return [topTen, statSplit];
+    return servers;
 }
 
 function sliceIntoChunks(arr: any[], chunkSize: number) {
@@ -121,31 +113,53 @@ function sliceIntoChunks(arr: any[], chunkSize: number) {
     return res;
 }
 
-// with of the cell content
-const colLen = [19, 10, 7, 10, 8];
+export function printTable(ns: NS, array: Server[]) {
+    // sanity check + number formatting
+    interface TableServer {
+        name: string;
+        maxMoney: string;
+        hackingChance: string;
+        weakeningTime: string;
+        score: string;
+    }
+    const tableArray: TableServer[] = [];
 
-export function printTable(ns: NS, array: any[]) {
+    for (let i = 0; i < array.length; i++) {
+        if (array[i].maxMoney === undefined) array[i].maxMoney = 0;
+        if (array[i].hackingChance === undefined) array[i].hackingChance = 0;
+        if (array[i].weakeningTime === undefined) array[i].weakeningTime = 0;
+
+        const server: TableServer = {
+            name: array[i].name,
+            maxMoney: ns.formatNumber(Number(array[i].maxMoney)),
+            hackingChance: ns.formatNumber(Number(array[i].hackingChance)),
+            weakeningTime: ns.formatNumber(Number(array[i].weakeningTime) / 1000), //ns.formatNumber(Number(array[i].weakeningTime), 4),
+            score: ns.formatNumber(Number(array[i].score)),
+        };
+        tableArray.push(server);
+    }
+
     ns.print("╔════════════════════╦═══════════╦════════╦═══════════╦═════════╗");
     ns.print("║       server       ║   Max $   ║ chance ║ Weak time ║  score  ║");
     ns.print("╠════════════════════╬═══════════╬════════╬═══════════╬═════════╣");
     // polluting table with data
-    for (let i = 0; i < array.length; i++) {
+    for (let i = 0; i < tableArray.length; i++) {
         ns.print(
             "║ " +
-                array[i][0] +
-                space(array[i][0].length, 0) +
+                tableArray[i].name +
+                space(tableArray[i].name.length, 0) +
                 "║ " +
-                array[i][1] +
-                space(array[i][1].length, 1) +
+                tableArray[i].maxMoney +
+                space(tableArray[i].maxMoney.length, 1) +
                 "║ " +
-                array[i][2] +
-                space(array[i][2].length, 2) +
+                tableArray[i].hackingChance +
+                space(tableArray[i].hackingChance.length, 2) +
                 "║ " +
-                array[i][3] +
-                space(array[i][3].length, 3) +
+                tableArray[i].weakeningTime +
+                space(tableArray[i].weakeningTime.length, 3) +
                 "║ " +
-                array[i][4] +
-                space(array[i][4].length, 4) +
+                tableArray[i].score +
+                space(tableArray[i].score.length, 4) +
                 "║",
         );
     }
@@ -154,6 +168,8 @@ export function printTable(ns: NS, array: any[]) {
 }
 
 function space(len: number, colIndex: number) {
+    // with of the cell content
+    const colLen = [19, 10, 7, 10, 8];
     const real = colLen[colIndex] - len;
     let str = "";
     for (let i = 0; i < real; i++) {

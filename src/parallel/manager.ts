@@ -1,6 +1,6 @@
 import { NS } from "@ns";
 
-import { nukeAll, getTimeH } from "/src/lib.js";
+import { nukeAll, getTimeH } from "../lib.js";
 import { getBestServer } from "../bestServer.js";
 import { weakenServer } from "./weakenAlgo.js";
 import { growServer } from "./growingAlgo.js";
