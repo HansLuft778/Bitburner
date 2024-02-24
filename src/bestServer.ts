@@ -2,11 +2,12 @@ import { NS } from "@ns";
 
 import { serverScanner, isHackable } from "./lib.js";
 
-interface Server {
+export interface Server {
     name: string;
     maxMoney?: number;
     hackingChance?: number;
     weakeningTime?: number;
+    maxRam: number;
     score: number;
 }
 
@@ -29,6 +30,7 @@ export function getBestServerList(ns: NS, shouldPrint: boolean) {
             const maxMoney = ns.getServerMaxMoney(serverList[i]);
             const hackingChance = ns.hackAnalyzeChance(serverList[i]);
             const weakeningTime = ns.getWeakenTime(serverList[i]);
+            const maxRam = ns.getServerMaxRam(serverList[i]);
 
             // filter server with no money or the hacking level above players hacking level
             if (maxMoney < 1 || ns.getServerRequiredHackingLevel(serverList[i]) > ns.getHackingLevel()) continue;
@@ -53,6 +55,7 @@ export function getBestServerList(ns: NS, shouldPrint: boolean) {
                 maxMoney: maxMoney,
                 hackingChance: hackingChance,
                 weakeningTime: weakeningTime,
+                maxRam: maxRam,
                 score: score,
             };
 
@@ -84,6 +87,7 @@ export function getBestServerListCheap(ns: NS, shouldPrint: boolean): Server[] {
         if (!isHackable(ns, serverName)) continue;
 
         const maxMoney = ns.getServerMaxMoney(serverName);
+        const maxRam = ns.getServerMaxRam(serverName);
 
         // filter server with no money or the hacking level above players hacking level
         if (maxMoney < 1 || ns.getServerRequiredHackingLevel(serverList[i]) > ns.getHackingLevel()) continue;
@@ -92,6 +96,8 @@ export function getBestServerListCheap(ns: NS, shouldPrint: boolean): Server[] {
 
         const server: Server = {
             name: serverName,
+            maxMoney: maxMoney,
+            maxRam: maxRam,
             score: score,
         };
         servers.push(server);

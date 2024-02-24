@@ -25,7 +25,7 @@ export async function main(ns: NS) {
     // steps: WGWH-WGWH-..
     while (true) {
         // find the server with the most available money
-        const target: string = getBestServerListCheap(ns, true)[0].name;
+        let target: string = getBestServerListCheap(ns, true)[0].name;
         ns.print("target: " + target);
 
         if (lastTarget != target) {
@@ -34,17 +34,20 @@ export async function main(ns: NS) {
         }
         lastTarget = target;
 
+        // Debug
+        target = "n00dles";
+
         ns.print(cyan + "------------ WEAKENING ------------" + reset);
-        await weakenServer(ns, target, "foodnstuff");
+        await weakenServer(ns, target);
 
         ns.print(cyan + "------------- GROWING -------------" + reset);
-        await growServer(ns, target, "foodnstuff");
+        await growServer(ns, target);
 
         ns.print(cyan + "------------ WEAKENING ------------" + reset);
-        await weakenServer(ns, target, "foodnstuff");
+        await weakenServer(ns, target);
 
         ns.print(cyan + "------------- HACKING -------------" + reset);
-        await hackServer(ns, target, "foodnstuff", 0.5);
+        await hackServer(ns, target, 0.8);
     }
 }
 
