@@ -52,7 +52,7 @@ export function nukeAll(ns: NS) {
     const hosts = serverScanner(ns);
     for (let i = 0; i < hosts.length; i++) {
         // check if the host is hackable
-        if (isHackable(ns, hosts[i])) {
+        if (isHackable(ns, hosts[i]) || ns.getPurchasedServers().includes(hosts[i])) {
             openPorts(ns, hosts[i]);
             ns.nuke(hosts[i]);
 
@@ -120,7 +120,7 @@ export function getWeakenThreadsEff2(ns: NS, server: string) {
 
 export function getHackThreads(ns: NS, server: string, moneyHackThreshold: number) {
     const serverMaxMoney = ns.getServerMaxMoney(server);
-    const lowerMoneyBound = serverMaxMoney * moneyHackThreshold;
+    const lowerMoneyBound = serverMaxMoney * (1 - moneyHackThreshold);
     const hackAmount = serverMaxMoney - lowerMoneyBound;
     const serverHackThreads = Math.ceil(ns.hackAnalyzeThreads(server, hackAmount));
 
@@ -131,7 +131,7 @@ export async function main(ns: NS) {
     ns.tail();
     ns.disableLog("ALL");
 
-    const server = "foodnstuff";
+    const server = "silver-helix";
     ns.print(getWeakenThreadsEff(ns, server) + " weakens needed");
     ns.print(getGrowThreads(ns, server) + " grows needed");
     ns.print(getHackThreads(ns, server, 0.9) + " hacks needed");
