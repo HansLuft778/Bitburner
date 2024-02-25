@@ -32,13 +32,13 @@ export async function main(ns: NS) {
 
     // steps: WGWH-WGWH-..
     while (true) {
-        await parallelManager(ns);
+        await parallelCycle(ns);
     }
 }
 
-export async function parallelManager(ns: NS) {
+export async function parallelCycle(ns: NS) {
     // find the server with the most available money
-    const target = getBestServer(ns);
+    let target = getBestServer(ns);
 
     if (lastTarget != target) {
         nukeAll(ns);
@@ -48,7 +48,7 @@ export async function parallelManager(ns: NS) {
     lastTarget = target;
 
     // debug
-    // target = "max-hardware"
+    target = "phantasy"
 
     // get execution times:
     const weakTime = ns.getWeakenTime(target);
