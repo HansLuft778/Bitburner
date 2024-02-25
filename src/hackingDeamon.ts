@@ -1,64 +1,69 @@
 import { NS } from "@ns";
 import { getBestHostByRam, getBestServerListCheap } from "./bestServer";
-import { parallelManager } from "./parallel/manager";
+import { parallelCycle } from "./parallel/manager";
+import { loopCycle } from "./loop/manager";
+import { getGrowThreads, getHackThreads, getWeakenThreads } from "./lib";
+
+const MONEY_HACK_THRESHOLD = 0.8;
+const RAM_WEAKEN = 1.75;
+const RAM_GROW = 1.75;
+const RAM_HACK = 1.7;
 
 export async function main(ns: NS) {
     ns.tail();
     ns.disableLog("ALL");
     // either start loop or parrallelize, depending on the number of servers and money the player hass
 
-    let servers = getBestServerListCheap(ns, false);
+    // ----------------- PREPARE SERVER -----------------
 
-    let target = servers[0].name;
-    // is server WGH-onehit use parallel
+    // TODO: find if prep is needed
+    // await loopCycle(ns);
 
-    // grow
-    const serverMaxMoney = ns.getServerMaxMoney(target);
-    const serverCurrentMoney = ns.getServerMoneyAvailable(target);
-    let moneyMult = serverMaxMoney / serverCurrentMoney;
-    if (isNaN(moneyMult) || moneyMult == Infinity) moneyMult = 1;
-    const growThreads = Math.ceil(ns.growthAnalyze(target, moneyMult));
+    // ----------------- CHECK WHICH MODE TO USE -----------------
 
-    // weak
-    const secIncrease = ns.growthAnalyzeSecurity(growThreads, target);
-    const serverWeakenThreads = Math.ceil(secIncrease / 0.05);
+    let target = getBestServerListCheap(ns, false)[0].name;
 
-    // hack
-    const lowerMoneyBound = serverMaxMoney * 0.8;
-    const hackAmount = serverMaxMoney - lowerMoneyBound;
-    const targetHackThreads = Math.ceil(ns.hackAnalyzeThreads(target, hackAmount));
+    // now we have to find out wether to keep using loop or switch to parallel mode this should be decided dynamicallys
 
-    const weakRamNeeded = 1.75 * serverWeakenThreads;
-    const growRamNeeded = 1.75 * growThreads;
-    const hackRamNeeded = 1.7 * targetHackThreads;
-    const totalRamNeeded = weakRamNeeded + growRamNeeded + hackRamNeeded;
-
-    let optimalHost = getBestHostByRam(ns);
-    let totalMaxRam = optimalHost.reduce((acc, server) => {
+    const allHosts = getBestHostByRam(ns);
+    const totalMaxRam = allHosts.reduce((acc, server) => {
         return acc + server.maxRam;
     }, 0);
 
-    if (totalMaxRam > totalRamNeeded) {
-        // lauch parallel
-        ns.print("totalMaxRam > totalRamNeeded");
-    }
+    // i have to find out, how many threads of each i need, after
 
-    // check if the player has enough money to buy a server to use parallel
-    const powerOfTwo = Math.ceil(Math.log2(totalMaxRam));
-    let money = ns.getPurchasedServerCost(powerOfTwo);
-    if (money < ns.getPlayer().money) {
-        // ns.purchaseServer("aws", powerOfTwo);
-        ns.print("bought server");
-        // lauch parallel
-    }
+    // how many to weak from current sec lvl to min
+    const firstWeakenThreads = getWeakenThreads(ns, target);
 
-    // lauch loop
-    ns.print("lauch loop");
+    // how many threads i need to grow the server from (1 - Threshold) to 1
+    const maxMoney = ns.getServerMaxMoney(target);
+    const minMoney = maxMoney * (1 - MONEY_HACK_THRESHOLD);
+    const moneyMult = maxMoney / minMoney;
+    const serverGrowThreads = Math.ceil(ns.growthAnalyze(target, moneyMult));
+
+    // how many threads i need to weaken security to 0 after growings
+
+    const secIncrease = ns.growthAnalyzeSecurity(serverGrowThreads, target);
+    const secondWeakenThreads = Math.ceil(secIncrease / ns.weakenAnalyze(1));
+
+    // how many threads i need to hack the server
+    const hackAmount = ns.getServerMaxMoney(target) * MONEY_HACK_THRESHOLD;
+    const serverHackThreads = Math.ceil(ns.hackAnalyzeThreads(target, hackAmount));
+
+    // this var describes the total amount of threads i need to run parallel mode
+    const sumThreads = firstWeakenThreads + serverGrowThreads + secondWeakenThreads + serverHackThreads;
+
+    ns.print(sumThreads + " threads needed");
+    if (sumThreads < totalMaxRam) {
+        ns.print("sumThreads < totalMaxRam");
+        // launchParallel(ns);
+    }
+    ns.print("sumThreads > totalMaxRam");
 }
 
 function launchParallel(ns: NS) {
     while (true) {
-        parallelManager(ns);
+        parallelCycle(ns);
     }
 }
 
