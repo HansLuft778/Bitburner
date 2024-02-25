@@ -1,15 +1,5 @@
 import { NS } from "@ns";
-
-// Text color
-const reset = "\x1b[0m";
-const black = "\x1b[30m";
-const red = "\x1b[31m";
-const green = "\x1b[32m";
-const yellow = "\x1b[33m";
-const blue = "\x1b[34m";
-const magenta = "\x1b[35m";
-const cyan = "\x1b[36m";
-const white = "\x1b[37m";
+import { Colors } from "./lib";
 
 let maxMoney = 0;
 let curMoney = 0;
@@ -39,7 +29,7 @@ export async function main(ns: NS) {
 export function printServerStats(ns: NS, server: string, hackThreshold: number) {
     setStats(ns, server, hackThreshold);
 
-    ns.print(cyan + headerString + reset);
+    ns.print(Colors.cyan + headerString + Colors.reset);
 
     ns.print("Money:");
     ns.print("\tMax Money: " + ns.formatNumber(maxMoney) + " | Current Money: " + ns.formatNumber(curMoney));
@@ -60,7 +50,7 @@ export function printServerStats(ns: NS, server: string, hackThreshold: number) 
         "\tHack Threads: " + ns.formatNumber(hackThreads) + " | Hack percent: " + ns.formatNumber(hackingPercent, 5),
     );
 
-    ns.print(cyan + footerString + reset);
+    ns.print(Colors.cyan + footerString + Colors.reset);
 }
 
 export function printServerStatsConsole(ns: NS, server: string) {
@@ -71,7 +61,7 @@ async function printServerStatsLive(ns: NS, server: string, hackThreshold: numbe
     while (true) {
         setStats(ns, server, hackThreshold);
 
-        ns.print(cyan + headerString + reset);
+        ns.print(Colors.cyan + headerString + Colors.reset);
 
         ns.print("Money:");
         ns.print("\tMax Money: " + ns.formatNumber(maxMoney) + " | Current Money: " + ns.formatNumber(curMoney));
@@ -95,7 +85,7 @@ async function printServerStatsLive(ns: NS, server: string, hackThreshold: numbe
                 ns.formatNumber(hackingPercent, 5),
         );
 
-        ns.print(cyan + footerString + reset);
+        ns.print(Colors.cyan + footerString + Colors.reset);
         await ns.sleep(200);
         ns.clearLog();
     }
