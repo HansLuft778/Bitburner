@@ -1,5 +1,17 @@
 import { NS } from "@ns";
 
+export enum Colors {
+    reset = "\x1b[0m",
+    black = "\x1b[30m",
+    red = "\x1b[31m",
+    green = "\x1b[32m",
+    yellow = "\x1b[33m",
+    blue = "\x1b[34m",
+    magenta = "\x1b[35m",
+    cyan = "\x1b[36m",
+    white = "\x1b[37m",
+}
+
 export function serverScanner(ns: NS) {
     let uncheckedHosts = ["home"];
     let checkedHosts = [];
@@ -72,4 +84,55 @@ export function getTimeH(timestamp?: number) {
     const milliseconds = date.getUTCMilliseconds().toString().padStart(3, "0");
     const formattedTime = `${hours}:${minutes}:${seconds}:${milliseconds}`;
     return formattedTime;
+}
+
+export function getGrowThreads(ns: NS, server: string) {
+    const serverMaxMoney = ns.getServerMaxMoney(server);
+    const serverCurrentMoney = ns.getServerMoneyAvailable(server);
+    let moneyMult = serverMaxMoney / serverCurrentMoney;
+    if (isNaN(moneyMult) || moneyMult == Infinity) moneyMult = 1;
+    const serverGrowThreads = Math.ceil(ns.growthAnalyze(server, moneyMult));
+
+    return serverGrowThreads;
+}
+
+export function getWeakenThreads(ns: NS, server: string) {
+    const growThreads = getGrowThreads(ns, server);
+    const secIncrease = ns.growthAnalyzeSecurity(growThreads, server);
+    const serverWeakenThreads = Math.ceil(secIncrease / 0.05);
+
+    return serverWeakenThreads;
+}
+
+export function getWeakenThreadsEff(ns: NS, server: string) {
+    const serverSecLvl = ns.getServerSecurityLevel(server);
+    const serverWeakenThreads = Math.ceil((serverSecLvl - ns.getServerMinSecurityLevel(server)) / 0.05);
+
+    return serverWeakenThreads;
+}
+
+export function getWeakenThreadsEff2(ns: NS, server: string) {
+    const serverSecLvl = ns.getServerSecurityLevel(server);
+    const serverWeakenThreads = Math.ceil((serverSecLvl - ns.getServerMinSecurityLevel(server)) / ns.weakenAnalyze(1));
+
+    return serverWeakenThreads;
+}
+
+export function getHackThreads(ns: NS, server: string, moneyHackThreshold: number) {
+    const serverMaxMoney = ns.getServerMaxMoney(server);
+    const lowerMoneyBound = serverMaxMoney * moneyHackThreshold;
+    const hackAmount = serverMaxMoney - lowerMoneyBound;
+    const serverHackThreads = Math.ceil(ns.hackAnalyzeThreads(server, hackAmount));
+
+    return serverHackThreads;
+}
+
+export async function main(ns: NS) {
+    ns.tail();
+    ns.disableLog("ALL");
+
+    const server = "foodnstuff";
+    ns.print(getWeakenThreadsEff(ns, server) + " weakens needed");
+    ns.print(getGrowThreads(ns, server) + " grows needed");
+    ns.print(getHackThreads(ns, server, 0.9) + " hacks needed");
 }
