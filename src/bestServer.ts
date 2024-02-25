@@ -88,6 +88,18 @@ export function getBestHostByRam(ns: NS): Server[] {
     });
     allHosts.push(home);
 
+    const purchasedServers = ns.getPurchasedServers();
+    for (let i = 0; i < purchasedServers.length; i++) {
+        const server: Server = {
+            name: purchasedServers[i],
+            maxRam: ns.getServerMaxRam(purchasedServers[i]),
+            score: 0,
+        };
+        if (server.maxRam > 2) {
+            allHosts.push(server);
+        }
+    }
+
     return allHosts;
 }
 
@@ -116,6 +128,7 @@ export function getBestServerListCheap(ns: NS, shouldPrint: boolean): Server[] {
         };
         servers.push(server);
     }
+
 
     servers.sort((a, b) => {
         return (b.score || 0) - (a.score || 0);
