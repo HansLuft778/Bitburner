@@ -1,5 +1,6 @@
 import { NS } from "@ns";
 import { getBestHostByRam } from "../bestServer";
+import { getWeakenThreadsEff } from "@/lib";
 
 export async function main(ns: NS) {
     ns.tail();
@@ -10,11 +11,9 @@ export async function weakenServer(ns: NS, target: string) {
     const safetyMarginMs = 200;
 
     // weaken
-    const serverSecLvl = ns.getServerSecurityLevel(target);
-    const targetWeakenThreads = Math.ceil((serverSecLvl - ns.getServerMinSecurityLevel(target)) / 0.05);
+    const targetWeakenThreads = getWeakenThreadsEff(ns, target);
     const weakenScriptRam = 1.75;
 
-    ns.print("min sec: " + ns.formatNumber(ns.getServerMinSecurityLevel(target)) + " cur sec lvl: " + serverSecLvl);
     ns.print("total weaken threads needed: " + targetWeakenThreads);
 
     const allHosts = getBestHostByRam(ns);

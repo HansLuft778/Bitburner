@@ -1,4 +1,5 @@
 import { getBestHostByRam, getBestServerListCheap } from "@/bestServer";
+import { getHackThreads } from "@/lib";
 import { NS } from "@ns";
 
 export async function main(ns: NS) {
@@ -9,15 +10,10 @@ export async function main(ns: NS) {
 export async function hackServer(ns: NS, target: string, threshold: number) {
     const safetyMarginMs = 200;
 
-    const serverMaxMoney = ns.getServerMaxMoney(target);
-    const lowerMoneyBound = serverMaxMoney * threshold;
-    const hackAmount = serverMaxMoney - lowerMoneyBound;
-
     //const hackChance = ns.hackAnalyzeChance(target) // todo
-    const targetHackThreads = Math.ceil(ns.hackAnalyzeThreads(target, hackAmount));
+    const targetHackThreads = getHackThreads(ns, target, threshold);
     const hackingScriptRam = 1.7;
 
-    ns.print("max money: " + serverMaxMoney + " 80%: " + lowerMoneyBound + " hack amount: " + hackAmount);
     ns.print(
         "total hack threads needed: " + targetHackThreads + " money available: " + ns.getServerMoneyAvailable(target),
     );

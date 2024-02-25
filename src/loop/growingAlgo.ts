@@ -1,6 +1,7 @@
 import { NS } from "@ns";
 
 import { getBestHostByRam, getBestServerListCheap } from "../bestServer";
+import { getGrowThreads } from "@/lib";
 
 export async function main(ns: NS) {
     ns.tail();
@@ -10,14 +11,9 @@ export async function main(ns: NS) {
 export async function growServer(ns: NS, target: string) {
     const safetyMarginMs = 200;
 
-    const serverMaxMoney = ns.getServerMaxMoney(target);
-    const serverCurrentMoney = ns.getServerMoneyAvailable(target);
-    const moneyMult = serverMaxMoney / serverCurrentMoney;
-
-    const targetGrowThreads = Math.ceil(ns.growthAnalyze(target, moneyMult));
+    const targetGrowThreads = getGrowThreads(ns, target);
     const growingScriptRam = 1.75;
 
-    ns.print("current money: " + serverCurrentMoney + " max: " + serverMaxMoney + " mult: " + moneyMult);
     ns.print("total growing threads needed: " + targetGrowThreads);
 
     const allHosts = getBestHostByRam(ns);
