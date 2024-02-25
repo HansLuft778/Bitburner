@@ -78,7 +78,11 @@ export function getBestServer(ns: NS): string {
 }
 
 export function getBestHostByRam(ns: NS): Server[] {
-    let home: Server = { name: "home", maxRam: ns.getServerMaxRam("home") - 7 - 10, score: 0 }; // 7 for the main scripts, 10 some safety margin
+    let home: Server = {
+        name: "home",
+        maxRam: ns.getServerMaxRam("home") - ns.getScriptRam("loop/manager.js") - 10,
+        score: 0,
+    }; // 10 some safety margin
     let allHosts = getBestServerListCheap(ns, false).filter((server) => {
         return server.maxRam > 2;
     });
