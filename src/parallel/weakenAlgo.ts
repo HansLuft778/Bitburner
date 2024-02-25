@@ -23,13 +23,18 @@ export function weakenServer(ns: NS, target: string, host: string, order: number
         // second weak only has to remove the sec increase from the grow before (more ram efficient)
         const serverMaxMoney = ns.getServerMaxMoney(target);
         const serverCurrentMoney = ns.getServerMoneyAvailable(target);
-        let moneyMult = serverMaxMoney / serverCurrentMoney;
-        if (isNaN(moneyMult) || moneyMult == Infinity) moneyMult = 1;
-        const growThreads = Math.ceil(ns.growthAnalyze(target, moneyMult));
+        let moneyMultiplier = serverMaxMoney / serverCurrentMoney; // doesn't work when current money is 0
+        if (isNaN(moneyMultiplier) || moneyMultiplier == Infinity) moneyMultiplier = 1;
+        const growThreads = Math.ceil(ns.growthAnalyze(target, moneyMultiplier));
+
+        // const maxMoney = ns.getServerMaxMoney(target);
+        // const minMoney = maxMoney * (1 - 0.8);
+        // const moneyMultiplier = maxMoney / minMoney;
+        // const growThreads = Math.ceil(ns.growthAnalyze(target, moneyMultiplier));
 
         const secIncrease = ns.growthAnalyzeSecurity(growThreads, target);
 
-        serverWeakenThreads = Math.ceil(secIncrease / 0.05);
+        serverWeakenThreads = Math.ceil(secIncrease / ns.weakenAnalyze(1));
     } else if (order == 1) {
         // first weak has to weaken server to min from unknown sec lvl
         const serverSecLvl = ns.getServerSecurityLevel(target);
@@ -62,22 +67,4 @@ export function weakenServer(ns: NS, target: string, host: string, order: number
 
     ns.exec("weaken.js", host, serverWeakenThreads, target);
     return true;
-
-    // const happen = serverWeakenThreads / threadSpace
-    // ns.print("will weaken in " + happen + " steps")
-
-    // let howMany = 0
-    // for (let i = 0; i < Math.floor(happen); i++) {
-    // 	const weakenTime = ns.getWeakenTime(target)
-    // 	ns.exec("weaken.js", host, threadSpace, target)
-    // 	await ns.sleep(weakenTime + safetyMarginMs)
-    // 	howMany += threadSpace;
-    // 	ns.print("done with " + howMany + "/" + serverWeakenThreads + " weakens")
-    // }
-    // if (howMany < serverWeakenThreads) {
-    // 	ns.print("need to weaken " + (serverWeakenThreads - howMany) + " more times")
-    // 	const weakenTime = ns.getWeakenTime(target)
-    // 	ns.exec("weaken.js", host, serverWeakenThreads - howMany, target)
-    // 	await ns.sleep(weakenTime + safetyMarginMs)
-    // }
 }
