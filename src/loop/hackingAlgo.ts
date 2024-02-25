@@ -46,7 +46,7 @@ export async function hackServer(ns: NS, target: string, threshold: number) {
             sumThreadsDone += numThreadsOnHost;
         }
         await ns.sleep(hackingTime + safetyMarginMs);
-        ns.print("done with " + sumThreadsDone + "/" + targetHackThreads + " weakens");
+        ns.print("done with " + sumThreadsDone + "/" + targetHackThreads + " hacks");
     }
 
     ns.print("Done hacking!");

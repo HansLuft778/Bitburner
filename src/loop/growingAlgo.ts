@@ -44,7 +44,7 @@ export async function growServer(ns: NS, target: string) {
             sumThreadsDone += numThreadsOnHost;
         }
         await ns.sleep(growingTime + safetyMarginMs);
-        ns.print("done with " + sumThreadsDone + "/" + targetGrowThreads + " weakens");
+        ns.print("done with " + sumThreadsDone + "/" + targetGrowThreads + " grows");
     }
 
     ns.print("Done growing!");
