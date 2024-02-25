@@ -35,7 +35,7 @@ export async function main(ns: NS) {
         lastTarget = target;
 
         // Debug
-        target = "n00dles";
+        // target = "n00dles";
 
         ns.print(cyan + "------------ WEAKENING ------------" + reset);
         await weakenServer(ns, target);
@@ -55,7 +55,5 @@ export async function main(ns: NS) {
  notes:
  weaken removes 0.05 sec lvl
  grow adds 0.004 sec lvl
-
- grow adds money:
 
  */

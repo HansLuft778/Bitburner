@@ -14,7 +14,7 @@ export interface Server {
 export async function main(ns: NS) {
     ns.tail();
     ns.print("gorg");
-    // ns.disableLog('ALL');
+    ns.disableLog("ALL");
     getBestServerList(ns, true);
 }
 
@@ -75,6 +75,16 @@ export function getBestServerList(ns: NS, shouldPrint: boolean) {
 export function getBestServer(ns: NS): string {
     const servers = getBestServerList(ns, false);
     return servers[0].name;
+}
+
+export function getBestHostByRam(ns: NS): Server[] {
+    let home: Server = { name: "home", maxRam: ns.getServerMaxRam("home"), score: 0 };
+    let allHosts = getBestServerListCheap(ns, false).filter((server) => {
+        return server.maxRam > 2;
+    });
+    allHosts.push(home);
+
+    return allHosts;
 }
 
 export function getBestServerListCheap(ns: NS, shouldPrint: boolean): Server[] {
