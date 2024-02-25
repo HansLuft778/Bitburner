@@ -1,5 +1,6 @@
-/** @param {NS} ns */
-export async function main(ns) {
+import { NS } from "@ns";
+
+export async function main(ns: NS) {
     let upgrade = false;
     let upgradeName = '';
     let upgradeRam = 0;
@@ -11,13 +12,13 @@ export async function main(ns) {
     if (ns.args.length == 3 || ns.args.length == 0) {
         if (ns.args[0] == '-u') {
             upgrade = true;
-            upgradeName = ns.args[1];
-            upgradeRam = ns.args[2];
+            upgradeName = ns.args[1].toString();
+            upgradeRam = Number(ns.args[2]);
         }
         if (ns.args[0] == '-b') {
             buy = true;
-            buyName = ns.args[1];
-            buyRam = ns.args[2];
+            buyName = ns.args[1].toString();
+            buyRam = Number(ns.args[2]);
         }
     } else {
         ns.tprint('\nusage: sm.js [options]\n\nOptions:\n\t-u <Name> <Ram>\n\t-b <Name> <Ram>');
