@@ -19,7 +19,6 @@ const cyan = "\x1b[36m";
 const white = "\x1b[37m";
 
 const delayMarginMs = 1000;
-const hackThreshold = 0.9;
 let lastTarget = "";
 
 export async function main(ns: NS) {
@@ -36,9 +35,11 @@ export async function main(ns: NS) {
     }
 }
 
-export async function parallelCycle(ns: NS) {
+export async function parallelCycle(ns: NS, target: string = "", hackThreshold: number = 0.8) {
     // find the server with the most available money
-    let target = getBestServer(ns);
+    if (target == "") {
+        target = getBestServer(ns);
+    }
 
     if (lastTarget != target) {
         nukeAll(ns);
@@ -48,7 +49,7 @@ export async function parallelCycle(ns: NS) {
     lastTarget = target;
 
     // debug
-    target = "phantasy"
+    // target = "phantasy"
 
     // get execution times:
     const weakTime = ns.getWeakenTime(target);
@@ -71,10 +72,9 @@ export async function parallelCycle(ns: NS) {
         weak2StartTime = 2 * delayMarginMs;
         await ns.sleep(weak2StartTime);
     }
-
     // weak II
     ns.print("Attempting to start Weak II at " + getTimeH());
-    const weak2Dispatched = weakenServer(ns, target, "aws-1", 2);
+    const weak2Dispatched = weakenServer(ns, target, "aws-0", 2);
 
     // --------------------------------------
     // grow delay
@@ -88,7 +88,7 @@ export async function parallelCycle(ns: NS) {
 
     // grow
     ns.print("Attempting to start Grow at " + getTimeH());
-    const growDispatched = growServer(ns, target, "aws-2");
+    const growDispatched = growServer(ns, target, "hacker");
 
     // --------------------------------------
     // hacking
@@ -105,13 +105,13 @@ export async function parallelCycle(ns: NS) {
         );
         const hackStartTime = weakTime + delayMarginMs - hackTime;
         await ns.sleep(hackStartTime);
-        hackServer(ns, target, "aws-3", hackThreshold);
+        hackServer(ns, target, "hacker", hackThreshold);
         await ns.sleep(hackTime + delayMarginMs); // wait for hack complete
     } else if (weak1Dispatched == false && weak2Dispatched == false && growDispatched == false) {
         // szenario: weak1 und weak2 skip
         // hack immediately
         ns.print(yellow + "Weak 1 and Weak 2 were skipped? Hacking now." + reset);
-        hackServer(ns, target, "aws-3", hackThreshold);
+        hackServer(ns, target, "hacker", hackThreshold);
         await ns.sleep(hackTime + delayMarginMs); // wait for hack complete
     } else if (weak1Dispatched == true && growDispatched == true && weak2Dispatched == true) {
         // hack normal
@@ -119,16 +119,26 @@ export async function parallelCycle(ns: NS) {
         const hackStartTime = weakTime + 3 * delayMarginMs - hackTime;
         const hackDelayDiff = hackStartTime - growStartTime;
         await ns.sleep(hackDelayDiff);
-        hackServer(ns, target, "aws-3", hackThreshold);
+        
+        hackServer(ns, target, "hacker", hackThreshold);
+        await ns.sleep(hackTime + delayMarginMs); // wait for hack complete
+    } else if (weak1Dispatched == false && weak2Dispatched == true && growDispatched == true) {
+        // case weak1 was skipped, but weak2 and grow were dispatched
+
+        ns.print(yellow + "Weak 1 was skipped. Perhaps the server is already at the min sec lvl." + reset);
+        const hackStartTime = weakTime + 2 * delayMarginMs - hackTime;
+        await ns.sleep(hackStartTime - growStartTime);
+        ns.print("Attempting to start Hack at " + getTimeH());
+        hackServer(ns, target, "hacker", hackThreshold);
         await ns.sleep(hackTime + delayMarginMs); // wait for hack complete
     } else {
         ns.print(red + "could not start hack!" + reset);
         ns.print(
-            "answerWeak1: " +
+            "weak1Dispatched: " +
                 weak1Dispatched +
-                " | answerWeak2: " +
+                " | weak2Dispatched: " +
                 weak2Dispatched +
-                " | answerGrow: " +
+                " | growDispatched: " +
                 growDispatched,
         );
         printServerStats(ns, target, hackThreshold);
