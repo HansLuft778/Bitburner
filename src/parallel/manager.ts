@@ -55,27 +55,28 @@ export async function main(ns: NS) {
 
         // weak I
         ns.print("Attempting to start Weak I at " + getTimeH());
-        const answerWeak1 = weakenServer(ns, target, "aws-0", 1);
+        const weak1Dispatched = weakenServer(ns, target, "aws-0", 1);
 
         // --------------------------------------
         // weak II delay
 
         // if weak I skip, start II imediately
         let weak2StartTime = 0;
-        if (answerWeak1 == true) {
-            weak2StartTime = weakTime + 2 * delayMarginMs - weakTime;
+        if (weak1Dispatched == true) {
+            // weak2StartTime = weakTime + 2 * delayMarginMs - weakTime;
+            weak2StartTime = 2 * delayMarginMs;
             await ns.sleep(weak2StartTime);
         }
 
         // weak II
         ns.print("Attempting to start Weak II at " + getTimeH());
-        const answerWeak2 = weakenServer(ns, target, "aws-1", 2);
+        const weak2Dispatched = weakenServer(ns, target, "aws-1", 2);
 
         // --------------------------------------
         // grow delay
 
         let growStartTime = 0;
-        if (answerWeak2 == true) {
+        if (weak2Dispatched == true) {
             growStartTime = weakTime + delayMarginMs - growTime;
             const growDelay = growStartTime - weak2StartTime;
             await ns.sleep(growDelay);
@@ -83,14 +84,14 @@ export async function main(ns: NS) {
 
         // grow
         ns.print("Attempting to start Grow at " + getTimeH());
-        const answerGrow = growServer(ns, target, "aws-2");
+        const growDispatched = growServer(ns, target, "aws-2");
 
         // --------------------------------------
         // hacking
 
         // hacking start logic, for further time optimizations
         // note: when weak2 fails, the grow must also fail (and vice versa: when grow fails, weak2 shouldnt have started)
-        if (answerWeak1 == true && answerWeak2 == false && answerGrow == false) {
+        if (weak1Dispatched == true && weak2Dispatched == false && growDispatched == false) {
             // szenario: weak1 geht, rest skip
             // hack finishes 1 margin unit after weak1 ends
             ns.print(
@@ -102,15 +103,15 @@ export async function main(ns: NS) {
             await ns.sleep(hackStartTime);
             hackServer(ns, target, "aws-3", hackThreshold);
             await ns.sleep(hackTime + delayMarginMs); // wait for hack complete
-        } else if (answerWeak1 == false && answerWeak2 == false && answerGrow == false) {
+        } else if (weak1Dispatched == false && weak2Dispatched == false && growDispatched == false) {
             // szenario: weak1 und weak2 skip
             // hack immediately
             ns.print(yellow + "Weak 1 and Weak 2 were skipped? Hacking now." + reset);
             hackServer(ns, target, "aws-3", hackThreshold);
             await ns.sleep(hackTime + delayMarginMs); // wait for hack complete
-        } else if (answerWeak1 == true && answerGrow == true && answerWeak2 == true) {
+        } else if (weak1Dispatched == true && growDispatched == true && weak2Dispatched == true) {
             // hack normal
-            ns.print(green + "Hack is about to start on normal path" + reset);
+            ns.print(green + "Hack is about to start as expected" + reset);
             const hackStartTime = weakTime + 3 * delayMarginMs - hackTime;
             const hackDelayDiff = hackStartTime - growStartTime;
             await ns.sleep(hackDelayDiff);
@@ -118,7 +119,7 @@ export async function main(ns: NS) {
             await ns.sleep(hackTime + delayMarginMs); // wait for hack complete
         } else {
             ns.print(red + "could not start hack!" + reset);
-            ns.print("answerWeak1: " + answerWeak1 + " | answerWeak2: " + answerWeak2 + " | answerGrow: " + answerGrow);
+            ns.print("answerWeak1: " + weak1Dispatched + " | answerWeak2: " + weak2Dispatched + " | answerGrow: " + growDispatched);
             printServerStats(ns, target, hackThreshold);
             return;
         }
