@@ -22,6 +22,7 @@ export async function main(ns: NS) {
 export async function loopCycle(ns: NS) {
     // find the server with the most available money
     let target: string = getBestServerListCheap(ns, true)[0].name;
+    target = "silver-helix";
     ns.print("target: " + target);
 
     if (lastTarget != target) {
@@ -30,7 +31,6 @@ export async function loopCycle(ns: NS) {
     }
     lastTarget = target;
 
-    // target = "n00dles";
 
     // ns.print(cyan + "------------ WEAKENING ------------" + reset);
     // await weakenServer(ns, target);
