@@ -105,23 +105,23 @@ export async function parallelCycle(ns: NS, target: string = "", hackThreshold: 
         );
         const hackStartTime = weakTime + delayMarginMs - hackTime;
         await ns.sleep(hackStartTime);
+        ns.print("Attempting to start Hack at " + getTimeH());
         hackServer(ns, target, "hacker", hackThreshold);
-        await ns.sleep(hackTime + delayMarginMs); // wait for hack complete
+        await ns.sleep(hackTime + delayMarginMs);
     } else if (weak1Dispatched == false && weak2Dispatched == false && growDispatched == false) {
-        // szenario: weak1 und weak2 skip
-        // hack immediately
-        ns.print(yellow + "Weak 1 and Weak 2 were skipped? Hacking now." + reset);
+        // scenario: weak1 and weak2 skipped
+        ns.print(yellow + "Weak 1 and Weak 2 were skipped? Hacking now. " + getTimeH() + reset);
         hackServer(ns, target, "hacker", hackThreshold);
-        await ns.sleep(hackTime + delayMarginMs); // wait for hack complete
+        await ns.sleep(hackTime + delayMarginMs);
     } else if (weak1Dispatched == true && growDispatched == true && weak2Dispatched == true) {
         // hack normal
         ns.print(green + "Hack is about to start as expected" + reset);
         const hackStartTime = weakTime + 3 * delayMarginMs - hackTime;
         const hackDelayDiff = hackStartTime - growStartTime;
         await ns.sleep(hackDelayDiff);
-        
+        ns.print("Attempting to start Hack at " + getTimeH());
         hackServer(ns, target, "hacker", hackThreshold);
-        await ns.sleep(hackTime + delayMarginMs); // wait for hack complete
+        await ns.sleep(hackTime + delayMarginMs);
     } else if (weak1Dispatched == false && weak2Dispatched == true && growDispatched == true) {
         // case weak1 was skipped, but weak2 and grow were dispatched
 
@@ -130,7 +130,7 @@ export async function parallelCycle(ns: NS, target: string = "", hackThreshold: 
         await ns.sleep(hackStartTime - growStartTime);
         ns.print("Attempting to start Hack at " + getTimeH());
         hackServer(ns, target, "hacker", hackThreshold);
-        await ns.sleep(hackTime + delayMarginMs); // wait for hack complete
+        await ns.sleep(hackTime + delayMarginMs);
     } else {
         ns.print(red + "could not start hack!" + reset);
         ns.print(
