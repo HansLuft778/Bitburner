@@ -19,7 +19,7 @@ export async function main(ns: NS) {
     }
 }
 
-export async function loopCycle(ns: NS, target: string = "", threshold: number = 0.8) {
+export async function loopCycle(ns: NS, target: string = "", threshold: number = 0.8, shouldHack: boolean = true) {
     // find the server with the most available money
     if (target == "") {
         target = getBestServerListCheap(ns, true)[0].name;
@@ -45,8 +45,10 @@ export async function loopCycle(ns: NS, target: string = "", threshold: number =
     ns.print(Colors.cyan + "------------ PREPARING ------------" + Colors.reset);
     await prepareServer(ns, target, threshold);
 
-    ns.print(Colors.cyan + "------------- HACKING -------------" + Colors.reset);
-    await hackServer(ns, target, threshold);
+    if (shouldHack) {
+        ns.print(Colors.cyan + "------------- HACKING -------------" + Colors.reset);
+        await hackServer(ns, target, threshold);
+    }
 }
 
 /**
