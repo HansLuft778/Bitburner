@@ -58,7 +58,7 @@ export async function parallelCycle(ns: NS, target: string = "", hackThreshold: 
     // --------------------------------------
     // weak II delay
 
-    // if weak I skip, start II imediately
+    // if weak I skip, start II immediately
     let weak2StartTime = 0;
     if (weak1Dispatched == true) {
         // weak2StartTime = weakTime + 2 * delayMarginMs - weakTime;
@@ -87,9 +87,9 @@ export async function parallelCycle(ns: NS, target: string = "", hackThreshold: 
     // hacking
 
     // hacking start logic, for further time optimizations
-    // note: when weak2 fails, the grow must also fail (and vice versa: when grow fails, weak2 shouldnt have started)
+    // note: when weak2 fails, the grow must also fail (and vice versa: when grow fails, weak2 should not have started)
     if (weak1Dispatched == true && weak2Dispatched == false && growDispatched == false) {
-        // szenario: weak1 geht, rest skip
+        // scenario: weak1 works, rest skip
         // hack finishes 1 margin unit after weak1 ends
         ns.print(
             Colors.yellow +
