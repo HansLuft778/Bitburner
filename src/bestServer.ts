@@ -77,14 +77,15 @@ export function getBestServer(ns: NS): string {
 }
 
 export function getBestHostByRam(ns: NS): Server[] {
+    let allHosts = getBestServerListCheap(ns, false).filter((server) => {
+        return server.maxRam > 2;
+    });
+
     let home: Server = {
         name: "home",
         maxRam: ns.getServerMaxRam("home") - ns.getScriptRam("loop/manager.js") - 10,
         score: 0,
     }; // 10 some safety margin
-    let allHosts = getBestServerListCheap(ns, false).filter((server) => {
-        return server.maxRam > 2;
-    });
     allHosts.push(home);
 
     const purchasedServers = ns.getPurchasedServers();
@@ -98,6 +99,11 @@ export function getBestHostByRam(ns: NS): Server[] {
             allHosts.push(server);
         }
     }
+
+    // sort by ram in ascending order
+    allHosts.sort((a, b) => {
+        return a.maxRam - b.maxRam;
+    });
 
     return allHosts;
 }
@@ -127,7 +133,6 @@ export function getBestServerListCheap(ns: NS, shouldPrint: boolean): Server[] {
         };
         servers.push(server);
     }
-
 
     servers.sort((a, b) => {
         return (b.score || 0) - (a.score || 0);
