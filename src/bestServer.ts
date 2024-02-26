@@ -76,6 +76,7 @@ export function getBestServer(ns: NS): string {
     return servers[0].name;
 }
 
+// TODO: change to available ram
 export function getBestHostByRam(ns: NS): Server[] {
     let allHosts = getBestServerListCheap(ns, false).filter((server) => {
         return server.maxRam > 2;
