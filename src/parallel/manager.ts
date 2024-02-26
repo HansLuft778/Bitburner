@@ -49,8 +49,6 @@ export async function parallelCycle(ns: NS, target: string = "", hackThreshold: 
     const growTime = ns.getGrowTime(target);
     const hackTime = ns.getHackTime(target);
 
-    // buyServer(ns, 32)
-
     // weak I
     ns.print("Attempting to start Weak I at " + getTimeH());
     const weak1Dispatched = weakenServer(ns, target, WEAK_HOST, 1);
@@ -118,7 +116,9 @@ export async function parallelCycle(ns: NS, target: string = "", hackThreshold: 
     } else if (weak1Dispatched == false && weak2Dispatched == true && growDispatched == true) {
         // case weak1 was skipped, but weak2 and grow were dispatched
 
-        ns.print(Colors.yellow + "Weak 1 was skipped. Perhaps the server is already at the min sec lvl." + Colors.reset);
+        ns.print(
+            Colors.yellow + "Weak 1 was skipped. Perhaps the server is already at the min sec lvl." + Colors.reset,
+        );
         const hackStartTime = weakTime + 2 * delayMarginMs - hackTime;
         await ns.sleep(hackStartTime - growStartTime);
         ns.print("Attempting to start Hack at " + getTimeH());
