@@ -13,7 +13,6 @@ export interface Server {
 
 export async function main(ns: NS) {
     ns.tail();
-    ns.print("gorg");
     ns.disableLog("ALL");
     getBestServerList(ns, true);
 }
