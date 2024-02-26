@@ -3,15 +3,19 @@ import { NS } from "@ns";
 
 export async function main(ns: NS) {
     ns.tail();
-    hackServer(ns, "foodnstuff", "hacker", 0.8);
+    hackServer(ns, "silver-helix", "hacker", 0.8);
 }
 
 export function hackServer(ns: NS, target: string, host: string, threshold: number) {
     let hackThreads = Math.ceil(threshold / ns.hackAnalyze(target));
+    // ns.print("threshold: " + threshold);
+    // ns.print("hackAnalyze: " + ns.hackAnalyze(target));
+    // ns.print("threshold / ns.hackAnalyze(target): " + threshold / ns.hackAnalyze(target));
     ns.print("hackThreads: " + hackThreads);
-    hackThreads = 100;
+
+    // hackThreads = 100;
     // const hackThreads = getHackThreads(ns, target, threshold);
-    ns.print("hackThreads: " + hackThreads);
+    // ns.print("hackThreads: " + hackThreads);
 
     const hackingRam = 1.7;
     const maxRam = ns.getServerMaxRam(host);
