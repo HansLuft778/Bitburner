@@ -3,6 +3,7 @@ import { getBestHostByRam, getBestServerListCheap } from "./bestServer";
 import { Colors, getGrowThreadsThreshold, getWeakenThreadsEff } from "./lib";
 import { loopCycle } from "./loop/manager";
 import { parallelCycle } from "./parallel/manager";
+import { get } from "http";
 
 // TODO: determine the threshold by first prepping the server to max money/min sec lvl.
 // Then find the percentage of money that can be stolen safely, so it can be regrown per one-hit.
@@ -38,10 +39,25 @@ export async function main(ns: NS) {
         ns.print(Colors.green + "Preparation finished, starting parallel mode");
     }
 
-    // ----------------- calculate threshold -----------------
+    // ----------------- CHECK WHICH MODE TO USE -----------------
+    while (true) {
+        let hackThreshold = getOptimalHackThreshold(ns, target);
+        ns.print("hackThreshold: " + hackThreshold);
+        await parallelCycle(ns, target, hackThreshold);
+    }
+}
 
-    // now we have to find out wether to keep using loop or switch to parallel mode this should be decided dynamically
+async function launchParallel(ns: NS, target: string, moneyHackThreshold: number) {
+    while (true) {
+        await parallelCycle(ns, target, moneyHackThreshold);
+    }
+}
 
+function launchLoop(ns: NS) {
+    while (true) {}
+}
+
+function getOptimalHackThreshold(ns: NS, target: string): number {
     const allHosts = getBestHostByRam(ns);
     const totalMaxRam = allHosts.reduce((acc, server) => {
         return acc + server.maxRam;
@@ -73,31 +89,14 @@ export async function main(ns: NS) {
             secondWeakenThreads * RAM_WEAKEN +
             serverHackThreads * RAM_HACK;
 
-        // log everything
-        ns.print("firstWeakenThreads: " + firstWeakenThreads);
-        ns.print("serverGrowThreads: " + serverGrowThreads);
-        ns.print("secondWeakenThreads: " + secondWeakenThreads);
-        ns.print("serverHackThreads: " + serverHackThreads);
-
         if (totalRamNeeded <= totalMaxRam) {
-            ns.print(totalRamNeeded + "GB of RAM needed to run parallel mode on " + target);
+            ns.print(
+                "needs " + totalRamNeeded + "GB of RAM and got " + totalMaxRam + ". Running parallel mode on" + target,
+            );
             break;
         }
         hackThreshold = Math.round((hackThreshold - THRESHOLD_STEP) * 100) / 100;
-        ns.print("trying with hackThreshold: " + hackThreshold);
+        ns.print("Threshold is too high, trying with: " + hackThreshold);
     }
-
-    // ----------------- CHECK WHICH MODE TO USE -----------------
-    ns.print("hackThreshold: " + hackThreshold);
-    await launchParallel(ns, target, hackThreshold);
-}
-
-async function launchParallel(ns: NS, target: string, moneyHackThreshold: number) {
-    while (true) {
-        await parallelCycle(ns, target, moneyHackThreshold);
-    }
-}
-
-function launchLoop(ns: NS) {
-    while (true) {}
+    return hackThreshold;
 }
