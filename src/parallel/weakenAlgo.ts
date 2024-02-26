@@ -1,3 +1,4 @@
+import { getBestHostByRam } from "@/bestServer";
 import { NS } from "@ns";
 
 export async function main(ns: NS) {
@@ -17,7 +18,7 @@ export async function main(ns: NS) {
  * @throws An error if the weaken order is not 1 or 2, or if there is not enough free RAM to execute the weaken operation.
  */
 export function weakenServer(ns: NS, target: string, host: string, order: number): boolean {
-    let serverWeakenThreads = 0;
+    let totalWeakenThreadsNeeded = 0;
     // calculate weakening threads based on the order
     if (order == 2) {
         // second weak only has to remove the sec increase from the grow before (more ram efficient)
@@ -34,37 +35,46 @@ export function weakenServer(ns: NS, target: string, host: string, order: number
 
         const secIncrease = ns.growthAnalyzeSecurity(growThreads, target);
 
-        serverWeakenThreads = Math.ceil(secIncrease / ns.weakenAnalyze(1));
+        totalWeakenThreadsNeeded = Math.ceil(secIncrease / ns.weakenAnalyze(1));
     } else if (order == 1) {
         // first weak has to weaken server to min from unknown sec lvl
         const serverSecLvl = ns.getServerSecurityLevel(target);
-        serverWeakenThreads = Math.ceil((serverSecLvl - ns.getServerMinSecurityLevel(target)) / 0.05);
+        totalWeakenThreadsNeeded = Math.ceil((serverSecLvl - ns.getServerMinSecurityLevel(target)) / 0.05);
     } else {
         throw new Error("weaken order can only be either 1 or 2!");
     }
 
-    if (serverWeakenThreads < 1) {
+    if (totalWeakenThreadsNeeded < 1) {
         ns.print("Weakenthreads are 0, skipping weak " + order);
         return false;
     }
 
     // exec weaken.js with num of threads
-    const weakenRam = 1.75;
-    const maxRam = ns.getServerMaxRam(host);
-    const freeRam = maxRam - ns.getServerUsedRam(host);
+    const allHosts = getBestHostByRam(ns);
+    const weakenScriptRam = 1.75;
 
-    const threadSpace = Math.floor(freeRam / weakenRam);
+    let threadsDispatched = 0;
+    let threadsRemaining = totalWeakenThreadsNeeded;
+    for (let i = 0; i < allHosts.length; i++) {
+        if (threadsDispatched >= totalWeakenThreadsNeeded) break;
+        const host = allHosts[i].name;
 
-    if (threadSpace < serverWeakenThreads)
-        throw new Error(
-            "can't onehit weaken on server " +
-                target +
-                ".\nneed " +
-                serverWeakenThreads +
-                " Threads, only got " +
-                threadSpace,
-        );
+        const maxRam = ns.getServerMaxRam(host);
+        const freeRam = maxRam - ns.getServerUsedRam(host);
+        if (freeRam < weakenScriptRam) continue;
+        const threadSpace = Math.floor(freeRam / weakenScriptRam);
 
-    ns.exec("weaken.js", host, serverWeakenThreads, target);
+        // if threadsRemaining is less than the threadSpace, then we can only dispatch threadsRemaining threads
+        const threadsToDispatch = Math.min(threadsRemaining, threadSpace);
+
+        ns.exec("weaken.js", host, threadsToDispatch, target);
+        threadsRemaining -= threadsToDispatch;
+        threadsDispatched += threadsToDispatch;
+    }
+
+    if (threadsRemaining > 0) {
+        ns.tprint("[WEAKEN] Error! There are threads remaining after dispatching all threads");
+        throw new Error("[WEAKEN] Error! There are threads remaining after dispatching all threads");
+    }
     return true;
 }
