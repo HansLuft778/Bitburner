@@ -1,22 +1,15 @@
 import { NS } from "@ns";
 
-import { nukeAll, getTimeH } from "../lib.js";
+import { nukeAll, getTimeH, Colors } from "../lib.js";
 import { getBestServer } from "../bestServer.js";
 import { weakenServer } from "./weakenAlgo.js";
 import { growServer } from "./growingAlgo.js";
 import { hackServer } from "./hackingAlgo.js";
 import { printServerStats } from "../serverStats.js";
 
-// Text color
-const reset = "\x1b[0m";
-const black = "\x1b[30m";
-const red = "\x1b[31m";
-const green = "\x1b[32m";
-const yellow = "\x1b[33m";
-const blue = "\x1b[34m";
-const magenta = "\x1b[35m";
-const cyan = "\x1b[36m";
-const white = "\x1b[37m";
+const GROW_HOST = "home";
+const WEAK_HOST = "home";
+const HACK_HOST = "home";
 
 const delayMarginMs = 1000;
 let lastTarget = "";
@@ -60,7 +53,7 @@ export async function parallelCycle(ns: NS, target: string = "", hackThreshold: 
 
     // weak I
     ns.print("Attempting to start Weak I at " + getTimeH());
-    const weak1Dispatched = weakenServer(ns, target, "aws-0", 1);
+    const weak1Dispatched = weakenServer(ns, target, WEAK_HOST, 1);
 
     // --------------------------------------
     // weak II delay
@@ -74,7 +67,7 @@ export async function parallelCycle(ns: NS, target: string = "", hackThreshold: 
     }
     // weak II
     ns.print("Attempting to start Weak II at " + getTimeH());
-    const weak2Dispatched = weakenServer(ns, target, "aws-0", 2);
+    const weak2Dispatched = weakenServer(ns, target, WEAK_HOST, 2);
 
     // --------------------------------------
     // grow delay
@@ -88,7 +81,7 @@ export async function parallelCycle(ns: NS, target: string = "", hackThreshold: 
 
     // grow
     ns.print("Attempting to start Grow at " + getTimeH());
-    const growDispatched = growServer(ns, target, "hacker");
+    const growDispatched = growServer(ns, target, GROW_HOST);
 
     // --------------------------------------
     // hacking
@@ -99,40 +92,40 @@ export async function parallelCycle(ns: NS, target: string = "", hackThreshold: 
         // szenario: weak1 geht, rest skip
         // hack finishes 1 margin unit after weak1 ends
         ns.print(
-            yellow +
+            Colors.yellow +
                 "Weak 2 was skipped. Did the last hack attempt fail?\nHacking is about to start earlier than planned." +
-                reset,
+                Colors.reset,
         );
         const hackStartTime = weakTime + delayMarginMs - hackTime;
         await ns.sleep(hackStartTime);
         ns.print("Attempting to start Hack at " + getTimeH());
-        hackServer(ns, target, "hacker", hackThreshold);
+        hackServer(ns, target, HACK_HOST, hackThreshold);
         await ns.sleep(hackTime + delayMarginMs);
     } else if (weak1Dispatched == false && weak2Dispatched == false && growDispatched == false) {
         // scenario: weak1 and weak2 skipped
-        ns.print(yellow + "Weak 1 and Weak 2 were skipped? Hacking now. " + getTimeH() + reset);
-        hackServer(ns, target, "hacker", hackThreshold);
+        ns.print(Colors.yellow + "Weak 1 and Weak 2 were skipped? Hacking now. " + getTimeH() + Colors.reset);
+        hackServer(ns, target, HACK_HOST, hackThreshold);
         await ns.sleep(hackTime + delayMarginMs);
     } else if (weak1Dispatched == true && growDispatched == true && weak2Dispatched == true) {
         // hack normal
-        ns.print(green + "Hack is about to start as expected" + reset);
+        ns.print(Colors.green + "Hack is about to start as expected" + Colors.reset);
         const hackStartTime = weakTime + 3 * delayMarginMs - hackTime;
         const hackDelayDiff = hackStartTime - growStartTime;
         await ns.sleep(hackDelayDiff);
         ns.print("Attempting to start Hack at " + getTimeH());
-        hackServer(ns, target, "hacker", hackThreshold);
+        hackServer(ns, target, HACK_HOST, hackThreshold);
         await ns.sleep(hackTime + delayMarginMs);
     } else if (weak1Dispatched == false && weak2Dispatched == true && growDispatched == true) {
         // case weak1 was skipped, but weak2 and grow were dispatched
 
-        ns.print(yellow + "Weak 1 was skipped. Perhaps the server is already at the min sec lvl." + reset);
+        ns.print(Colors.yellow + "Weak 1 was skipped. Perhaps the server is already at the min sec lvl." + Colors.reset);
         const hackStartTime = weakTime + 2 * delayMarginMs - hackTime;
         await ns.sleep(hackStartTime - growStartTime);
         ns.print("Attempting to start Hack at " + getTimeH());
-        hackServer(ns, target, "hacker", hackThreshold);
+        hackServer(ns, target, HACK_HOST, hackThreshold);
         await ns.sleep(hackTime + delayMarginMs);
     } else {
-        ns.print(red + "could not start hack!" + reset);
+        ns.print(Colors.red + "could not start hack!" + Colors.reset);
         ns.print(
             "weak1Dispatched: " +
                 weak1Dispatched +
@@ -146,7 +139,7 @@ export async function parallelCycle(ns: NS, target: string = "", hackThreshold: 
     }
 
     // --------------------------------------
-    ns.print(green + "Cycle done. Beginning new cycle.." + reset);
+    ns.print(Colors.green + "Cycle done. Beginning new cycle.." + Colors.reset);
     printServerStats(ns, target, hackThreshold);
 }
 
