@@ -1,8 +1,8 @@
 import { NS } from "@ns";
 import { getBestHostByRam, getBestServerListCheap } from "./bestServer";
-import { parallelCycle } from "./parallel/manager";
+import { Colors, getGrowThreadsThreshold, getWeakenThreadsEff } from "./lib";
 import { loopCycle } from "./loop/manager";
-import { getGrowThreads, getGrowThreadsThreshold, getHackThreads, getWeakenThreadsEff } from "./lib";
+import { parallelCycle } from "./parallel/manager";
 
 // TODO: determine the threshold by first prepping the server to max money/min sec lvl.
 // Then find the percentage of money that can be stolen safely, so it can be regrown per one-hit.
@@ -18,7 +18,7 @@ export async function main(ns: NS) {
     // either start loop or parallelize, depending on the number of servers and money the player has
 
     let target = getBestServerListCheap(ns, false)[0].name;
-    target = "harakiri-sushi";
+    // target = "harakiri-sushi";
     ns.print("target: " + target);
 
     // ----------------- PREPARE SERVER -----------------
@@ -31,9 +31,14 @@ export async function main(ns: NS) {
         await loopCycle(ns, target, MONEY_HACK_THRESHOLD, false);
     }
 
-    // ----------------- calculate threshold -----------------
+    if (
+        ns.getServerMaxMoney(target) == ns.getServerMoneyAvailable(target) &&
+        ns.getServerSecurityLevel(target) == ns.getServerMinSecurityLevel(target)
+    ) {
+        ns.print(Colors.green + "Preparation finished, starting parallel mode");
+    }
 
-    // ----------------- CHECK WHICH MODE TO USE -----------------
+    // ----------------- calculate threshold -----------------
 
     // now we have to find out wether to keep using loop or switch to parallel mode this should be decided dynamically
 
@@ -42,45 +47,52 @@ export async function main(ns: NS) {
         return acc + server.maxRam;
     }, 0);
 
-    // i have to find out, how many threads of each i need, after
+    let hackThreshold = 0.9;
+    const THRESHOLD_STEP = 0.05;
+    while (true) {
+        // i have to find out, how many threads of each i need, after
 
-    // how many to weak from current sec lvl to min
-    const firstWeakenThreads = getWeakenThreadsEff(ns, target);
+        // how many to weak from current sec lvl to min
+        const firstWeakenThreads = getWeakenThreadsEff(ns, target);
 
-    // how many threads i need to grow the server from (1 - Threshold) to 1
-    const serverGrowThreads = getGrowThreadsThreshold(ns, target, MONEY_HACK_THRESHOLD);
+        // how many threads i need to grow the server from (1 - Threshold) to 1
+        const serverGrowThreads = getGrowThreadsThreshold(ns, target, hackThreshold);
 
-    // how many threads i need to weaken security to 0 after growings
-    const secIncrease = ns.growthAnalyzeSecurity(serverGrowThreads);
-    const secondWeakenThreads = Math.ceil(secIncrease / ns.weakenAnalyze(1));
+        // how many threads i need to weaken security to 0 after growings
+        const secIncrease = ns.growthAnalyzeSecurity(serverGrowThreads);
+        const secondWeakenThreads = Math.ceil(secIncrease / ns.weakenAnalyze(1));
 
-    // how many threads i need to hack the server
-    const hackAmount = ns.getServerMaxMoney(target) * MONEY_HACK_THRESHOLD;
-    const serverHackThreads = Math.ceil(ns.hackAnalyzeThreads(target, hackAmount));
+        // how many threads i need to hack the server
+        const hackAmount = ns.getServerMaxMoney(target) * hackThreshold;
+        const serverHackThreads = Math.ceil(ns.hackAnalyzeThreads(target, hackAmount));
 
-    // this var describes the total amount of threads i need to run parallel mode
-    const totalRamNeeded =
-        firstWeakenThreads * RAM_WEAKEN +
-        serverGrowThreads * RAM_GROW +
-        secondWeakenThreads * RAM_WEAKEN +
-        serverHackThreads * RAM_HACK;
+        // this var describes the total amount of threads i need to run parallel mode
+        const totalRamNeeded =
+            firstWeakenThreads * RAM_WEAKEN +
+            serverGrowThreads * RAM_GROW +
+            secondWeakenThreads * RAM_WEAKEN +
+            serverHackThreads * RAM_HACK;
 
-    // log everything
-    ns.print("firstWeakenThreads: " + firstWeakenThreads);
-    ns.print("serverGrowThreads: " + serverGrowThreads);
-    ns.print("secondWeakenThreads: " + secondWeakenThreads);
-    ns.print("serverHackThreads: " + serverHackThreads);
+        // log everything
+        ns.print("firstWeakenThreads: " + firstWeakenThreads);
+        ns.print("serverGrowThreads: " + serverGrowThreads);
+        ns.print("secondWeakenThreads: " + secondWeakenThreads);
+        ns.print("serverHackThreads: " + serverHackThreads);
 
-    ns.print(totalRamNeeded + "GB of RAM needed to run parallel mode on " + target);
-    if (totalRamNeeded < totalMaxRam) {
-        ns.print("sumThreads < totalMaxRam");
-        await launchParallel(ns, target, MONEY_HACK_THRESHOLD);
+        if (totalRamNeeded <= totalMaxRam) {
+            ns.print(totalRamNeeded + "GB of RAM needed to run parallel mode on " + target);
+            break;
+        }
+        hackThreshold = Math.round((hackThreshold - THRESHOLD_STEP) * 100) / 100;
+        ns.print("trying with hackThreshold: " + hackThreshold);
     }
-    ns.print("sumThreads > totalMaxRam");
+
+    // ----------------- CHECK WHICH MODE TO USE -----------------
+    ns.print("hackThreshold: " + hackThreshold);
+    await launchParallel(ns, target, hackThreshold);
 }
 
 async function launchParallel(ns: NS, target: string, moneyHackThreshold: number) {
-    // TODO: instead of calling the function, it might be better to call ns.exec() to run the script in parallel to the daemon. This enables easy support for hitting multiple targets at the same time, in case spare resources are available.
     while (true) {
         await parallelCycle(ns, target, moneyHackThreshold);
     }
