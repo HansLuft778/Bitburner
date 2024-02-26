@@ -8,7 +8,7 @@ export async function main(ns: NS) {
     await prepareServer(ns, "foodnstuff");
 }
 
-export async function prepareServer(ns: NS, target: string) {
+export async function prepareServer(ns: NS, target: string, threshold: number = 0.8) {
     const safetyMarginMs = 200;
 
     const weakenScriptRam = 1.75;
@@ -39,7 +39,7 @@ export async function prepareServer(ns: NS, target: string) {
             await ns.sleep(weakenTime + safetyMarginMs);
             ns.print("done with " + sumThreadsDone + "/" + targetWeakenThreads + " weakens");
         }
-        printServerStats(ns, target, 0.8);
+        printServerStats(ns, target, threshold);
         const targetGrowThreads = getGrowThreads(ns, target);
         // check if grow is needed
         if (targetGrowThreads === 0) {
@@ -65,7 +65,7 @@ export async function prepareServer(ns: NS, target: string) {
         }
         await ns.sleep(growingTime + safetyMarginMs);
         ns.print("done with " + sumGrowthThreadsDone + "/" + targetGrowThreads + " grows");
-        printServerStats(ns, target, 0.8);
+        printServerStats(ns, target, threshold);
     }
 
     ns.print("Done preparing!");

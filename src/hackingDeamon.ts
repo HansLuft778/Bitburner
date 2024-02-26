@@ -17,16 +17,16 @@ export async function main(ns: NS) {
     ns.disableLog("ALL");
     // either start loop or parallelize, depending on the number of servers and money the player has
 
+    let target = getBestServerListCheap(ns, false)[0].name;
+    // target = "silver-helix";
+    ns.print("target: " + target);
+
     // ----------------- PREPARE SERVER -----------------
 
     // TODO: find if prep is needed
-    // await loopCycle(ns);
+    await loopCycle(ns, target, MONEY_HACK_THRESHOLD);
 
     // ----------------- CHECK WHICH MODE TO USE -----------------
-
-    let target = getBestServerListCheap(ns, false)[0].name;
-    target = "silver-helix";
-    ns.print("target: " + target);
 
     // now we have to find out wether to keep using loop or switch to parallel mode this should be decided dynamically
 

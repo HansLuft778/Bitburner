@@ -19,10 +19,12 @@ export async function main(ns: NS) {
     }
 }
 
-export async function loopCycle(ns: NS) {
+export async function loopCycle(ns: NS, target: string = "", threshold: number = 0.8) {
     // find the server with the most available money
-    let target: string = getBestServerListCheap(ns, true)[0].name;
-    target = "silver-helix";
+    if (target == "") {
+        target = getBestServerListCheap(ns, true)[0].name;
+    }
+
     ns.print("target: " + target);
 
     if (lastTarget != target) {
@@ -30,7 +32,6 @@ export async function loopCycle(ns: NS) {
         ns.print("found new best Server: " + target);
     }
     lastTarget = target;
-
 
     // ns.print(cyan + "------------ WEAKENING ------------" + reset);
     // await weakenServer(ns, target);
@@ -42,10 +43,10 @@ export async function loopCycle(ns: NS) {
     // await weakenServer(ns, target);
 
     ns.print(Colors.cyan + "------------ PREPARING ------------" + Colors.reset);
-    await prepareServer(ns, target);
+    await prepareServer(ns, target, threshold);
 
     ns.print(Colors.cyan + "------------- HACKING -------------" + Colors.reset);
-    await hackServer(ns, target, 0.8);
+    await hackServer(ns, target, threshold);
 }
 
 /**
