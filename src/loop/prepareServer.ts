@@ -18,54 +18,63 @@ export async function prepareServer(ns: NS, target: string, threshold: number = 
 
     // TODO: use similar method as in parallel/manager.ts to let the grow finish right after the weaken
     while (true) {
-        const targetWeakenThreads = getWeakenThreadsEff(ns, target);
+        const totalWeakenThreadsNeeded = getWeakenThreadsEff(ns, target);
 
         ns.print(Colors.cyan + "------------ WEAKENING ------------" + Colors.reset);
-        ns.print("total weaken threads needed: " + targetWeakenThreads);
+        ns.print("total weaken threads needed: " + totalWeakenThreadsNeeded);
         // weaken to min sec lvl
-        let sumThreadsDone = 0;
-        while (sumThreadsDone < targetWeakenThreads) {
+        let threadsDispatched = 0;
+        let threadsRemaining = totalWeakenThreadsNeeded;
+        while (threadsDispatched < totalWeakenThreadsNeeded) {
             const weakenTime = ns.getWeakenTime(target);
+
             for (let i = 0; i < allHosts.length; i++) {
-                if (sumThreadsDone >= targetWeakenThreads) break;
+                if (threadsDispatched >= totalWeakenThreadsNeeded) break;
 
                 const host = allHosts[i];
                 const freeRam = host.maxRam - ns.getServerUsedRam(host.name);
-
+                if (freeRam < weakenScriptRam) continue;
                 const numThreadsOnHost = Math.floor(freeRam / weakenScriptRam);
 
-                ns.exec("weaken.js", host.name, numThreadsOnHost, target);
-                sumThreadsDone += numThreadsOnHost;
+                const threadsToDispatch = Math.min(threadsRemaining, numThreadsOnHost);
+
+                ns.exec("weaken.js", host.name, threadsToDispatch, target);
+                threadsRemaining -= threadsToDispatch;
+                threadsDispatched += threadsToDispatch;
             }
             await ns.sleep(weakenTime + safetyMarginMs);
-            ns.print("done with " + sumThreadsDone + "/" + targetWeakenThreads + " weakens");
+            ns.print("done with " + threadsDispatched + "/" + totalWeakenThreadsNeeded + " weakens");
         }
         printServerStats(ns, target, threshold);
-        const targetGrowThreads = getGrowThreads(ns, target);
+        const totalGrowThreadsNeeded = getGrowThreads(ns, target);
         // check if grow is needed
-        if (targetGrowThreads === 0) {
+        if (totalGrowThreadsNeeded === 0) {
             ns.print("No growth needed");
             break;
         }
 
         ns.print(Colors.cyan + "------------- GROWING -------------" + Colors.reset);
-        ns.print("total growing threads needed: " + targetGrowThreads);
+        ns.print("total growing threads needed: " + totalGrowThreadsNeeded);
         // grow one batch
         const growingTime = ns.getGrowTime(target);
-        let sumGrowthThreadsDone = 0;
+        threadsDispatched = 0;
+        threadsRemaining = totalGrowThreadsNeeded;
         for (let i = 0; i < allHosts.length; i++) {
-            if (sumGrowthThreadsDone >= targetGrowThreads) break;
+            if (threadsDispatched >= totalGrowThreadsNeeded) break;
 
             const host = allHosts[i];
             const freeRam = host.maxRam - ns.getServerUsedRam(host.name);
-
+            if (freeRam < growingScriptRam) continue;
             const numThreadsOnHost = Math.floor(freeRam / growingScriptRam);
 
-            ns.exec("grow.js", host.name, numThreadsOnHost, target);
-            sumGrowthThreadsDone += numThreadsOnHost;
+            const threadsToDispatch = Math.min(threadsRemaining, numThreadsOnHost);
+
+            ns.exec("grow.js", host.name, threadsToDispatch, target);
+            threadsRemaining -= threadsToDispatch;
+            threadsDispatched += threadsToDispatch;
         }
         await ns.sleep(growingTime + safetyMarginMs);
-        ns.print("done with " + sumGrowthThreadsDone + "/" + targetGrowThreads + " grows");
+        ns.print("done with " + threadsDispatched + "/" + totalGrowThreadsNeeded + " grows");
         printServerStats(ns, target, threshold);
     }
 
