@@ -1,6 +1,7 @@
-/** @param {NS} ns */
-export function serverScanner(ns) {
-    let uncheckedHosts = ['home'];
+import { NS } from "@ns";
+
+export function serverScanner(ns: NS): string[] {
+    let uncheckedHosts = ["home"];
     let checkedHosts = [];
 
     for (let i = 0; i < uncheckedHosts.length; i++) {
@@ -17,7 +18,7 @@ export function serverScanner(ns) {
     return checkedHosts.sort();
 }
 
-export function isHackable(ns, server) {
+export function isHackable(ns: NS, server: string): boolean {
     ns.print(server);
     if (
         ns.getServerNumPortsRequired(server) <= getNumHacks(ns) &&
@@ -27,13 +28,11 @@ export function isHackable(ns, server) {
     else return false;
 }
 
-export function getNumHacks(ns) {
+export function getNumHacks(ns: NS): number {
     let i = 0;
-    if (ns.fileExists('BruteSSH.exe')) i++;
-    if (ns.fileExists('FTPCrack.exe')) i++;
-    if (ns.fileExists('HTTPWorm.exe')) i++;
-    if (ns.fileExists('SQLInject.exe')) i++;
+    if (ns.fileExists("BruteSSH.exe")) i++;
+    if (ns.fileExists("FTPCrack.exe")) i++;
+    if (ns.fileExists("HTTPWorm.exe")) i++;
+    if (ns.fileExists("SQLInject.exe")) i++;
     return i;
 }
-
-export async function main(ns) {}
