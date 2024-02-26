@@ -89,9 +89,18 @@ export function getTimeH(timestamp?: number) {
 export function getGrowThreads(ns: NS, server: string) {
     const serverMaxMoney = ns.getServerMaxMoney(server);
     const serverCurrentMoney = ns.getServerMoneyAvailable(server);
-    let moneyMult = serverMaxMoney / serverCurrentMoney;
-    if (isNaN(moneyMult) || moneyMult == Infinity) moneyMult = 1;
-    const serverGrowThreads = Math.ceil(ns.growthAnalyze(server, moneyMult));
+    let moneyMultiplier = serverMaxMoney / serverCurrentMoney;
+    if (isNaN(moneyMultiplier) || moneyMultiplier == Infinity) moneyMultiplier = 1;
+    const serverGrowThreads = Math.ceil(ns.growthAnalyze(server, moneyMultiplier));
+
+    return serverGrowThreads;
+}
+
+export function getGrowThreadsThreshold(ns: NS, server: string, threshold: number) {
+    const maxMoney = ns.getServerMaxMoney(server);
+    const minMoney = maxMoney * (1 - threshold);
+    const moneyMultiplier = maxMoney / minMoney;
+    const serverGrowThreads = Math.ceil(ns.growthAnalyze(server, moneyMultiplier));
 
     return serverGrowThreads;
 }
@@ -105,13 +114,6 @@ export function getWeakenThreads(ns: NS, server: string) {
 }
 
 export function getWeakenThreadsEff(ns: NS, server: string) {
-    const serverSecLvl = ns.getServerSecurityLevel(server);
-    const serverWeakenThreads = Math.ceil((serverSecLvl - ns.getServerMinSecurityLevel(server)) / 0.05);
-
-    return serverWeakenThreads;
-}
-
-export function getWeakenThreadsEff2(ns: NS, server: string) {
     const serverSecLvl = ns.getServerSecurityLevel(server);
     const serverWeakenThreads = Math.ceil((serverSecLvl - ns.getServerMinSecurityLevel(server)) / ns.weakenAnalyze(1));
 
