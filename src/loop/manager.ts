@@ -33,15 +33,6 @@ export async function loopCycle(ns: NS, target: string = "", threshold: number =
     }
     lastTarget = target;
 
-    // ns.print(cyan + "------------ WEAKENING ------------" + reset);
-    // await weakenServer(ns, target);
-
-    // ns.print(cyan + "------------- GROWING -------------" + reset);
-    // await growServer(ns, target);
-
-    // ns.print(cyan + "------------ WEAKENING ------------" + reset);
-    // await weakenServer(ns, target);
-
     ns.print(Colors.cyan + "------------ PREPARING ------------" + Colors.reset);
     await prepareServer(ns, target, threshold);
 
