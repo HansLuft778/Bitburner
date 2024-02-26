@@ -9,7 +9,7 @@ let curSec = 0;
 let maxRam = 0;
 let useRam = 0;
 let freeRam = 0;
-let moneyMult = 0;
+let moneyMultiplier = 0;
 let growingThreads = 0;
 let serverWeakenThreadsCur = 0;
 let lowerMoneyBound = 0;
@@ -33,7 +33,9 @@ export function printServerStats(ns: NS, server: string, hackThreshold: number) 
 
     ns.print("Money:");
     ns.print("\tMax Money: " + ns.formatNumber(maxMoney) + " | Current Money: " + ns.formatNumber(curMoney));
-    ns.print("\tHack Chance: " + ns.formatNumber(hackingChance));
+    ns.print(
+        "\tPercent: " + ns.formatNumber(curMoney / maxMoney) + " | Hack Chance: " + ns.formatNumber(hackingChance),
+    );
 
     ns.print("Security:");
     ns.print("\tMin Seclvl: " + minSec + " | Current Seclvl: " + ns.formatNumber(curSec));
@@ -47,7 +49,7 @@ export function printServerStats(ns: NS, server: string, hackThreshold: number) 
     ns.print("\tWeaken Threads " + serverWeakenThreadsCur);
 
     ns.print(
-        "\tHack Threads: " + ns.formatNumber(hackThreads) + " | Hack percent: " + ns.formatNumber(hackingPercent, 5),
+        "\tHack Threads: " + ns.formatNumber(hackThreads, 0) + " | Hack percent: " + ns.formatNumber(hackingPercent, 5),
     );
 
     ns.print(Colors.cyan + footerString + Colors.reset);
@@ -80,7 +82,7 @@ async function printServerStatsLive(ns: NS, server: string, hackThreshold: numbe
 
         ns.print(
             "\tHack Threads: " +
-                ns.formatNumber(hackThreads) +
+                ns.formatNumber(hackThreads, 0) +
                 " | Hack percent: " +
                 ns.formatNumber(hackingPercent, 5),
         );
@@ -105,10 +107,10 @@ function setStats(ns: NS, server: string, hackThreshold: number) {
     freeRam = maxRam - useRam;
     // threads
 
-    moneyMult = maxMoney / curMoney;
-    if (isNaN(moneyMult) || moneyMult == Infinity) moneyMult = 1;
+    moneyMultiplier = maxMoney / curMoney;
+    if (isNaN(moneyMultiplier) || moneyMultiplier == Infinity) moneyMultiplier = 1;
 
-    growingThreads = Math.ceil(ns.growthAnalyze(server, moneyMult));
+    growingThreads = Math.ceil(ns.growthAnalyze(server, moneyMultiplier));
 
     serverWeakenThreadsCur = Math.ceil((curSec - ns.getServerMinSecurityLevel(server)) / 0.05);
 
