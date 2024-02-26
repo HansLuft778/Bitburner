@@ -16,6 +16,7 @@ export async function prepareServer(ns: NS, target: string, threshold: number = 
 
     const allHosts = getBestHostByRam(ns);
 
+    // TODO: use similar method as in parallel/manager.ts to let the grow finish right after the weaken
     while (true) {
         const targetWeakenThreads = getWeakenThreadsEff(ns, target);
 
