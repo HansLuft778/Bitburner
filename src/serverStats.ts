@@ -1,6 +1,8 @@
 import { NS } from "@ns";
 import { Colors } from "./lib";
 
+const BORDER_COLOR = Colors.cyan;
+
 let maxMoney = 0;
 let curMoney = 0;
 let hackingChance = 0;
@@ -23,74 +25,42 @@ export async function main(ns: NS) {
     ns.clearLog();
     ns.tail();
     ns.disableLog("ALL");
-    await printServerStatsLive(ns, ns.args[0].toString(), 0.9);
+    while (true) {
+        ns.clearLog();
+        printServerStats(ns, ns.args[0].toString(), 0.9);
+        await ns.sleep(200);
+    }
 }
 
 export function printServerStats(ns: NS, server: string, hackThreshold: number) {
     setStats(ns, server, hackThreshold);
 
-    ns.print(Colors.cyan + headerString + Colors.reset);
+    ns.print(BORDER_COLOR + headerString + Colors.reset);
 
-    ns.print("Money:");
-    ns.print("\tMax Money: " + ns.formatNumber(maxMoney) + " | Current Money: " + ns.formatNumber(curMoney));
-    ns.print(
-        "\tPercent: " + ns.formatNumber(curMoney / maxMoney) + " | Hack Chance: " + ns.formatNumber(hackingChance),
+    printStatLine(ns, "Money:", false);
+    printStatLine(ns, "Max Money: " + ns.formatNumber(maxMoney) + " | Current Money: " + ns.formatNumber(curMoney));
+    printStatLine(
+        ns,
+        "Percent: " + ns.formatNumber(curMoney / maxMoney) + " | Hack Chance: " + ns.formatNumber(hackingChance),
     );
 
-    ns.print("Security:");
-    ns.print("\tMin Seclvl: " + minSec + " | Current Seclvl: " + ns.formatNumber(curSec));
+    printStatLine(ns, "Security:", false);
+    printStatLine(ns, "Min Seclvl: " + minSec + " | Current Seclvl: " + ns.formatNumber(curSec));
 
-    ns.print("Ram:");
-    ns.print("\tServer Max Ram: " + maxRam);
-    ns.print("\tUsed Ram: " + useRam + " | free Ram: " + freeRam);
+    printStatLine(ns, "Ram:", false);
+    printStatLine(ns, "Server Max Ram: " + maxRam);
+    printStatLine(ns, "Used Ram: " + useRam + " | free Ram: " + freeRam);
 
-    ns.print("Threads:");
-    ns.print("\tGrow Threads: " + growingThreads);
-    ns.print("\tWeaken Threads " + serverWeakenThreadsCur);
+    printStatLine(ns, "Threads:", false);
+    printStatLine(ns, "Grow Threads: " + growingThreads);
+    printStatLine(ns, "Weaken Threads " + serverWeakenThreadsCur);
+    printStatLine(ns, "Hack Threads: " + hackThreads + " | Hack percent: " + ns.formatNumber(hackingPercent, 5));
 
-    ns.print(
-        "\tHack Threads: " + ns.formatNumber(hackThreads, 0) + " | Hack percent: " + ns.formatNumber(hackingPercent, 5),
-    );
-
-    ns.print(Colors.cyan + footerString + Colors.reset);
+    ns.print(BORDER_COLOR + footerString + Colors.reset);
 }
 
 export function printServerStatsConsole(ns: NS, server: string) {
     // todo
-}
-
-async function printServerStatsLive(ns: NS, server: string, hackThreshold: number) {
-    while (true) {
-        setStats(ns, server, hackThreshold);
-
-        ns.print(Colors.cyan + headerString + Colors.reset);
-
-        ns.print("Money:");
-        ns.print("\tMax Money: " + ns.formatNumber(maxMoney) + " | Current Money: " + ns.formatNumber(curMoney));
-        ns.print("\tHack Chance: " + ns.formatNumber(hackingChance));
-
-        ns.print("Security:");
-        ns.print("\tMin Seclvl: " + minSec + " | Current Seclvl: " + ns.formatNumber(curSec));
-
-        ns.print("Ram:");
-        ns.print("\tServer Max Ram: " + maxRam);
-        ns.print("\tUsed Ram: " + useRam + " | free Ram: " + freeRam);
-
-        ns.print("Threads:");
-        ns.print("\tGrow Threads: " + growingThreads);
-        ns.print("\tWeaken Threads " + serverWeakenThreadsCur);
-
-        ns.print(
-            "\tHack Threads: " +
-                ns.formatNumber(hackThreads, 0) +
-                " | Hack percent: " +
-                ns.formatNumber(hackingPercent, 5),
-        );
-
-        ns.print(Colors.cyan + footerString + Colors.reset);
-        await ns.sleep(200);
-        ns.clearLog();
-    }
 }
 
 function setStats(ns: NS, server: string, hackThreshold: number) {
@@ -121,14 +91,21 @@ function setStats(ns: NS, server: string, hackThreshold: number) {
     if (isNaN(hackThreads) || hackThreads == Infinity) hackThreads = 0;
     if (isNaN(hackingPercent) || hackingPercent == Infinity) hackingPercent = 0;
 
-    headerString = "----------------- stats for " + server + " -----------------";
-    footerString = buildFooterString(headerString.length);
+    headerString = "┌───────────────── stats for " + server + " ─────────────────┐";
+    footerString = "└" + "─".repeat(headerString.length - 2) + "┘";
 }
 
-function buildFooterString(len: number) {
-    let footerStr = "";
-    for (let i = 0; i < len; i++) {
-        footerStr += "-";
-    }
-    return footerStr;
+function printStatLine(ns: NS, value: string, indent: boolean = true) {
+    if (indent) value = "\t" + value;
+    const offset = indent ? 8 : 3; // the offset to subtract the border and indent
+    ns.print(
+        BORDER_COLOR +
+            "│ " +
+            Colors.reset +
+            value +
+            " ".repeat(headerString.length - value.length - offset) +
+            BORDER_COLOR +
+            "│" +
+            Colors.reset,
+    );
 }
