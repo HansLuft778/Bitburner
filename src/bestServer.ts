@@ -28,7 +28,7 @@ export function getBestServerList(ns: NS, shouldPrint: boolean) {
         if (isHackable(ns, serverList[i])) {
             const maxMoney = ns.getServerMaxMoney(serverList[i]);
             const hackingChance = ns.hackAnalyzeChance(serverList[i]);
-            const weakeningTime = ns.getWeakenTime(serverList[i]);
+            let weakeningTime = ns.getWeakenTime(serverList[i]);
             const maxRam = ns.getServerMaxRam(serverList[i]);
 
             // filter server with no money or the hacking level above players hacking level
@@ -43,8 +43,9 @@ export function getBestServerList(ns: NS, shouldPrint: boolean) {
                 const player = ns.getPlayer();
                 server.hackDifficulty = server.minDifficulty;
                 const maxMoney = server.moneyMax == undefined ? 0 : server.moneyMax;
+                weakeningTime = ns.formulas.hacking.weakenTime(server, player);
                 score =
-                    ((maxMoney / ns.formulas.hacking.weakenTime(server, player)) *
+                    ((maxMoney / weakeningTime) *
                         ns.formulas.hacking.hackChance(server, player)) /
                     1000;
             }
@@ -170,9 +171,9 @@ export function printTable(ns: NS, array: Server[]) {
         tableArray.push(server);
     }
 
-    ns.print("╔════════════════════╦═══════════╦════════╦═══════════╦═════════╗");
-    ns.print("║       server       ║   Max $   ║ chance ║ Weak time ║  score  ║");
-    ns.print("╠════════════════════╬═══════════╬════════╬═══════════╬═════════╣");
+    ns.print("╔════════════════════╦══════════╦════════╦═══════════╦═════════╗");
+    ns.print("║       server       ║   Max $  ║ chance ║ Weak time ║  score  ║");
+    ns.print("╠════════════════════╬══════════╬════════╬═══════════╬═════════╣");
     // polluting table with data
     for (let i = 0; i < tableArray.length; i++) {
         ns.print(
@@ -195,12 +196,12 @@ export function printTable(ns: NS, array: Server[]) {
         );
     }
 
-    ns.print("╚════════════════════╩═══════════╩════════╩═══════════╩═════════╝");
+    ns.print("╚════════════════════╩══════════╩════════╩═══════════╩═════════╝");
 }
 
 function space(len: number, colIndex: number) {
     // with of the cell content
-    const colLen = [19, 10, 7, 10, 8];
+    const colLen = [19, 9, 7, 10, 8];
     const real = colLen[colIndex] - len;
     let str = "";
     for (let i = 0; i < real; i++) {
