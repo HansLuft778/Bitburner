@@ -1,6 +1,6 @@
 import { NS } from "@ns";
 import { getBestHostByRam } from "../bestServer";
-import { Colors, getGrowThreads, getWeakenThreadsEff } from "@/lib";
+import { Colors, getGrowThreads, getWeakenThreads } from "@/lib";
 import { printServerStats } from "@/serverStats";
 
 export async function main(ns: NS) {
@@ -18,7 +18,7 @@ export async function prepareServer(ns: NS, target: string, threshold: number = 
 
     // TODO: use similar method as in parallel/manager.ts to let the grow finish right after the weaken
     while (true) {
-        const totalWeakenThreadsNeeded = getWeakenThreadsEff(ns, target);
+        const totalWeakenThreadsNeeded = getWeakenThreads(ns, target);
 
         ns.print(Colors.CYAN + "------------ WEAKENING ------------" + Colors.reset);
         ns.print("total weaken threads needed: " + totalWeakenThreadsNeeded);

@@ -113,7 +113,7 @@ export function getWeakenThreadsAfterHack(ns: NS, numHackThreads: number): numbe
     return serverWeakenThreads;
 }
 
-export function getWeakenThreadsEff(ns: NS, server: string) {
+export function getWeakenThreads(ns: NS, server: string) {
     const serverSecLvl = ns.getServerSecurityLevel(server);
     const serverWeakenThreads = Math.ceil((serverSecLvl - ns.getServerMinSecurityLevel(server)) / ns.weakenAnalyze(1));
 
@@ -134,7 +134,7 @@ export async function main(ns: NS) {
     ns.disableLog("ALL");
 
     const server = "the-hub";
-    ns.print(getWeakenThreadsEff(ns, server) + " weakens needed");
+    ns.print(getWeakenThreads(ns, server) + " weakens needed");
     ns.print(getGrowThreads(ns, server) + " grows needed");
     ns.print(getHackThreads(ns, server, 0.9) + " hacks needed");
 }

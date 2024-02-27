@@ -38,7 +38,7 @@ export async function hackServer(ns: NS, target: string, threshold: number) {
 
             const numThreadsOnHost = Math.floor(freeRam / hackingScriptRam);
 
-            ns.exec("hack.js", host.name, numThreadsOnHost, target);
+            ns.exec("hack.js", host.name, numThreadsOnHost, target, 0);
             sumThreadsDone += numThreadsOnHost;
         }
         await ns.sleep(hackingTime + safetyMarginMs);

@@ -1,5 +1,5 @@
 import { getBestHostByRam } from "@/bestServer";
-import { Colors, getGrowThreads, getWeakenThreadsEff } from "@/lib";
+import { Colors, getGrowThreads, getWeakenThreads } from "@/lib";
 import { NS } from "@ns";
 import { ServerManager } from "./serverManager";
 
@@ -25,7 +25,7 @@ export function weakenServer(ns: NS, target: string, order: number, batchId: num
 
     if (order == 1) {
         // first weak has to weaken server to min from unknown sec lvl
-        totalWeakenThreadsNeeded = getWeakenThreadsEff(ns, target);
+        totalWeakenThreadsNeeded = getWeakenThreads(ns, target);
         ns.print("Actual weaken1 threads needed: " + totalWeakenThreadsNeeded);
     } else if (order == 2) {
         // second weak only has to remove the sec increase from the grow before (more ram efficient)
