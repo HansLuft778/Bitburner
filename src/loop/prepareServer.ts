@@ -20,7 +20,7 @@ export async function prepareServer(ns: NS, target: string, threshold: number = 
     while (true) {
         const totalWeakenThreadsNeeded = getWeakenThreadsEff(ns, target);
 
-        ns.print(Colors.cyan + "------------ WEAKENING ------------" + Colors.reset);
+        ns.print(Colors.CYAN + "------------ WEAKENING ------------" + Colors.reset);
         ns.print("total weaken threads needed: " + totalWeakenThreadsNeeded);
         // weaken to min sec lvl
         let threadsDispatched = 0;
@@ -48,7 +48,7 @@ export async function prepareServer(ns: NS, target: string, threshold: number = 
         }
         printServerStats(ns, target, threshold);
 
-        ns.print(Colors.cyan + "------------- GROWING -------------" + Colors.reset);
+        ns.print(Colors.CYAN + "------------- GROWING -------------" + Colors.reset);
         const totalGrowThreadsNeeded = getGrowThreads(ns, target);
         // check if grow is needed
         if (totalGrowThreadsNeeded === 0) {
