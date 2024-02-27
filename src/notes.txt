@@ -1,0 +1,30 @@
+grow being 3.2x hacktime and weaken 4x hacktime
+grow can not safely be distributed, cause:
+    multiple instances cant finish at the same time, effect is calculated at the end, 
+    thus if its spread across multiple instances they'll increase security for one another
+
+
+
+
+
+firstWeakenThreads: 2 // um den hack wieder gut zu machen
+serverGrowThreads: 589
+secondWeakenThreads: 48
+serverHackThreads: 4492
+
+needs 8754.65GB of RAM and got 9581.7. Running parallel mode on the-hub
+hackThreshold: 0.55
+
+fix:
+grow threads conservative calculation by adding the THRESHOLD_STEP on top -> will help when we overshoot the threshold target
+first weak threads now take the security increase if the hack into account
+
+
+
+predicted threads needed:
+firstWeakenThreads: 121
+serverGrowThreads: 2196
+secondWeakenThreads: 176
+serverHackThreads: 3016
+needs 9489.95GB of RAM and got 9581.7. Running parallel mode on the-hub
+hackThreshold: 0.9

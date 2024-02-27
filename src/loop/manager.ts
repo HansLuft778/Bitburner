@@ -21,18 +21,16 @@ export async function main(ns: NS) {
             ns.print("found new best Server: " + target);
         }
         lastTarget = target;
-        await loopCycle(ns, target, 0.8, true);
+        await loopCycle(ns, target, 0.8);
     }
 }
 
-export async function loopCycle(ns: NS, target: string, threshold: number, shouldHack: boolean) {
+export async function loopCycle(ns: NS, target: string, threshold: number) {
     ns.print(Colors.cyan + "------------ PREPARING ------------" + Colors.reset);
     await prepareServer(ns, target, threshold);
 
-    if (shouldHack) {
-        ns.print(Colors.cyan + "------------- HACKING -------------" + Colors.reset);
-        await hackServer(ns, target, threshold);
-    }
+    ns.print(Colors.cyan + "------------- HACKING -------------" + Colors.reset);
+    await hackServer(ns, target, threshold);
 }
 
 /**

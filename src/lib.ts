@@ -90,6 +90,7 @@ export function getGrowThreads(ns: NS, server: string) {
     const serverMaxMoney = ns.getServerMaxMoney(server);
     const serverCurrentMoney = ns.getServerMoneyAvailable(server);
     let moneyMultiplier = serverMaxMoney / serverCurrentMoney;
+    ns.print("moneyMultiplier: " + moneyMultiplier);
     if (isNaN(moneyMultiplier) || moneyMultiplier == Infinity) moneyMultiplier = 1;
     const serverGrowThreads = Math.ceil(ns.growthAnalyze(server, moneyMultiplier));
 
@@ -133,7 +134,7 @@ export async function main(ns: NS) {
     ns.tail();
     ns.disableLog("ALL");
 
-    const server = "silver-helix";
+    const server = "the-hub";
     ns.print(getWeakenThreadsEff(ns, server) + " weakens needed");
     ns.print(getGrowThreads(ns, server) + " grows needed");
     ns.print(getHackThreads(ns, server, 0.9) + " hacks needed");

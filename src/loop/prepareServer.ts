@@ -60,20 +60,16 @@ export async function prepareServer(ns: NS, target: string, threshold: number = 
         // grow one batch
         const growingTime = ns.getGrowTime(target);
         threadsDispatched = 0;
-        threadsRemaining = totalGrowThreadsNeeded;
         for (let i = 0; i < allHosts.length; i++) {
-            if (threadsDispatched >= totalGrowThreadsNeeded) break;
+            // if (threadsDispatched >= totalGrowThreadsNeeded) break;
 
             const host = allHosts[i];
             const freeRam = host.maxRam - ns.getServerUsedRam(host.name);
             if (freeRam < growingScriptRam) continue;
             const numThreadsOnHost = Math.floor(freeRam / growingScriptRam);
 
-            const threadsToDispatch = Math.min(threadsRemaining, numThreadsOnHost);
-
-            ns.exec("grow.js", host.name, threadsToDispatch, target);
-            threadsRemaining -= threadsToDispatch;
-            threadsDispatched += threadsToDispatch;
+            ns.exec("grow.js", host.name, numThreadsOnHost, target);
+            threadsDispatched += numThreadsOnHost;
         }
         ns.print("dispatched " + threadsDispatched + " grow threads");
         await ns.sleep(growingTime + safetyMarginMs);
