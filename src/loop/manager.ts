@@ -16,17 +16,16 @@ export async function main(ns: NS) {
     // steps: WGWH-WGWH-..
     while (true) {
         const target = getBestServerListCheap(ns, true)[0].name;
-        await loopCycle(ns, target);
+        if (lastTarget != target) {
+            nukeAll(ns);
+            ns.print("found new best Server: " + target);
+        }
+        lastTarget = target;
+        await loopCycle(ns, target, 0.8, true);
     }
 }
 
-export async function loopCycle(ns: NS, target: string, threshold: number = 0.8, shouldHack: boolean = true) {
-    if (lastTarget != target) {
-        nukeAll(ns);
-        ns.print("found new best Server: " + target);
-    }
-    lastTarget = target;
-
+export async function loopCycle(ns: NS, target: string, threshold: number, shouldHack: boolean) {
     ns.print(Colors.cyan + "------------ PREPARING ------------" + Colors.reset);
     await prepareServer(ns, target, threshold);
 
