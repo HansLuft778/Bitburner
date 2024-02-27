@@ -18,7 +18,7 @@ export async function main(ns: NS) {
     // either start loop or parallelize, depending on the number of servers and money the player has
 
     let target = getBestServerListCheap(ns, false)[0].name;
-    // target = "harakiri-sushi";
+    // target = "phantasy";
     ns.print("target: " + target);
 
     // ----------------- PREPARE SERVER -----------------
@@ -28,20 +28,21 @@ export async function main(ns: NS) {
         ns.getServerMaxMoney(target) != ns.getServerMoneyAvailable(target) ||
         ns.getServerSecurityLevel(target) != ns.getServerMinSecurityLevel(target)
     ) {
-        await prepareServer(ns, target, MONEY_HACK_THRESHOLD);
+        // await prepareServer(ns, target, MONEY_HACK_THRESHOLD);
     }
 
     if (
         ns.getServerMaxMoney(target) == ns.getServerMoneyAvailable(target) &&
         ns.getServerSecurityLevel(target) == ns.getServerMinSecurityLevel(target)
     ) {
-        ns.print(Colors.green + "Preparation finished, starting parallel mode");
+        ns.print(Colors.GREEN + "Preparation finished, starting parallel mode");
     } else {
-        ns.print(Colors.red + "Preparation failed, starting loop mode");
+        ns.print(Colors.RED + "Preparation failed, starting loop mode");
     }
 
     // ----------------- CHECK WHICH MODE TO USE -----------------
     let hackThreshold = getOptimalHackThreshold(ns, target);
+    hackThreshold = 0.9;
     while (true) {
         ns.print("hackThreshold: " + hackThreshold);
         await parallelCycle(ns, target, hackThreshold);
@@ -58,6 +59,9 @@ function launchLoop(ns: NS) {
     while (true) {}
 }
 
+/**
+ * Needs update: check until i can buy WGH servers
+ */
 function getOptimalHackThreshold(ns: NS, target: string): number {
     const allHosts = getBestHostByRam(ns);
     const totalMaxRam = allHosts.reduce((acc, server) => {

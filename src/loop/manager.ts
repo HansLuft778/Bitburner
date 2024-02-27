@@ -1,9 +1,7 @@
 import { NS } from "@ns";
 
-import { Colors, nukeAll } from "../lib.js";
 import { getBestServerListCheap } from "../bestServer.js";
-import { weakenServer } from "./weakenAlgo.js";
-import { growServer } from "./growingAlgo.js";
+import { Colors, nukeAll } from "../lib.js";
 import { hackServer } from "./hackingAlgo.js";
 import { prepareServer } from "./prepareServer.js";
 

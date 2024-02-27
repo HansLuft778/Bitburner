@@ -7,11 +7,8 @@ import { growServer } from "./growingAlgo.js";
 import { hackServer } from "./hackingAlgo.js";
 import { printServerStats } from "../serverStats.js";
 
-const GROW_HOST = "home";
-const WEAK_HOST = "home";
-const HACK_HOST = "home";
-
 const DELAY_MARGIN_MS = 1000;
+const NUM_BATCHES = 1;
 let lastTarget = "";
 
 export async function main(ns: NS) {
@@ -41,104 +38,141 @@ export async function parallelCycle(ns: NS, target: string = "", hackThreshold: 
     }
     lastTarget = target;
 
-    // debug
-    // target = "phantasy"
+    if (NUM_BATCHES > 1) {
+        ns.print(Colors.CYAN + "------------ MULTI BATCH MODE ------------");
+        for (let batchId = 0; batchId < NUM_BATCHES; batchId++) {
+            // get execution times:
+            const weakTime = ns.getWeakenTime(target);
+            const growTime = ns.getGrowTime(target);
+            const hackTime = ns.getHackTime(target);
 
-    // get execution times:
-    const weakTime = ns.getWeakenTime(target);
-    const growTime = ns.getGrowTime(target);
-    const hackTime = ns.getHackTime(target);
+            // --------------------------------------
+            // weak I
 
-    // --------------------------------------
-    // weak I
+            ns.print("Attempting to start Weak I at " + getTimeH());
+            weakenServer(ns, target, 1, batchId);
 
-    ns.print("Attempting to start Weak I at " + getTimeH());
-    const weak1Dispatched = weakenServer(ns, target, 1);
+            // --------------------------------------
+            // weak II
 
-    // --------------------------------------
-    // weak II
+            let weak2delay = 2 * DELAY_MARGIN_MS;
+            ns.print("Attempting to start Weak II at " + getTimeH(Date.now() + weak2delay));
+            weakenServer(ns, target, 2, batchId, weak2delay);
 
-    let weak2delay = 2 * DELAY_MARGIN_MS;
-    ns.print("Attempting to start Weak II at " + getTimeH(Date.now() + weak2delay));
-    weakenServer(ns, target, 2, weak2delay);
+            // --------------------------------------
+            // grow
 
-    // --------------------------------------
-    // grow
+            let growDelay = weakTime - growTime + DELAY_MARGIN_MS;
+            ns.print("Attempting to start Grow at " + getTimeH());
+            growServer(ns, target, batchId, growDelay);
 
-    let growDelay = weakTime - growTime + DELAY_MARGIN_MS;
-    ns.print("Attempting to start Grow at " + getTimeH());
-    growServer(ns, target, growDelay);
+            // --------------------------------------
+            // hacking
 
-    // --------------------------------------
-    // hacking
+            // hack normal
+            const hackDelay = weakTime - hackTime + 3 * DELAY_MARGIN_MS;
+            ns.print("Attempting to start Hack at " + getTimeH());
+            hackServer(ns, target, hackThreshold, batchId, hackDelay);
 
-    // hack normal
-    const hackStartTime = weakTime - hackTime + 3 * DELAY_MARGIN_MS;
-    ns.print("Attempting to start Hack at " + getTimeH());
-    hackServer(ns, target, HACK_HOST, hackThreshold, hackStartTime);
+            printServerStats(ns, target, hackThreshold);
 
-    ns.print(Colors.green + "Cycle done. Beginning new cycle.." + Colors.reset);
-    printServerStats(ns, target, hackThreshold);
+            await ns.sleep(weakTime + 5 * DELAY_MARGIN_MS);
+            ns.print(Colors.GREEN + "Cycle done. Beginning new cycle.." + Colors.reset);
+        }
+    } else {
+        ns.print(Colors.CYAN + "------------ SINGLE BATCH MODE ------------");
+        const weakTime = ns.getWeakenTime(target);
+        const growTime = ns.getGrowTime(target);
+        const hackTime = ns.getHackTime(target);
+        // weak I
+        ns.print("Attempting to start Weak I at " + getTimeH());
+        const weak1Dispatched = weakenServer(ns, target, 1, 0);
 
-    await ns.sleep(weakTime + 4 * DELAY_MARGIN_MS);
+        // --------------------------------------
+        // weak II delay
 
-    // await ns.sleep(hackTime + DELAY_MARGIN_MS);
+        // if weak I skip, start II immediately
+        let weak2StartTime = 0;
+        if (weak1Dispatched == true) {
+            // weak2StartTime = weakTime + 2 * DELAY_MARGIN_MS - weakTime;
+            weak2StartTime = 2 * DELAY_MARGIN_MS;
+            await ns.sleep(weak2StartTime);
+        }
+        // weak II
+        ns.print("Attempting to start Weak II at " + getTimeH());
+        const weak2Dispatched = weakenServer(ns, target, 2, 0);
 
-    // hacking start logic, for further time optimizations
-    // note: when weak2 fails, the grow must also fail (and vice versa: when grow fails, weak2 should not have started)
-    // if (weak1Dispatched == true && weak2Dispatched == false && growDispatched == false) {
-    //     // scenario: weak1 works, rest skip
-    //     // hack finishes 1 margin unit after weak1 ends
-    //     ns.print(
-    //         Colors.yellow +
-    //             "Weak 2 was skipped. Did the last hack attempt fail?\nHacking is about to start earlier than planned." +
-    //             Colors.reset,
-    //     );
-    //     const hackStartTime = weakTime + DELAY_MARGIN_MS - hackTime;
-    //     await ns.sleep(hackStartTime);
-    //     ns.print("Attempting to start Hack at " + getTimeH());
-    //     hackServer(ns, target, HACK_HOST, hackThreshold);
-    //     await ns.sleep(hackTime + DELAY_MARGIN_MS);
-    // } else if (weak1Dispatched == false && weak2Dispatched == false && growDispatched == false) {
-    //     // scenario: weak1 and weak2 skipped
-    //     ns.print(Colors.yellow + "Weak 1 and Weak 2 were skipped? Hacking now. " + getTimeH() + Colors.reset);
-    //     hackServer(ns, target, HACK_HOST, hackThreshold);
-    //     await ns.sleep(hackTime + DELAY_MARGIN_MS);
-    // } else if (weak1Dispatched == true && growDispatched == true && weak2Dispatched == true) {
-    //     // hack normal
-    //     ns.print(Colors.green + "Hack is about to start as expected" + Colors.reset);
-    //     const hackStartTime = weakTime + 3 * DELAY_MARGIN_MS - hackTime;
-    //     const hackDelayDiff = hackStartTime - growDelay;
-    //     await ns.sleep(hackDelayDiff);
-    //     ns.print("Attempting to start Hack at " + getTimeH());
-    //     hackServer(ns, target, HACK_HOST, hackThreshold);
-    //     await ns.sleep(hackTime + DELAY_MARGIN_MS);
-    // } else if (weak1Dispatched == false && weak2Dispatched == true && growDispatched == true) {
-    //     // case weak1 was skipped, but weak2 and grow were dispatched
+        // --------------------------------------
+        // grow delay
 
-    //     ns.print(
-    //         Colors.yellow + "Weak 1 was skipped. Perhaps the server is already at the min sec lvl." + Colors.reset,
-    //     );
-    //     const hackStartTime = weakTime + 2 * DELAY_MARGIN_MS - hackTime;
-    //     await ns.sleep(hackStartTime - growDelay);
-    //     ns.print("Attempting to start Hack at " + getTimeH());
-    //     hackServer(ns, target, HACK_HOST, hackThreshold);
-    //     await ns.sleep(hackTime + DELAY_MARGIN_MS);
-    // } else {
-    //     ns.print(Colors.red + "could not start hack!" + Colors.reset);
-    //     ns.print(
-    //         "weak1Dispatched: " +
-    //             weak1Dispatched +
-    //             " | weak2Dispatched: " +
-    //             weak2Dispatched +
-    //             " | growDispatched: " +
-    //             growDispatched,
-    //     );
-    //     printServerStats(ns, target, hackThreshold);
-    //     return;
-    // }
+        let growStartTime = 0;
+        if (weak2Dispatched == true) {
+            growStartTime = weakTime + DELAY_MARGIN_MS - growTime;
+            const growDelay = growStartTime - weak2StartTime;
+            await ns.sleep(growDelay);
+        }
 
-    // --------------------------------------
+        // grow
+        ns.print("Attempting to start Grow at " + getTimeH());
+        const growDispatched = growServer(ns, target, 0);
+
+        // --------------------------------------
+        // hacking
+
+        // hacking start logic, for further time optimizations
+        // note: when weak2 fails, the grow must also fail (and vice versa: when grow fails, weak2 should not have started)
+        if (weak1Dispatched == true && weak2Dispatched == false && growDispatched == false) {
+            // scenario: weak1 works, rest skip
+            // hack finishes 1 margin unit after weak1 ends
+            ns.print(
+                Colors.YELLOW +
+                    "Weak 2 was skipped. Did the last hack attempt fail?\nHacking is about to start earlier than planned." +
+                    Colors.reset,
+            );
+            const hackStartTime = weakTime + DELAY_MARGIN_MS - hackTime;
+            await ns.sleep(hackStartTime);
+            ns.print("Attempting to start Hack at " + getTimeH());
+            hackServer(ns, target, hackThreshold, 0);
+            await ns.sleep(hackTime + DELAY_MARGIN_MS);
+        } else if (weak1Dispatched == false && weak2Dispatched == false && growDispatched == false) {
+            // scenario: weak1 and weak2 skipped
+            ns.print(Colors.YELLOW + "Weak 1 and Weak 2 were skipped? Hacking now. " + getTimeH() + Colors.reset);
+            hackServer(ns, target, hackThreshold, 0);
+            await ns.sleep(hackTime + DELAY_MARGIN_MS);
+        } else if (weak1Dispatched == true && growDispatched == true && weak2Dispatched == true) {
+            // hack normal
+            ns.print(Colors.GREEN + "Hack is about to start as expected" + Colors.reset);
+            const hackStartTime = weakTime + 3 * DELAY_MARGIN_MS - hackTime;
+            const hackDelayDiff = hackStartTime - growStartTime;
+            await ns.sleep(hackDelayDiff);
+            ns.print("Attempting to start Hack at " + getTimeH());
+            hackServer(ns, target, hackThreshold, 0);
+            await ns.sleep(hackTime + DELAY_MARGIN_MS);
+        } else if (weak1Dispatched == false && weak2Dispatched == true && growDispatched == true) {
+            // case weak1 was skipped, but weak2 and grow were dispatched
+
+            ns.print(
+                Colors.YELLOW + "Weak 1 was skipped. Perhaps the server is already at the min sec lvl." + Colors.reset,
+            );
+            const hackStartTime = weakTime + 2 * DELAY_MARGIN_MS - hackTime;
+            await ns.sleep(hackStartTime - growStartTime);
+            ns.print("Attempting to start Hack at " + getTimeH());
+            hackServer(ns, target, hackThreshold, 0);
+            await ns.sleep(hackTime + DELAY_MARGIN_MS);
+        } else {
+            ns.print(Colors.RED + "could not start hack!" + Colors.reset);
+            ns.print(
+                "weak1Dispatched: " +
+                    weak1Dispatched +
+                    " | weak2Dispatched: " +
+                    weak2Dispatched +
+                    " | growDispatched: " +
+                    growDispatched,
+            );
+            printServerStats(ns, target, hackThreshold);
+            return;
+        }
+    }
 }
 
 /**
