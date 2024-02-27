@@ -1,10 +1,11 @@
 import { getBestHostByRam } from "@/bestServer";
-import { getGrowThreads, getWeakenThreadsEff } from "@/lib";
+import { Colors, getGrowThreads, getWeakenThreadsEff } from "@/lib";
 import { NS } from "@ns";
+import { ServerManager } from "./serverManager";
 
 export async function main(ns: NS) {
     ns.tail();
-    weakenServer(ns, "foodnstuff", 1);
+    weakenServer(ns, "foodnstuff", 1, 0);
 }
 
 /**
@@ -18,7 +19,7 @@ export async function main(ns: NS) {
  * @returns A boolean indicating whether the weaken operation was successful.
  * @throws An error if the weaken order is not 1 or 2, or if there is not enough free RAM to execute the weaken operation.
  */
-export function weakenServer(ns: NS, target: string, order: number, delay: number = 0): boolean {
+export function weakenServer(ns: NS, target: string, order: number, batchId: number, delay: number = 0): boolean {
     let totalWeakenThreadsNeeded = 0;
     // calculate weakening threads based on the order
 
@@ -66,9 +67,26 @@ export function weakenServer(ns: NS, target: string, order: number, delay: numbe
         threadsDispatched += threadsToDispatch;
     }
 
-    if (threadsRemaining > 0) {
-        ns.tprint("[WEAKEN] Error! There are" + threadsRemaining + "threads remaining after dispatching all threads");
-        throw new Error("[WEAKEN] Error! There are threads remaining after dispatching all threads");
+    if (threadsRemaining <= 0) {
+        ns.print("Done deploying weaken" + order + "!");
+        return true;
     }
+    ns.print(
+        Colors.YELLOW +
+            "There are " +
+            threadsRemaining +
+            " threads remaining after dispatching all threads, attempting to dispatch remaining threads on purchased server",
+    );
+
+    const neededWeakenRam = threadsRemaining * weakenScriptRam;
+    const server = ServerManager.buyOrUpgradeServer(ns, neededWeakenRam, "weak", batchId);
+
+    if (server === "") {
+        ns.tprint("Error! Could not buy server to weak " + target);
+        throw new Error("Error! Could not buy server to weak " + target);
+    }
+
+    ns.exec("weaken.js", server, threadsRemaining, target, delay);
+
     return true;
 }
