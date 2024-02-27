@@ -98,7 +98,7 @@ function getOptimalHackThreshold(ns: NS, target: string): number {
 
         if (totalRamNeeded < totalMaxRam) {
             ns.print(
-                "needs " + totalRamNeeded + "GB of RAM and got " + totalMaxRam + ". Running parallel mode on" + target,
+                "needs " + totalRamNeeded + "GB of RAM and got " + totalMaxRam + ". Running parallel mode on " + target,
             );
             break;
         }
