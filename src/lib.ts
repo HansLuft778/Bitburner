@@ -105,10 +105,10 @@ export function getGrowThreadsThreshold(ns: NS, server: string, threshold: numbe
     return serverGrowThreads;
 }
 
-export function getWeakenThreads(ns: NS, server: string) {
-    const growThreads = getGrowThreads(ns, server);
-    const secIncrease = ns.growthAnalyzeSecurity(growThreads, server);
-    const serverWeakenThreads = Math.ceil(secIncrease / 0.05);
+export function getWeakenThreadsAfterHack(ns: NS, numHackThreads: number): number {
+    const hackSecLvlIncrease = ns.hackAnalyzeSecurity(numHackThreads);
+
+    const serverWeakenThreads = Math.ceil(hackSecLvlIncrease / ns.weakenAnalyze(1));
 
     return serverWeakenThreads;
 }
