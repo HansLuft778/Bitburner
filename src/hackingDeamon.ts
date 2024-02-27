@@ -41,8 +41,8 @@ export async function main(ns: NS) {
     }
 
     // ----------------- CHECK WHICH MODE TO USE -----------------
+    let hackThreshold = getOptimalHackThreshold(ns, target);
     while (true) {
-        let hackThreshold = getOptimalHackThreshold(ns, target);
         ns.print("hackThreshold: " + hackThreshold);
         await parallelCycle(ns, target, hackThreshold);
     }
