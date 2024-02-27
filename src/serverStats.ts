@@ -1,7 +1,7 @@
 import { NS } from "@ns";
 import { Colors } from "./lib";
 
-const BORDER_COLOR = Colors.cyan;
+const BORDER_COLOR = Colors.CYAN;
 
 let maxMoney = 0;
 let curMoney = 0;
