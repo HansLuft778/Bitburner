@@ -15,18 +15,12 @@ export async function main(ns: NS) {
 
     // steps: WGWH-WGWH-..
     while (true) {
-        await loopCycle(ns);
+        const target = getBestServerListCheap(ns, true)[0].name;
+        await loopCycle(ns, target);
     }
 }
 
-export async function loopCycle(ns: NS, target: string = "", threshold: number = 0.8, shouldHack: boolean = true) {
-    // find the server with the most available money
-    if (target == "") {
-        target = getBestServerListCheap(ns, true)[0].name;
-    }
-
-    ns.print("target: " + target);
-
+export async function loopCycle(ns: NS, target: string, threshold: number = 0.8, shouldHack: boolean = true) {
     if (lastTarget != target) {
         nukeAll(ns);
         ns.print("found new best Server: " + target);
