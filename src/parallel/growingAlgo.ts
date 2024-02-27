@@ -1,12 +1,13 @@
 import { getBestHostByRam } from "@/bestServer";
 import { NS } from "@ns";
+import { ServerManager } from "./serverManager";
 
 export async function main(ns: NS) {
     ns.tail();
-    growServer(ns, "foodnstuff", "hacker");
+    growServer(ns, "foodnstuff");
 }
 
-export function growServer(ns: NS, target: string, host: string) {
+export function growServer(ns: NS, target: string, delay: number = 0): boolean {
     const serverMaxMoney = ns.getServerMaxMoney(target);
     const serverCurrentMoney = ns.getServerMoneyAvailable(target);
     let moneyMultiplier = serverMaxMoney / serverCurrentMoney;
@@ -24,47 +25,53 @@ export function growServer(ns: NS, target: string, host: string) {
     const allHosts = getBestHostByRam(ns);
     const growingScriptRam = 1.75;
 
-    let threadsDispatched = 0;
-    let threadsRemaining = totalGrowThreadsNeeded;
     for (let i = 0; i < allHosts.length; i++) {
-        if (threadsDispatched >= totalGrowThreadsNeeded) break;
-        const host = allHosts[i].name;
+        const host = allHosts[i];
 
-        const maxRam = ns.getServerMaxRam(host);
-        const freeRam = maxRam - ns.getServerUsedRam(host);
-        if (freeRam < growingScriptRam) continue;
-        const threadSpace = Math.floor(freeRam / growingScriptRam);
+        const maxThreadsOnHost = Math.floor(host.availableRam / growingScriptRam);
 
-        // if threadsRemaining is less than the threadSpace, then we can only dispatch threadsRemaining threads
-        const threadsToDispatch = Math.min(threadsRemaining, threadSpace);
-
-        ns.exec("grow.js", host, threadsToDispatch, target);
-        threadsRemaining -= threadsToDispatch;
-        threadsDispatched += threadsToDispatch;
+        if (maxThreadsOnHost >= totalGrowThreadsNeeded) {
+            ns.exec("grow.js", host.name, totalGrowThreadsNeeded, target);
+            return true;
+        }
     }
 
-    if (threadsRemaining > 0) {
-        ns.tprint("[GROW] Error! There are threads remaining after dispatching all threads");
-        throw new Error("[GROW] Error! There are threads remaining after dispatching all threads");
+    ns.print("No available host to grow " + target + ". Buying server...");
+
+    // buy server
+    const server = ServerManager.buyServer(ns, totalGrowThreadsNeeded * growingScriptRam);
+
+    if (server === "") {
+        ns.tprint("Error! Could not buy server to grow " + target);
+        throw new Error("Error! Could not buy server to grow " + target);
     }
+
+    ns.exec("grow.js", server, totalGrowThreadsNeeded, target);
+
     return true;
 
-    // const maxRam = ns.getServerMaxRam(host);
-    // const freeRam = maxRam - ns.getServerUsedRam(host);
+    // let threadsDispatched = 0;
+    // let threadsRemaining = totalGrowThreadsNeeded;
+    // for (let i = 0; i < allHosts.length; i++) {
+    //     if (threadsDispatched >= totalGrowThreadsNeeded) break;
+    //     const host = allHosts[i].name;
 
-    // const maxThreadsOnHost = Math.floor(freeRam / growingScriptRam);
+    //     const maxRam = ns.getServerMaxRam(host);
+    //     const freeRam = maxRam - ns.getServerUsedRam(host);
+    //     if (freeRam < growingScriptRam) continue;
+    //     const threadSpace = Math.floor(freeRam / growingScriptRam);
 
-    // if (maxThreadsOnHost < growThreads) {
-    //     ns.tprint("Error! Not enough threads to grow " + target + " on " + host);
-    //     throw new Error( // need 2568 Threads, only got 2340
-    //         "can't one-hit grow on server " +
-    //             target +
-    //             ".\nneed " +
-    //             growThreads +
-    //             " Threads, only got " +
-    //             maxThreadsOnHost,
-    //     );
+    //     // if threadsRemaining is less than the threadSpace, then we can only dispatch threadsRemaining threads
+    //     const threadsToDispatch = Math.min(threadsRemaining, threadSpace);
+
+    //     ns.exec("grow.js", host, threadsToDispatch, target, delay);
+    //     threadsRemaining -= threadsToDispatch;
+    //     threadsDispatched += threadsToDispatch;
     // }
 
-    // ns.exec("grow.js", host, growThreads, target);
+    // if (threadsRemaining > 0) {
+    //     ns.tprint("[GROW] Error! There are threads remaining after dispatching all threads");
+    //     throw new Error("[GROW] Error! There are threads remaining after dispatching all threads");
+    // }
+    // return true;
 }

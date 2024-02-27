@@ -1,13 +1,13 @@
 import { getBestHostByRam } from "@/bestServer";
-import { getHackThreads } from "@/lib";
 import { NS } from "@ns";
+import { ServerManager } from "./serverManager";
 
 export async function main(ns: NS) {
     ns.tail();
     hackServer(ns, "silver-helix", "hacker", 0.8);
 }
 
-export function hackServer(ns: NS, target: string, host: string, threshold: number) {
+export function hackServer(ns: NS, target: string, host: string, threshold: number, delay: number = 0) {
     let totalHackThreadsNeeded = Math.ceil(threshold / ns.hackAnalyze(target));
     // ns.print("threshold: " + threshold);
     // ns.print("hackAnalyze: " + ns.hackAnalyze(target));
@@ -21,29 +21,55 @@ export function hackServer(ns: NS, target: string, host: string, threshold: numb
     const allHosts = getBestHostByRam(ns);
     const hackingScriptRam = 1.7;
 
-    let threadsDispatched = 0;
-    let threadsRemaining = totalHackThreadsNeeded;
     for (let i = 0; i < allHosts.length; i++) {
-        if (threadsDispatched >= totalHackThreadsNeeded) break;
-        const host = allHosts[i].name;
+        const host = allHosts[i];
 
-        const maxRam = ns.getServerMaxRam(host);
-        const freeRam = maxRam - ns.getServerUsedRam(host);
-        if (freeRam < hackingScriptRam) continue;
-        const threadSpace = Math.floor(freeRam / hackingScriptRam);
+        const maxThreadsOnHost = Math.floor(host.availableRam / hackingScriptRam);
 
-        // if threadsRemaining is less than the threadSpace, then we can only dispatch threadsRemaining threads
-        const threadsToDispatch = Math.min(threadsRemaining, threadSpace);
-
-        ns.exec("hack.js", host, threadsToDispatch, target);
-        threadsRemaining -= threadsToDispatch;
-        threadsDispatched += threadsToDispatch;
+        if (maxThreadsOnHost >= totalHackThreadsNeeded) {
+            ns.exec("hack.js", host.name, totalHackThreadsNeeded, target);
+            return true;
+        }
     }
 
-    if (threadsRemaining > 0) {
-        ns.tprint("[HACK] Error! There are threads remaining after dispatching all threads");
-        throw new Error("[HACK] Error! There are threads remaining after dispatching all threads");
+    ns.print("No available host to grow " + target + ". Buying server...");
+
+    // buy server
+    const server = ServerManager.buyServer(ns, totalHackThreadsNeeded * hackingScriptRam);
+
+    if (server === "") {
+        ns.tprint("Error! Could not buy server to hack " + target);
+        throw new Error("Error! Could not buy server to hack " + target);
     }
+
+    ns.exec("hack.js", server, totalHackThreadsNeeded, target);
+
+    return true;
+
+
+    // let threadsDispatched = 0;
+    // let threadsRemaining = totalHackThreadsNeeded;
+    // for (let i = 0; i < allHosts.length; i++) {
+    //     if (threadsDispatched >= totalHackThreadsNeeded) break;
+    //     const host = allHosts[i].name;
+
+    //     const maxRam = ns.getServerMaxRam(host);
+    //     const freeRam = maxRam - ns.getServerUsedRam(host);
+    //     if (freeRam < hackingScriptRam) continue;
+    //     const threadSpace = Math.floor(freeRam / hackingScriptRam);
+
+    //     // if threadsRemaining is less than the threadSpace, then we can only dispatch threadsRemaining threads
+    //     const threadsToDispatch = Math.min(threadsRemaining, threadSpace);
+
+    //     ns.exec("hack.js", host, threadsToDispatch, target, delay);
+    //     threadsRemaining -= threadsToDispatch;
+    //     threadsDispatched += threadsToDispatch;
+    // }
+
+    // if (threadsRemaining > 0) {
+    //     ns.tprint("[HACK] Error! There are threads remaining after dispatching all threads");
+    //     throw new Error("[HACK] Error! There are threads remaining after dispatching all threads");
+    // }
 
     // const maxRam = ns.getServerMaxRam(host);
     // const freeRam = maxRam - ns.getServerUsedRam(target);
@@ -52,7 +78,7 @@ export function hackServer(ns: NS, target: string, host: string, threshold: numb
 
     // if (maxThreadsOnHost < hackThreads)
     //     throw new Error(
-    //         "can't onehit hack on server " +
+    //         "can't one-hit hack on server " +
     //             target +
     //             ".\nneed " +
     //             hackThreads +
