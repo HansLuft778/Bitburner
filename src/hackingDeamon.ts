@@ -1,9 +1,8 @@
 import { NS } from "@ns";
 import { getBestHostByRam, getBestServerListCheap } from "./bestServer";
 import { Colors, getGrowThreadsThreshold, getWeakenThreadsAfterHack } from "./lib";
-import { loopCycle } from "./loop/manager";
-import { parallelCycle } from "./parallel/manager";
 import { prepareServer } from "./loop/prepareServer";
+import { parallelCycle } from "./parallel/manager";
 
 // TODO: determine the threshold by first prepping the server to max money/min sec lvl.
 // Then find the percentage of money that can be stolen safely, so it can be regrown per one-hit.
