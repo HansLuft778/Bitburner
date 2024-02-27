@@ -8,6 +8,7 @@ export interface Server {
     hackingChance?: number;
     weakeningTime?: number;
     maxRam: number;
+    availableRam: number;
     score: number;
 }
 
@@ -44,10 +45,7 @@ export function getBestServerList(ns: NS, shouldPrint: boolean) {
                 server.hackDifficulty = server.minDifficulty;
                 const maxMoney = server.moneyMax == undefined ? 0 : server.moneyMax;
                 weakeningTime = ns.formulas.hacking.weakenTime(server, player);
-                score =
-                    ((maxMoney / weakeningTime) *
-                        ns.formulas.hacking.hackChance(server, player)) /
-                    1000;
+                score = ((maxMoney / weakeningTime) * ns.formulas.hacking.hackChance(server, player)) / 1000;
             }
 
             const server: Server = {
@@ -56,6 +54,7 @@ export function getBestServerList(ns: NS, shouldPrint: boolean) {
                 hackingChance: hackingChance,
                 weakeningTime: weakeningTime,
                 maxRam: maxRam,
+                availableRam: maxRam - ns.getServerUsedRam(serverList[i]),
                 score: score,
             };
 
@@ -80,12 +79,13 @@ export function getBestServer(ns: NS): string {
 // TODO: change to available ram
 export function getBestHostByRam(ns: NS): Server[] {
     let allHosts = getBestServerListCheap(ns, false).filter((server) => {
-        return server.maxRam > 2;
+        return server.availableRam > 2;
     });
 
     let home: Server = {
         name: "home",
-        maxRam: ns.getServerMaxRam("home") - ns.getScriptRam("loop/manager.js") - 10,
+        maxRam: ns.getServerMaxRam("home") - 50,
+        availableRam: ns.getServerMaxRam("home") - ns.getServerUsedRam("home") - 50,
         score: 0,
     }; // 10 some safety margin
     allHosts.push(home);
@@ -95,6 +95,7 @@ export function getBestHostByRam(ns: NS): Server[] {
         const server: Server = {
             name: purchasedServers[i],
             maxRam: ns.getServerMaxRam(purchasedServers[i]),
+            availableRam: ns.getServerMaxRam(purchasedServers[i]) - ns.getServerUsedRam(purchasedServers[i]),
             score: 0,
         };
         if (server.maxRam > 2) {
@@ -104,7 +105,7 @@ export function getBestHostByRam(ns: NS): Server[] {
 
     // sort by ram in ascending order
     allHosts.sort((a, b) => {
-        return a.maxRam - b.maxRam;
+        return a.availableRam - b.availableRam;
     });
 
     return allHosts;
@@ -131,6 +132,7 @@ export function getBestServerListCheap(ns: NS, shouldPrint: boolean): Server[] {
             name: serverName,
             maxMoney: maxMoney,
             maxRam: maxRam,
+            availableRam: maxRam - ns.getServerUsedRam(serverName),
             score: score,
         };
         servers.push(server);
