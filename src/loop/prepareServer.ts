@@ -42,19 +42,21 @@ export async function prepareServer(ns: NS, target: string, threshold: number = 
                 threadsRemaining -= threadsToDispatch;
                 threadsDispatched += threadsToDispatch;
             }
-            await ns.sleep(weakenTime + safetyMarginMs);
+            ns.print("dispatched " + threadsDispatched + " weaken threads");
+            await ns.sleep(weakenTime + safetyMarginMs + 1000);
             ns.print("done with " + threadsDispatched + "/" + totalWeakenThreadsNeeded + " weakens");
         }
         printServerStats(ns, target, threshold);
+
+        ns.print(Colors.cyan + "------------- GROWING -------------" + Colors.reset);
         const totalGrowThreadsNeeded = getGrowThreads(ns, target);
         // check if grow is needed
         if (totalGrowThreadsNeeded === 0) {
             ns.print("No growth needed");
             break;
         }
-
-        ns.print(Colors.cyan + "------------- GROWING -------------" + Colors.reset);
         ns.print("total growing threads needed: " + totalGrowThreadsNeeded);
+
         // grow one batch
         const growingTime = ns.getGrowTime(target);
         threadsDispatched = 0;
@@ -73,6 +75,7 @@ export async function prepareServer(ns: NS, target: string, threshold: number = 
             threadsRemaining -= threadsToDispatch;
             threadsDispatched += threadsToDispatch;
         }
+        ns.print("dispatched " + threadsDispatched + " grow threads");
         await ns.sleep(growingTime + safetyMarginMs);
         ns.print("done with " + threadsDispatched + "/" + totalGrowThreadsNeeded + " grows");
         printServerStats(ns, target, threshold);
