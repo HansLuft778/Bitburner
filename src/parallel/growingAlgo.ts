@@ -13,6 +13,8 @@ export function growServer(ns: NS, target: string, host: string) {
     if (isNaN(moneyMultiplier) || moneyMultiplier == Infinity) moneyMultiplier = 1;
     const totalGrowThreadsNeeded = Math.ceil(ns.growthAnalyze(target, moneyMultiplier));
 
+    ns.print("Actual grow threads needed: " + totalGrowThreadsNeeded);
+
     if (totalGrowThreadsNeeded < 1) {
         ns.print("No grow threads needed, skipping growth process");
         return false;

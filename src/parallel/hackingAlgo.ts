@@ -12,7 +12,7 @@ export function hackServer(ns: NS, target: string, host: string, threshold: numb
     // ns.print("threshold: " + threshold);
     // ns.print("hackAnalyze: " + ns.hackAnalyze(target));
     // ns.print("threshold / ns.hackAnalyze(target): " + threshold / ns.hackAnalyze(target));
-    ns.print("hackThreads: " + totalHackThreadsNeeded);
+    ns.print("actual hack threads needed: " + totalHackThreadsNeeded);
 
     // hackThreads = 100;
     // const hackThreads = getHackThreads(ns, target, threshold);

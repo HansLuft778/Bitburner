@@ -1,4 +1,5 @@
 import { getBestHostByRam } from "@/bestServer";
+import { getWeakenThreadsEff } from "@/lib";
 import { NS } from "@ns";
 
 export async function main(ns: NS) {
@@ -36,10 +37,12 @@ export function weakenServer(ns: NS, target: string, host: string, order: number
         const secIncrease = ns.growthAnalyzeSecurity(growThreads, target);
 
         totalWeakenThreadsNeeded = Math.ceil(secIncrease / ns.weakenAnalyze(1));
+
+        ns.print("Actual weaken2 threads needed: " + totalWeakenThreadsNeeded);
     } else if (order == 1) {
         // first weak has to weaken server to min from unknown sec lvl
-        const serverSecLvl = ns.getServerSecurityLevel(target);
-        totalWeakenThreadsNeeded = Math.ceil((serverSecLvl - ns.getServerMinSecurityLevel(target)) / 0.05);
+        totalWeakenThreadsNeeded = getWeakenThreadsEff(ns, target);
+        ns.print("Actual weaken1 threads needed: " + totalWeakenThreadsNeeded);
     } else {
         throw new Error("weaken order can only be either 1 or 2!");
     }
