@@ -36,7 +36,7 @@ export async function weakenServer(ns: NS, target: string) {
 
             const numThreadsOnHost = Math.floor(freeRam / weakenScriptRam);
 
-            ns.exec("weaken.js", host.name, numThreadsOnHost, target);
+            ns.exec("weaken.js", host.name, numThreadsOnHost, target, 0);
             sumThreadsDone += numThreadsOnHost;
         }
         await ns.sleep(weakenTime + safetyMarginMs);

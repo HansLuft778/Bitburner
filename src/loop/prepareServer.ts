@@ -38,7 +38,7 @@ export async function prepareServer(ns: NS, target: string, threshold: number = 
 
                 const threadsToDispatch = Math.min(threadsRemaining, numThreadsOnHost);
 
-                ns.exec("weaken.js", host.name, threadsToDispatch, target);
+                ns.exec("weaken.js", host.name, threadsToDispatch, target, 0);
                 threadsRemaining -= threadsToDispatch;
                 threadsDispatched += threadsToDispatch;
             }
@@ -68,7 +68,7 @@ export async function prepareServer(ns: NS, target: string, threshold: number = 
             if (freeRam < growingScriptRam) continue;
             const numThreadsOnHost = Math.floor(freeRam / growingScriptRam);
 
-            ns.exec("grow.js", host.name, numThreadsOnHost, target);
+            ns.exec("grow.js", host.name, numThreadsOnHost, target, 0);
             threadsDispatched += numThreadsOnHost;
         }
         ns.print("dispatched " + threadsDispatched + " grow threads");
