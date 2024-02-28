@@ -14,28 +14,25 @@ export class ServerManager {
      * @returns The name of the upgraded server or an empty string if a new server cannot be bought/upgraded.
      */
     static buyOrUpgradeServer(ns: NS, desiredRam: number, serverType: string, batchId: number): string {
-        const serverName = serverType + batchId;
+        const serverName = serverType + "-" + batchId;
         const upgradeSuccessful = this.upgradeServer(ns, desiredRam, serverName);
 
         if (upgradeSuccessful) {
+            ns.print(Colors.GREEN + "[server Manager] Upgraded Server '" + serverName + "'!");
             return serverName;
         }
 
-        const exponent = Math.ceil(Math.log2(desiredRam));
-        desiredRam = Math.pow(2, exponent);
-
-        let buyCost = ns.getPurchasedServerCost(desiredRam);
-        if (buyCost > ns.getServerMoneyAvailable("home")) {
-            ns.print(Colors.RED + "[server Manager] Player has not enough money to buy a new server!");
-            return "";
-        }
-
         const name = this.buyServer(ns, desiredRam, serverName);
+        if (name === "") {
+            ns.print(Colors.RED + "[server Manager] Failed to buy a new server!");
+            return name;
+        }
+        ns.print(Colors.GREEN + "[server Manager] Bought Server '" + name + "'!");
         nukeAll(ns);
         return name;
     }
 
-    static buyServer(ns: NS, ram: number, serverName: string): string {
+    static buyServer(ns: NS, desiredRam: number, serverName: string): string {
         const purchasedServerLimit = ns.getPurchasedServerLimit();
         const purchasedServers = ns.getPurchasedServers();
         if (purchasedServers.length >= purchasedServerLimit) {
@@ -43,12 +40,20 @@ export class ServerManager {
             return "";
         }
 
-        const exponent = Math.ceil(Math.log2(ram));
-        ram = Math.pow(2, exponent);
+        const exponent = Math.ceil(Math.log2(desiredRam));
+        desiredRam = Math.pow(2, exponent);
 
-        nukeServer(ns, serverName);
+        const cost = ns.getPurchasedServerCost(desiredRam);
+        if (cost > ns.getServerMoneyAvailable("home")) {
+            ns.print(
+                Colors.RED +
+                    "[server Manager] attempted to buy a new server, but the player does not have enough money",
+            );
+            return "";
+        }
 
-        const name = ns.purchaseServer(serverName, ram);
+        const name = ns.purchaseServer(serverName, desiredRam);
+        nukeServer(ns, name);
         return name;
     }
 
@@ -66,6 +71,13 @@ export class ServerManager {
         totalRequiredRam = Math.pow(2, exponent);
 
         const cost = ns.getPurchasedServerUpgradeCost(serverName, totalRequiredRam);
+
+        if (cost > ns.getServerMoneyAvailable("home")) {
+            ns.print(
+                Colors.RED + "[server Manager] attempted to upgrade Server, but the player does not have enough money",
+            );
+            return false;
+        }
 
         if (!ns.upgradePurchasedServer(serverName, totalRequiredRam)) {
             ns.print(Colors.RED + "[server Manager] attempted to upgrade Server, but the upgrade failed");
