@@ -1,6 +1,6 @@
 import { NS } from "@ns";
 
-import { getBestHostByRam, getBestServerListCheap } from "./bestServer";
+import { getBestHostByRam, getBestServerList, getBestServerListCheap } from "./bestServer";
 import { Colors, getGrowThreadsThreshold, getWeakenThreadsAfterHack } from "./lib";
 import { prepareServer } from "./loop/prepareServer";
 import { parallelCycle } from "./parallel/manager";
@@ -15,8 +15,8 @@ export async function main(ns: NS) {
     ns.disableLog("ALL");
     // either start loop or parallelize, depending on the number of servers and money the player has
 
-    let target = getBestServerListCheap(ns, false)[0].name;
-    target = "phantasy";
+    let target = getBestServerList(ns, false)[0].name;
+    // target = "phantasy";
     ns.print("target: " + target);
 
     // ----------------- PREPARE SERVER -----------------

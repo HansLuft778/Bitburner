@@ -1,6 +1,6 @@
 import { NS } from "@ns";
 
-import { serverScanner, isHackable } from "./lib.js";
+import { isHackable, nukeServer, serverScanner } from "./lib.js";
 
 export interface Server {
     name: string;
@@ -26,40 +26,43 @@ export function getBestServerList(ns: NS, shouldPrint: boolean) {
     const servers: Server[] = [];
 
     for (let i = 0; i < serverList.length; i++) {
-        if (isHackable(ns, serverList[i])) {
-            const maxMoney = ns.getServerMaxMoney(serverList[i]);
-            const hackingChance = ns.hackAnalyzeChance(serverList[i]);
-            let weakeningTime = ns.getWeakenTime(serverList[i]);
-            const maxRam = ns.getServerMaxRam(serverList[i]);
-
-            // filter server with no money or the hacking level above players hacking level
-            if (maxMoney < 1 || ns.getServerRequiredHackingLevel(serverList[i]) > ns.getHackingLevel()) continue;
-
-            // const score = (maxMoney / (weakeningTime + 3)) * hackingChance * (1 / weakeningTime)
-            // const score = ns.formatNumber(((maxMoney / (weakeningTime)) * hackingChance) / 1000)
-            let score = maxMoney / ns.getServerMinSecurityLevel(serverList[i]) / 1000000;
-
-            if (ns.fileExists("formulas.exe", "home")) {
-                const server = ns.getServer(serverList[i]);
-                const player = ns.getPlayer();
-                server.hackDifficulty = server.minDifficulty;
-                const maxMoney = server.moneyMax == undefined ? 0 : server.moneyMax;
-                weakeningTime = ns.formulas.hacking.weakenTime(server, player);
-                score = ((maxMoney / weakeningTime) * ns.formulas.hacking.hackChance(server, player)) / 1000;
-            }
-
-            const server: Server = {
-                name: serverList[i],
-                maxMoney: maxMoney,
-                hackingChance: hackingChance,
-                weakeningTime: weakeningTime,
-                maxRam: maxRam,
-                availableRam: maxRam - ns.getServerUsedRam(serverList[i]),
-                score: score,
-            };
-
-            servers.push(server);
+        if (!isHackable(ns, serverList[i])) {
+            continue;
         }
+        nukeServer(ns, serverList[i]);
+
+        const maxMoney = ns.getServerMaxMoney(serverList[i]);
+        const hackingChance = ns.hackAnalyzeChance(serverList[i]);
+        let weakeningTime = ns.getWeakenTime(serverList[i]);
+        const maxRam = ns.getServerMaxRam(serverList[i]);
+
+        // filter server with no money or the hacking level above players hacking level
+        if (maxMoney < 1 || ns.getServerRequiredHackingLevel(serverList[i]) > ns.getHackingLevel()) continue;
+
+        // const score = (maxMoney / (weakeningTime + 3)) * hackingChance * (1 / weakeningTime)
+        // const score = ns.formatNumber(((maxMoney / (weakeningTime)) * hackingChance) / 1000)
+        let score = maxMoney / ns.getServerMinSecurityLevel(serverList[i]) / 1000000;
+
+        if (ns.fileExists("formulas.exe", "home")) {
+            const server = ns.getServer(serverList[i]);
+            const player = ns.getPlayer();
+            server.hackDifficulty = server.minDifficulty;
+            const maxMoney = server.moneyMax == undefined ? 0 : server.moneyMax;
+            weakeningTime = ns.formulas.hacking.weakenTime(server, player);
+            score = ((maxMoney / weakeningTime) * ns.formulas.hacking.hackChance(server, player)) / 1000;
+        }
+
+        const server: Server = {
+            name: serverList[i],
+            maxMoney: maxMoney,
+            hackingChance: hackingChance,
+            weakeningTime: weakeningTime,
+            maxRam: maxRam,
+            availableRam: maxRam - ns.getServerUsedRam(serverList[i]),
+            score: score,
+        };
+
+        servers.push(server);
     }
 
     servers.sort((a, b) => {
@@ -143,6 +146,8 @@ export function getBestServerListCheap(ns: NS, shouldPrint: boolean): Server[] {
     });
 
     if (shouldPrint) printTable(ns, servers);
+
+    ns.print(servers);
 
     return servers;
 }

@@ -1,4 +1,4 @@
-import { Colors, nukeAll } from "@/lib";
+import { Colors, nukeAll, nukeServer } from "@/lib";
 import { NS } from "@ns";
 
 export class ServerManager {
@@ -45,6 +45,8 @@ export class ServerManager {
 
         const exponent = Math.ceil(Math.log2(ram));
         ram = Math.pow(2, exponent);
+
+        nukeServer(ns, serverName);
 
         const name = ns.purchaseServer(serverName, ram);
         return name;

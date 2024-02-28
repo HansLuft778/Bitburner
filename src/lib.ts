@@ -53,6 +53,7 @@ export function nukeAll(ns: NS) {
     for (let i = 0; i < hosts.length; i++) {
         // check if the host is hackable
         if (isHackable(ns, hosts[i]) || ns.getPurchasedServers().includes(hosts[i])) {
+            // TODO: getPurchasedServers() is not needed
             openPorts(ns, hosts[i]);
             ns.nuke(hosts[i]);
 
@@ -64,6 +65,15 @@ export function nukeAll(ns: NS) {
             continue;
         }
     }
+}
+
+export function nukeServer(ns: NS, server: string) {
+    openPorts(ns, server);
+    ns.nuke(server);
+
+    ns.scp("hack.js", server);
+    ns.scp("grow.js", server);
+    ns.scp("weaken.js", server);
 }
 
 export function openPorts(ns: NS, target: string) {
@@ -144,7 +154,7 @@ export function getGrowThreadsFormulas(ns: NS, server: string, hackThreshold: nu
 
     if (serverObject.moneyMax == undefined) return 0;
 
-    serverObject.moneyAvailable = serverObject.moneyMax * (1 - (hackThreshold + 0.01)) ;
+    serverObject.moneyAvailable = serverObject.moneyMax * (1 - (hackThreshold + 0.01));
     serverObject.baseDifficulty = serverObject.minDifficulty;
 
     return ns.formulas.hacking.growThreads(serverObject, playerObject, serverObject.moneyMax);

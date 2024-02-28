@@ -9,7 +9,7 @@ import { hackServer } from "./hackingAlgo.js";
 import { weakenServer } from "./weakenAlgo.js";
 
 const DELAY_MARGIN_MS = 1000;
-const NUM_BATCHES = 6;
+const NUM_BATCHES = 3;
 let lastTarget = "";
 
 export async function main(ns: NS) {
@@ -22,22 +22,20 @@ export async function main(ns: NS) {
 
     // steps: WGWH-WGWH-..
     while (true) {
-        await parallelCycle(ns);
+        let target = getBestServer(ns);
+        await parallelCycle(ns, target, 0.8);
     }
 }
 
-export async function parallelCycle(ns: NS, target: string = "", hackThreshold: number = 0.8) {
+export async function parallelCycle(ns: NS, target: string, hackThreshold: number = 0.8) {
     // find the server with the most available money
-    if (target == "") {
-        target = getBestServer(ns);
-    }
 
-    if (lastTarget != target) {
-        nukeAll(ns);
-        ns.print("found new best Server: " + target);
-        printServerStats(ns, target, hackThreshold);
-    }
-    lastTarget = target;
+    // if (lastTarget != target) {
+    //     nukeAll(ns);
+    //     ns.print("found new best Server: " + target);
+    //     printServerStats(ns, target, hackThreshold);
+    // }
+    // lastTarget = target;
     const weakTime = ns.getWeakenTime(target);
 
     if (NUM_BATCHES > 1) {
@@ -87,7 +85,7 @@ export async function parallelCycle(ns: NS, target: string = "", hackThreshold: 
             printServerStats(ns, target, hackThreshold);
 
             ns.print(Colors.GREEN + "Cycle done. Beginning new cycle.." + Colors.reset);
-            await ns.sleep(5 * DELAY_MARGIN_MS);
+            await ns.sleep(4 * DELAY_MARGIN_MS);
         }
         await ns.sleep(weakTime);
     } else {
@@ -97,7 +95,7 @@ export async function parallelCycle(ns: NS, target: string = "", hackThreshold: 
         const hackTime = ns.getHackTime(target);
         // weak I
         ns.print("Attempting to start Weak I at " + getTimeH());
-        const weak1Dispatched = weakenServer(ns, target, 1, 0, false);
+        const weak1Dispatched = weakenServer(ns, target, 1, 0);
 
         // --------------------------------------
         // weak II delay
@@ -111,7 +109,7 @@ export async function parallelCycle(ns: NS, target: string = "", hackThreshold: 
         }
         // weak II
         ns.print("Attempting to start Weak II at " + getTimeH());
-        const weak2Dispatched = weakenServer(ns, target, 2, 0, false);
+        const weak2Dispatched = weakenServer(ns, target, 2, 0);
 
         // --------------------------------------
         // grow delay
