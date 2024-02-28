@@ -1,5 +1,6 @@
 import { NS } from "@ns";
 import { Colors } from "./lib";
+import { Interface } from "readline";
 
 const BORDER_COLOR = Colors.CYAN;
 
@@ -20,18 +21,6 @@ let hackThreads = 0;
 let headerString = "";
 let footerString = "";
 let hackingPercent = 0;
-
-export async function main(ns: NS) {
-    ns.clearLog();
-    ns.tail();
-    ns.resizeTail(542, 375);
-    ns.disableLog("ALL");
-    while (true) {
-        ns.clearLog();
-        printServerStats(ns, ns.args[0].toString(), 0.9);
-        await ns.sleep(50);
-    }
-}
 
 export function printServerStats(ns: NS, server: string, hackThreshold: number) {
     setStats(ns, server, hackThreshold);
@@ -109,4 +98,27 @@ function printStatLine(ns: NS, value: string, indent: boolean = true) {
             "│" +
             Colors.reset,
     );
+}
+
+interface AutocompleteData {
+    servers: string[];
+    txts: string[];
+    scripts: string[];
+    flags: string[];
+}
+
+export function autocomplete(data: AutocompleteData, args: (string | number | boolean)[]) {
+    return [...data.servers];
+}
+
+export async function main(ns: NS) {
+    ns.clearLog();
+    ns.tail();
+    ns.resizeTail(542, 375);
+    ns.disableLog("ALL");
+    while (true) {
+        ns.clearLog();
+        printServerStats(ns, ns.args[0].toString(), 0.9);
+        await ns.sleep(50);
+    }
 }
