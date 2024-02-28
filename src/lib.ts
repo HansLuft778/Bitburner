@@ -113,6 +113,14 @@ export function getWeakenThreadsAfterHack(ns: NS, numHackThreads: number): numbe
     return serverWeakenThreads;
 }
 
+export function getWeakenThreadsAfterGrow(ns: NS, numGrowThreads: number): number {
+    const hackSecLvlIncrease = ns.growthAnalyzeSecurity(numGrowThreads);
+
+    const serverWeakenThreads = Math.ceil(hackSecLvlIncrease / ns.weakenAnalyze(1));
+
+    return serverWeakenThreads;
+}
+
 export function getWeakenThreads(ns: NS, server: string) {
     const serverSecLvl = ns.getServerSecurityLevel(server);
     const serverWeakenThreads = Math.ceil((serverSecLvl - ns.getServerMinSecurityLevel(server)) / ns.weakenAnalyze(1));
@@ -124,17 +132,41 @@ export function getHackThreads(ns: NS, server: string, moneyHackThreshold: numbe
     const serverMaxMoney = ns.getServerMaxMoney(server);
     const lowerMoneyBound = serverMaxMoney * (1 - moneyHackThreshold);
     const hackAmount = serverMaxMoney - lowerMoneyBound;
-    const serverHackThreads = Math.ceil(ns.hackAnalyzeThreads(server, hackAmount));
+    const serverHackThreads = Math.floor(ns.hackAnalyzeThreads(server, hackAmount));
 
     return serverHackThreads;
+}
+
+// ----------------- FormulasAPI -----------------
+export function getGrowThreadsFormulas(ns: NS, server: string, hackThreshold: number) {
+    const serverObject = ns.getServer(server);
+    const playerObject = ns.getPlayer();
+
+    if (serverObject.moneyMax == undefined) return 0;
+
+    serverObject.moneyAvailable = serverObject.moneyMax * (1 - (hackThreshold + 0.01)) ;
+    serverObject.baseDifficulty = serverObject.minDifficulty;
+
+    return ns.formulas.hacking.growThreads(serverObject, playerObject, serverObject.moneyMax);
+}
+
+export function getHackThreadsFormulas(ns: NS, server: string, hackThreshold: number) {
+    const serverObject = ns.getServer(server);
+    const playerObject = ns.getPlayer();
+
+    serverObject.baseDifficulty = serverObject.minDifficulty;
+    serverObject.moneyAvailable = serverObject.moneyMax;
+
+    // threads * percent == hackThreshold => threads == hackThreshold / percent
+    return Math.floor(hackThreshold / ns.formulas.hacking.hackPercent(serverObject, playerObject));
 }
 
 export async function main(ns: NS) {
     ns.tail();
     ns.disableLog("ALL");
 
-    const server = "the-hub";
+    const server = "phantasy";
     ns.print(getWeakenThreads(ns, server) + " weakens needed");
     ns.print(getGrowThreads(ns, server) + " grows needed");
-    ns.print(getHackThreads(ns, server, 0.9) + " hacks needed");
+    ns.print(getHackThreadsFormulas(ns, server, 0.9) + " hacks needed");
 }
