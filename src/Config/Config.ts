@@ -3,7 +3,7 @@
  *
  * To modify the settings, update the class properties accordingly.
  */
-export class Settings {
+export class Config {
     /**
      * The target the daemon should hack, leave empty to hack the best server.
      * Default: ""
@@ -46,4 +46,12 @@ export class Settings {
      * Default: 2
      */
     public static readonly NUM_BATCHES = 2;
+
+    /**
+     * The amount of RAM (in gigabytes) required by the weaken, grow and hack script.
+     * Default: 1.75, 1.75, 1.7
+     */
+    public static readonly WEAKEN_SCRIPT_RAM = 1.75;
+    public static readonly GROW_SCRIPT_RAM = 1.75;
+    public static readonly HACK_SCRIPT_RAM = 1.7;
 }
