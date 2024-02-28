@@ -1,6 +1,5 @@
 import { NS } from "@ns";
 import { Colors } from "./lib";
-import { Interface } from "readline";
 
 const BORDER_COLOR = Colors.CYAN;
 
@@ -15,8 +14,6 @@ let freeRam = 0;
 let moneyMultiplier = 0;
 let growingThreads = 0;
 let serverWeakenThreadsCur = 0;
-let lowerMoneyBound = 0;
-let hackAmount = 0;
 let hackThreads = 0;
 let headerString = "";
 let footerString = "";
@@ -49,7 +46,7 @@ export function printServerStats(ns: NS, server: string, hackThreshold: number) 
     ns.print(BORDER_COLOR + footerString + Colors.RESET);
 }
 
-export function printServerStatsConsole(ns: NS, server: string) {
+export function printServerStatsConsole() {
     // todo
 }
 
@@ -74,8 +71,6 @@ function setStats(ns: NS, server: string, hackThreshold: number) {
 
     serverWeakenThreadsCur = Math.ceil((curSec - ns.getServerMinSecurityLevel(server)) / 0.05);
 
-    lowerMoneyBound = maxMoney * hackThreshold;
-    hackAmount = maxMoney - lowerMoneyBound;
     hackingPercent = ns.hackAnalyze(server);
     hackThreads = Math.ceil(hackThreshold / hackingPercent);
     if (isNaN(hackThreads) || hackThreads == Infinity) hackThreads = 0;
@@ -107,7 +102,7 @@ interface AutocompleteData {
     flags: string[];
 }
 
-export function autocomplete(data: AutocompleteData, args: (string | number | boolean)[]) {
+export function autocomplete(data: AutocompleteData) {
     return [...data.servers];
 }
 
