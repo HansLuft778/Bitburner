@@ -52,17 +52,16 @@ export function weakenServer(ns: NS, target: string, order: number, batchId: num
     let threadsRemaining = totalWeakenThreadsNeeded;
     for (let i = 0; i < allHosts.length; i++) {
         if (threadsDispatched >= totalWeakenThreadsNeeded) break;
-        const host = allHosts[i].name;
+        const host = allHosts[i];
 
-        const maxRam = ns.getServerMaxRam(host);
-        const freeRam = maxRam - ns.getServerUsedRam(host);
+        const freeRam = host.availableRam;
         if (freeRam < weakenScriptRam) continue;
         const threadSpace = Math.floor(freeRam / weakenScriptRam);
 
         // if threadsRemaining is less than the threadSpace, then we can only dispatch threadsRemaining threads
         const threadsToDispatch = Math.min(threadsRemaining, threadSpace);
 
-        ns.exec("weaken.js", host, threadsToDispatch, target, delay);
+        ns.exec("weaken.js", host.name, threadsToDispatch, target, delay);
         threadsRemaining -= threadsToDispatch;
         threadsDispatched += threadsToDispatch;
     }
