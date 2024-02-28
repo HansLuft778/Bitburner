@@ -24,6 +24,7 @@ let hackingPercent = 0;
 export async function main(ns: NS) {
     ns.clearLog();
     ns.tail();
+    ns.resizeTail(542, 375);
     ns.disableLog("ALL");
     while (true) {
         ns.clearLog();
