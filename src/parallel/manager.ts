@@ -1,12 +1,13 @@
 import { NS } from "@ns";
 
 import { getBestServer } from "../bestServer.js";
-import { Colors, getTimeH, nukeAll } from "../lib.js";
+import { Colors, getTimeH } from "../lib.js";
 import { printServerStats } from "../serverStats.js";
 import { WGHAlgorithms } from "./WGHAlgorithms.js";
 import { growServer } from "./growingAlgo.js";
 import { hackServer } from "./hackingAlgo.js";
 import { weakenServer } from "./weakenAlgo.js";
+import { Time } from "@/Time.js";
 
 const DELAY_MARGIN_MS = 1000;
 
@@ -27,6 +28,7 @@ export async function main(ns: NS) {
 
 export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8, num_batches = 1) {
     const weakTime = ns.getWeakenTime(target);
+    const time = Time.getInstance();
 
     if (num_batches > 1) {
         ns.print(Colors.CYAN + "------------ MULTI BATCH MODE ------------");
@@ -44,13 +46,11 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
             // hack normal
             // const hackDelay = weakTime - hackTime + 3 * DELAY_MARGIN_MS;
             const hackDelay = weakTime - hackTime - DELAY_MARGIN_MS;
-            ns.print("Attempting to start Hack at " + getTimeH());
             WGHAlgorithms.hackServer(ns, target, hackThreshold, batchId, true, hackDelay);
 
             // --------------------------------------
             // weak I
 
-            ns.print("Attempting to start Weak I at " + getTimeH());
             // weakenServer(ns, target, 1, batchId, true);
             WGHAlgorithms.weakenServer(ns, target, 1, batchId, true);
 
@@ -58,7 +58,6 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
             // grow
 
             const growDelay = weakTime - growTime + DELAY_MARGIN_MS;
-            ns.print("Attempting to start Grow at " + getTimeH());
             // growServer(ns, target, batchId, growDelay);
             WGHAlgorithms.growServer(ns, target, batchId, true, hackThreshold, growDelay);
 
@@ -66,7 +65,6 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
             // weak II
 
             const weak2delay = 2 * DELAY_MARGIN_MS;
-            ns.print("Attempting to start Weak II at " + getTimeH(Date.now() + weak2delay));
             // weakenServer(ns, target, 2, batchId, true, weak2delay);
             WGHAlgorithms.weakenServer(ns, target, 2, batchId, true, weak2delay);
 
@@ -75,9 +73,13 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
             printServerStats(ns, target, hackThreshold);
 
             ns.print(Colors.GREEN + "Cycle done. Beginning new cycle.." + Colors.RESET);
+
             await ns.sleep(4 * DELAY_MARGIN_MS);
+            time.substractTime(4 * DELAY_MARGIN_MS);
         }
-        await ns.sleep(weakTime);
+        // sleep until next cycle
+        await ns.sleep(weakTime - 4 * DELAY_MARGIN_MS * num_batches + DELAY_MARGIN_MS);
+        time.substractTime(weakTime - 4 * DELAY_MARGIN_MS * num_batches + DELAY_MARGIN_MS);
     } else {
         ns.print(Colors.CYAN + "------------ SINGLE BATCH MODE ------------");
         const weakTime = ns.getWeakenTime(target);
