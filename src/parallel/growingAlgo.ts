@@ -8,7 +8,7 @@ export async function main(ns: NS) {
     growServer(ns, "foodnstuff", 0);
 }
 
-export function growServer(ns: NS, target: string, batchId: number, delay: number = 0): boolean {
+export function growServer(ns: NS, target: string, batchId: number, delay = 0): boolean {
     const serverMaxMoney = ns.getServerMaxMoney(target);
     const serverCurrentMoney = ns.getServerMoneyAvailable(target);
     let moneyMultiplier = serverMaxMoney / serverCurrentMoney;

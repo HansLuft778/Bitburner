@@ -1,6 +1,6 @@
 import { getBestHostByRam } from "@/bestServer";
 import { NS } from "@ns";
-import { ServerManager } from "./serverManager";
+import { ServerManager } from "./ServerManager";
 import { Colors } from "@/lib";
 
 export async function main(ns: NS) {
@@ -8,7 +8,7 @@ export async function main(ns: NS) {
     hackServer(ns, "silver-helix", 0.8, 0);
 }
 
-export function hackServer(ns: NS, target: string, threshold: number, batchId: number, delay: number = 0) {
+export function hackServer(ns: NS, target: string, threshold: number, batchId: number, delay = 0) {
     const totalHackThreadsNeeded = Math.ceil(threshold / ns.hackAnalyze(target));
     ns.print("actual hack threads needed: " + totalHackThreadsNeeded);
 

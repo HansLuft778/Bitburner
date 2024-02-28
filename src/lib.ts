@@ -13,11 +13,11 @@ export enum Colors {
 }
 
 export function serverScanner(ns: NS) {
-    let uncheckedHosts = ["home"];
-    let checkedHosts = [];
+    const uncheckedHosts = ["home"];
+    const checkedHosts = [];
 
     for (let i = 0; i < uncheckedHosts.length; i++) {
-        let newHosts = ns.scan(uncheckedHosts[i]);
+        const newHosts = ns.scan(uncheckedHosts[i]);
         checkedHosts.push(uncheckedHosts[i]);
 
         for (let n = 0; n < newHosts.length; n++) {

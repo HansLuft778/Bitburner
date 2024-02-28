@@ -85,7 +85,7 @@ function setStats(ns: NS, server: string, hackThreshold: number) {
     footerString = "└" + "─".repeat(headerString.length - 2) + "┘";
 }
 
-function printStatLine(ns: NS, value: string, indent: boolean = true) {
+function printStatLine(ns: NS, value: string, indent = true) {
     if (indent) value = "\t" + value;
     const offset = indent ? 8 : 3; // the offset to subtract the border and indent
     ns.print(

@@ -35,7 +35,6 @@ export class Config {
      */
     public static readonly MIN_HACK_THRESHOLD = 0.15;
 
-
     /**
      * The maximum amount of RAM the daemon should leave free on the Home server.
      * Default: 50

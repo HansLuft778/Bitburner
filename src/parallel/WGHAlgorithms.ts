@@ -10,7 +10,7 @@ import {
     getWeakenThreadsAfterGrow,
     getWeakenThreadsAfterHack,
 } from "@/lib";
-import { ServerManager } from "./serverManager";
+import { ServerManager } from "./ServerManager";
 
 export class WGHAlgorithms {
     private static currentGrowThreads = 0;
@@ -35,7 +35,7 @@ export class WGHAlgorithms {
         order: number,
         batchId: number,
         batchMode: boolean,
-        delay: number = 0,
+        delay = 0,
     ): boolean {
         let totalWeakenThreadsNeeded = 0;
         // calculate weakening threads based on the order

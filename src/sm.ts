@@ -34,7 +34,7 @@ export async function main(ns: NS) {
             ns.tprint("You do not own a server called " + upgradeName);
         }
 
-        let price = ns.getPurchasedServerUpgradeCost(upgradeName, upgradeRam);
+        const price = ns.getPurchasedServerUpgradeCost(upgradeName, upgradeRam);
 
         const answer = await ns.prompt(
             "upgrading the server (" +
@@ -49,7 +49,7 @@ export async function main(ns: NS) {
         buyRam = getGBfromAnyUnit(ns, buyRam, buyUnit);
         if (buyRam < 1) return;
 
-        let price = ns.getPurchasedServerCost(buyRam);
+        const price = ns.getPurchasedServerCost(buyRam);
 
         const answer = await ns.prompt(
             "buying the server (" + buyName + ") with " + buyRam + "GB of Ram, will cost " + ns.formatNumber(price),

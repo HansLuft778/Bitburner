@@ -81,11 +81,11 @@ export function getBestServer(ns: NS): string {
 
 // TODO: change to available ram
 export function getBestHostByRam(ns: NS): Server[] {
-    let allHosts = getBestServerListCheap(ns, false).filter((server) => {
+    const allHosts = getBestServerListCheap(ns, false).filter((server) => {
         return server.availableRam > 2;
     });
 
-    let home: Server = {
+    const home: Server = {
         name: "home",
         maxRam: ns.getServerMaxRam("home") - 50,
         availableRam: ns.getServerMaxRam("home") - ns.getServerUsedRam("home") - 50,
@@ -129,7 +129,7 @@ export function getBestServerListCheap(ns: NS, shouldPrint: boolean): Server[] {
         // filter server with no money or the hacking level above players hacking level
         if (maxMoney < 1 || ns.getServerRequiredHackingLevel(serverList[i]) > ns.getHackingLevel()) continue;
 
-        let score = maxMoney / ns.getServerMinSecurityLevel(serverName) / 1000000;
+        const score = maxMoney / ns.getServerMinSecurityLevel(serverName) / 1000000;
 
         const server: Server = {
             name: serverName,

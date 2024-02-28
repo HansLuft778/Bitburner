@@ -20,12 +20,12 @@ export async function main(ns: NS) {
 
     // steps: WGWH-WGWH-..
     while (true) {
-        let target = getBestServer(ns);
+        const target = getBestServer(ns);
         await parallelCycle(ns, target, 0.8);
     }
 }
 
-export async function parallelCycle(ns: NS, target: string, hackThreshold: number = 0.8, num_batches: number = 1) {
+export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8, num_batches = 1) {
     const weakTime = ns.getWeakenTime(target);
 
     if (num_batches > 1) {
@@ -57,7 +57,7 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold: numbe
             // --------------------------------------
             // grow
 
-            let growDelay = weakTime - growTime + DELAY_MARGIN_MS;
+            const growDelay = weakTime - growTime + DELAY_MARGIN_MS;
             ns.print("Attempting to start Grow at " + getTimeH());
             // growServer(ns, target, batchId, growDelay);
             WGHAlgorithms.growServer(ns, target, batchId, true, hackThreshold, growDelay);
@@ -65,7 +65,7 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold: numbe
             // --------------------------------------
             // weak II
 
-            let weak2delay = 2 * DELAY_MARGIN_MS;
+            const weak2delay = 2 * DELAY_MARGIN_MS;
             ns.print("Attempting to start Weak II at " + getTimeH(Date.now() + weak2delay));
             // weakenServer(ns, target, 2, batchId, true, weak2delay);
             WGHAlgorithms.weakenServer(ns, target, 2, batchId, true, weak2delay);

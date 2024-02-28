@@ -10,7 +10,7 @@ export async function main(ns: NS) {
     await prepareServer(ns, "foodnstuff");
 }
 
-export async function prepareServer(ns: NS, target: string, threshold: number = 0.8) {
+export async function prepareServer(ns: NS, target: string, threshold = 0.8) {
     // either prepare in loop or parallel mode
     const allHosts = getBestHostByRam(ns);
     const sumAvailableRam = allHosts.reduce((acc, server) => {
@@ -36,10 +36,10 @@ export async function prepareServer(ns: NS, target: string, threshold: number = 
 
         WGHAlgorithms.weakenServer(ns, target, 1, 0, false);
 
-        let growDelay = weakTime - growTime + Config.DELAY_MARGIN_MS;
+        const growDelay = weakTime - growTime + Config.DELAY_MARGIN_MS;
         WGHAlgorithms.growServer(ns, target, 0, false, 0, growDelay);
 
-        let weak2delay = 2 * Config.DELAY_MARGIN_MS;
+        const weak2delay = 2 * Config.DELAY_MARGIN_MS;
         WGHAlgorithms.weakenServer(ns, target, 2, 0, false, weak2delay);
 
         // wait for prep to finish

@@ -1,7 +1,7 @@
 import { getBestHostByRam } from "@/bestServer";
 import { Colors, getGrowThreads, getWeakenThreads } from "@/lib";
 import { NS } from "@ns";
-import { ServerManager } from "./serverManager";
+import { ServerManager } from "./ServerManager";
 
 export async function main(ns: NS) {
     ns.tail();
@@ -19,7 +19,7 @@ export async function main(ns: NS) {
  * @returns A boolean indicating whether the weaken operation was successful.
  * @throws An error if the weaken order is not 1 or 2, or if there is not enough free RAM to execute the weaken operation.
  */
-export function weakenServer(ns: NS, target: string, order: number, batchId: number, delay: number = 0): boolean {
+export function weakenServer(ns: NS, target: string, order: number, batchId: number, delay = 0): boolean {
     let totalWeakenThreadsNeeded = 0;
     // calculate weakening threads based on the order
 
