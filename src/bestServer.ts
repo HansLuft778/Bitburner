@@ -147,8 +147,6 @@ export function getBestServerListCheap(ns: NS, shouldPrint: boolean): Server[] {
 
     if (shouldPrint) printTable(ns, servers);
 
-    ns.print(servers);
-
     return servers;
 }
 
