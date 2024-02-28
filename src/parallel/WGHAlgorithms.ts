@@ -1,5 +1,6 @@
 import { NS } from "@ns";
 
+import { Config } from "@/Config/Config";
 import { Server, getBestHostByRam } from "@/bestServer";
 import {
     Colors,
@@ -11,7 +12,6 @@ import {
     getWeakenThreadsAfterHack,
 } from "@/lib";
 import { ServerManager } from "./ServerManager";
-import { Config } from "@/Config/Config";
 
 export class WGHAlgorithms {
     private static currentGrowThreads = 0;

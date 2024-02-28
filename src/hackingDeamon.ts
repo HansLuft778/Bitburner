@@ -102,12 +102,12 @@ function getHackThreshold(ns: NS, target: string): number {
     }, 0);
 
     let hackThreshold = 0.9;
-    const THRESHOLD_STEP = 0.05;
-    const MIN_HACK_THRESHOLD = 0.15;
+    const THRESHOLD_STEP = Config.THRESHOLD_STEP;
+    const MIN_HACK_THRESHOLD = Config.MIN_HACK_THRESHOLD;
 
-    const RAM_WEAKEN = 1.75;
-    const RAM_GROW = 1.75;
-    const RAM_HACK = 1.7;
+    const RAM_WEAKEN = Config.WEAKEN_SCRIPT_RAM;
+    const RAM_GROW = Config.GROW_SCRIPT_RAM;
+    const RAM_HACK = Config.HACK_SCRIPT_RAM;
     while (true) {
         // how many threads i need to grow the server from (1 - Threshold) to 1
         // needs threshold grow calculation, cause when the server is at max money, it would return 0 otherwise
@@ -162,7 +162,7 @@ function getHackThresholdBatch(ns: NS, target: string): number {
     }, 0);
 
     let hackThreshold = 0.9;
-    const MIN_HACK_THRESHOLD = 0.15;
+    const MIN_HACK_THRESHOLD = Config.MIN_HACK_THRESHOLD;
     const THRESHOLD_STEP = Config.THRESHOLD_STEP;
 
     const moneyAllowedToUse = ns.getServerMoneyAvailable("home") * (2 / 3);

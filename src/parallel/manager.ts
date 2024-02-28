@@ -8,8 +8,9 @@ import { growServer } from "./growingAlgo.js";
 import { hackServer } from "./hackingAlgo.js";
 import { weakenServer } from "./weakenAlgo.js";
 import { Time } from "@/Time.js";
+import { Config } from "@/Config/Config.js";
 
-const DELAY_MARGIN_MS = 1000;
+const DELAY_MARGIN_MS = Config.DELAY_MARGIN_MS;
 
 export async function main(ns: NS) {
     ns.tail();

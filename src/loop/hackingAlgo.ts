@@ -1,4 +1,5 @@
-import { getBestHostByRam, getBestServerListCheap } from "@/bestServer";
+import { Config } from "@/Config/Config";
+import { getBestHostByRam } from "@/bestServer";
 import { getHackThreads } from "@/lib";
 import { NS } from "@ns";
 
@@ -8,11 +9,11 @@ export async function main(ns: NS) {
 }
 
 export async function hackServer(ns: NS, target: string, threshold: number) {
-    const safetyMarginMs = 200;
+    const safetyMarginMs = Config.DELAY_MARGIN_MS;
 
     //const hackChance = ns.hackAnalyzeChance(target) // todo
     const targetHackThreads = getHackThreads(ns, target, threshold);
-    const hackingScriptRam = 1.7;
+    const hackingScriptRam = Config.HACK_SCRIPT_RAM;
 
     ns.print(
         "total hack threads needed: " + targetHackThreads + " money available: " + ns.getServerMoneyAvailable(target),
