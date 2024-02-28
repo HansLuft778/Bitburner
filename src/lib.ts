@@ -1,7 +1,7 @@
 import { NS } from "@ns";
 
 export enum Colors {
-    reset = "\x1b[0m",
+    RESET = "\x1b[0m",
     BLACK = "\x1b[30m",
     RED = "\x1b[31m",
     GREEN = "\x1b[32m",

@@ -9,8 +9,6 @@ import { hackServer } from "./hackingAlgo.js";
 import { weakenServer } from "./weakenAlgo.js";
 
 const DELAY_MARGIN_MS = 1000;
-const NUM_BATCHES = 3;
-let lastTarget = "";
 
 export async function main(ns: NS) {
     ns.tail();
@@ -27,21 +25,13 @@ export async function main(ns: NS) {
     }
 }
 
-export async function parallelCycle(ns: NS, target: string, hackThreshold: number = 0.8) {
-    // find the server with the most available money
-
-    // if (lastTarget != target) {
-    //     nukeAll(ns);
-    //     ns.print("found new best Server: " + target);
-    //     printServerStats(ns, target, hackThreshold);
-    // }
-    // lastTarget = target;
+export async function parallelCycle(ns: NS, target: string, hackThreshold: number = 0.8, num_batches: number = 1) {
     const weakTime = ns.getWeakenTime(target);
 
-    if (NUM_BATCHES > 1) {
+    if (num_batches > 1) {
         ns.print(Colors.CYAN + "------------ MULTI BATCH MODE ------------");
 
-        for (let batchId = 0; batchId < NUM_BATCHES; batchId++) {
+        for (let batchId = 0; batchId < num_batches; batchId++) {
             ns.print(Colors.CYAN + "------------ BATCH " + batchId + " ------------");
             // get execution times:
             const weakTime = ns.getWeakenTime(target);
@@ -84,7 +74,7 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold: numbe
 
             printServerStats(ns, target, hackThreshold);
 
-            ns.print(Colors.GREEN + "Cycle done. Beginning new cycle.." + Colors.reset);
+            ns.print(Colors.GREEN + "Cycle done. Beginning new cycle.." + Colors.RESET);
             await ns.sleep(4 * DELAY_MARGIN_MS);
         }
         await ns.sleep(weakTime);
@@ -136,7 +126,7 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold: numbe
             ns.print(
                 Colors.YELLOW +
                     "Weak 2 was skipped. Did the last hack attempt fail?\nHacking is about to start earlier than planned." +
-                    Colors.reset,
+                    Colors.RESET,
             );
             const hackStartTime = weakTime + DELAY_MARGIN_MS - hackTime;
             await ns.sleep(hackStartTime);
@@ -145,12 +135,12 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold: numbe
             await ns.sleep(hackTime + DELAY_MARGIN_MS);
         } else if (weak1Dispatched == false && weak2Dispatched == false && growDispatched == false) {
             // scenario: weak1 and weak2 skipped
-            ns.print(Colors.YELLOW + "Weak 1 and Weak 2 were skipped? Hacking now. " + getTimeH() + Colors.reset);
+            ns.print(Colors.YELLOW + "Weak 1 and Weak 2 were skipped? Hacking now. " + getTimeH() + Colors.RESET);
             hackServer(ns, target, hackThreshold, 0);
             await ns.sleep(hackTime + DELAY_MARGIN_MS);
         } else if (weak1Dispatched == true && growDispatched == true && weak2Dispatched == true) {
             // hack normal
-            ns.print(Colors.GREEN + "Hack is about to start as expected" + Colors.reset);
+            ns.print(Colors.GREEN + "Hack is about to start as expected" + Colors.RESET);
             const hackStartTime = weakTime + 3 * DELAY_MARGIN_MS - hackTime;
             const hackDelayDiff = hackStartTime - growStartTime;
             await ns.sleep(hackDelayDiff);
@@ -161,7 +151,7 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold: numbe
             // case weak1 was skipped, but weak2 and grow were dispatched
 
             ns.print(
-                Colors.YELLOW + "Weak 1 was skipped. Perhaps the server is already at the min sec lvl." + Colors.reset,
+                Colors.YELLOW + "Weak 1 was skipped. Perhaps the server is already at the min sec lvl." + Colors.RESET,
             );
             const hackStartTime = weakTime + 2 * DELAY_MARGIN_MS - hackTime;
             await ns.sleep(hackStartTime - growStartTime);
@@ -169,7 +159,7 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold: numbe
             hackServer(ns, target, hackThreshold, 0);
             await ns.sleep(hackTime + DELAY_MARGIN_MS);
         } else {
-            ns.print(Colors.RED + "could not start hack!" + Colors.reset);
+            ns.print(Colors.RED + "could not start hack!" + Colors.RESET);
             ns.print(
                 "weak1Dispatched: " +
                     weak1Dispatched +

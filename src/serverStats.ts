@@ -25,7 +25,7 @@ let hackingPercent = 0;
 export function printServerStats(ns: NS, server: string, hackThreshold: number) {
     setStats(ns, server, hackThreshold);
 
-    ns.print(BORDER_COLOR + headerString + Colors.reset);
+    ns.print(BORDER_COLOR + headerString + Colors.RESET);
 
     printStatLine(ns, "Money:", false);
     printStatLine(ns, "Max Money: " + ns.formatNumber(maxMoney) + " | Current Money: " + ns.formatNumber(curMoney));
@@ -46,7 +46,7 @@ export function printServerStats(ns: NS, server: string, hackThreshold: number) 
     printStatLine(ns, "Weaken Threads " + serverWeakenThreadsCur);
     printStatLine(ns, "Hack Threads: " + hackThreads + " | Hack percent: " + ns.formatNumber(hackingPercent, 5));
 
-    ns.print(BORDER_COLOR + footerString + Colors.reset);
+    ns.print(BORDER_COLOR + footerString + Colors.RESET);
 }
 
 export function printServerStatsConsole(ns: NS, server: string) {
@@ -91,12 +91,12 @@ function printStatLine(ns: NS, value: string, indent: boolean = true) {
     ns.print(
         BORDER_COLOR +
             "│ " +
-            Colors.reset +
+            Colors.RESET +
             value +
             " ".repeat(headerString.length - value.length - offset) +
             BORDER_COLOR +
             "│" +
-            Colors.reset,
+            Colors.RESET,
     );
 }
 

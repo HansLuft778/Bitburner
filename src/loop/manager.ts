@@ -24,10 +24,10 @@ export async function main(ns: NS) {
 }
 
 export async function loopCycle(ns: NS, target: string, threshold: number) {
-    ns.print(Colors.CYAN + "------------ PREPARING ------------" + Colors.reset);
+    ns.print(Colors.CYAN + "------------ PREPARING ------------" + Colors.RESET);
     await prepareServer(ns, target, threshold);
 
-    ns.print(Colors.CYAN + "------------- HACKING -------------" + Colors.reset);
+    ns.print(Colors.CYAN + "------------- HACKING -------------" + Colors.RESET);
     await hackServer(ns, target, threshold);
 }
 
