@@ -15,7 +15,6 @@
   "rules": {
     "no-constant-condition": ["off"],
     "@typescript-eslint/no-floating-promises": "error",
-    "indent": ["error", 4],
-    "quotes": ["double"]
+    "indent": ["error", 4]
   }
 }
