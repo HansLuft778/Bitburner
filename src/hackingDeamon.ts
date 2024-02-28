@@ -1,12 +1,10 @@
 import { NS } from "@ns";
+
 import { getBestHostByRam, getBestServerListCheap } from "./bestServer";
 import { Colors, getGrowThreadsThreshold, getWeakenThreadsAfterHack } from "./lib";
 import { prepareServer } from "./loop/prepareServer";
 import { parallelCycle } from "./parallel/manager";
 
-// TODO: determine the threshold by first prepping the server to max money/min sec lvl.
-// Then find the percentage of money that can be stolen safely, so it can be regrown per one-hit.
-// This might be key to solve the threads problem, without having to get the FormulasAPI
 const MONEY_HACK_THRESHOLD = 0.5;
 const RAM_WEAKEN = 1.75;
 const RAM_GROW = 1.75;
@@ -18,7 +16,7 @@ export async function main(ns: NS) {
     // either start loop or parallelize, depending on the number of servers and money the player has
 
     let target = getBestServerListCheap(ns, false)[0].name;
-    // target = "phantasy";
+    target = "phantasy";
     ns.print("target: " + target);
 
     // ----------------- PREPARE SERVER -----------------
@@ -28,7 +26,7 @@ export async function main(ns: NS) {
         ns.getServerMaxMoney(target) != ns.getServerMoneyAvailable(target) ||
         ns.getServerSecurityLevel(target) != ns.getServerMinSecurityLevel(target)
     ) {
-        // await prepareServer(ns, target, MONEY_HACK_THRESHOLD);
+        await prepareServer(ns, target, MONEY_HACK_THRESHOLD);
     }
 
     if (
@@ -37,7 +35,8 @@ export async function main(ns: NS) {
     ) {
         ns.print(Colors.GREEN + "Preparation finished, starting parallel mode");
     } else {
-        ns.print(Colors.RED + "Preparation failed, starting loop mode");
+        ns.tprint(Colors.RED + "Preparation failed, starting loop mode");
+        throw new Error("Preparation failed, starting loop mode");
     }
 
     // ----------------- CHECK WHICH MODE TO USE -----------------
