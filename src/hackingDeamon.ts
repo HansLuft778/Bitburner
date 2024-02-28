@@ -162,10 +162,10 @@ function getHackThresholdBatch(ns: NS, target: string): number {
     }, 0);
 
     let hackThreshold = 0.9;
-    const MIN_HACK_THRESHOLD = Config.MIN_HACK_THRESHOLD;
     const THRESHOLD_STEP = Config.THRESHOLD_STEP;
-
-    const moneyAllowedToUse = ns.getServerMoneyAvailable("home") * (2 / 3);
+    
+    // const MIN_HACK_THRESHOLD = Config.MIN_HACK_THRESHOLD;
+    // const moneyAllowedToUse = ns.getServerMoneyAvailable("home") * (2 / 3);
 
     while (true) {
         // how many threads i need to grow the server from (1 - Threshold) to 1
