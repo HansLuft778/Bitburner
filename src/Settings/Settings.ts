@@ -8,30 +8,42 @@ export class Settings {
      * The target the daemon should hack, leave empty to hack the best server.
      * Default: ""
      */
-    public static target = "";
+    public static readonly TARGET = "";
 
     /**
      * The maximum amount of money the daemon is allowed to use to buy servers.
      * Default: 0
      */
-    public static maxMoneyToBuy = 0;
+    public static readonly MAX_MONEY_TO_BUY = 0;
 
     /**
      * The maximum amount of money the daemon is allowed to hack from a server, leave at 0 to let the daemon decide.
      * Default: 0
      */
-    public static hackThreshold = 0;
+    public static readonly HACK_THRESHOLD = 0;
+
+    /**
+     * The step value which is used to decrease the hack threshold to calculate the optimal HACK_THRESHOLD.
+     * Default: 0.05
+     */
+    public static readonly THRESHOLD_STEP = 0.05;
 
     /**
      * The maximum amount of RAM the daemon should leave free on the Home server.
      * Default: 50
      */
-    public static homeFreeRam = 50;
+    public static readonly HOME_FREE_RAM = 50;
 
     /**
      * The delay time in milliseconds.
      * This constant represents the amount of time to add as a margin when calling weak/grow/hack in parallel mode.
      * Default: 1000
      */
-    public static DELAY_MARGIN_MS = 1000;
+    public static readonly DELAY_MARGIN_MS = 1000;
+
+    /**
+     * The number of batches to use in parallel mode.
+     * Default: 2
+     */
+    public static readonly NUM_BATCHES = 2;
 }
