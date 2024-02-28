@@ -1,6 +1,6 @@
 import { getBestHostByRam } from "@/bestServer";
 import { NS } from "@ns";
-import { ServerManager } from "./serverManager";
+import { ServerManager } from "./ServerManager";
 import { Colors } from "@/lib";
 
 export async function main(ns: NS) {
