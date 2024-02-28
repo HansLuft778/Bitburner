@@ -29,6 +29,14 @@ export class Config {
     public static readonly THRESHOLD_STEP = 0.05;
 
     /**
+     * The minimum hack threshold value.
+     * This value represents the minimum threshold required for a successful hack.
+     * Default: 0.15
+     */
+    public static readonly MIN_HACK_THRESHOLD = 0.15;
+
+
+    /**
      * The maximum amount of RAM the daemon should leave free on the Home server.
      * Default: 50
      */
