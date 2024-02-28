@@ -163,7 +163,7 @@ function getHackThresholdBatch(ns: NS, target: string): number {
 
     let hackThreshold = 0.9;
     const THRESHOLD_STEP = Config.THRESHOLD_STEP;
-    
+
     // const MIN_HACK_THRESHOLD = Config.MIN_HACK_THRESHOLD;
     // const moneyAllowedToUse = ns.getServerMoneyAvailable("home") * (2 / 3);
 
