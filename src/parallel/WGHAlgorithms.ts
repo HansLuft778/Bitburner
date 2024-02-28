@@ -1,6 +1,6 @@
 import { NS } from "@ns";
 
-import { getBestHostByRam } from "@/bestServer";
+import { Server, getBestHostByRam } from "@/bestServer";
 import {
     Colors,
     getGrowThreads,
@@ -11,6 +11,7 @@ import {
     getWeakenThreadsAfterHack,
 } from "@/lib";
 import { ServerManager } from "./ServerManager";
+import { Config } from "@/Config/Config";
 
 export class WGHAlgorithms {
     private static currentGrowThreads = 0;
@@ -36,6 +37,7 @@ export class WGHAlgorithms {
         batchId: number,
         batchMode: boolean,
         delay = 0,
+        filterNotAllowedHosts = true,
     ): boolean {
         let totalWeakenThreadsNeeded = 0;
         // calculate weakening threads based on the order
@@ -43,22 +45,17 @@ export class WGHAlgorithms {
         if (order == 1 && !batchMode) {
             // first weak has to weaken server to min from unknown sec lvl
             totalWeakenThreadsNeeded = getWeakenThreads(ns, target);
-            ns.print("Actual weaken1 threads needed: " + totalWeakenThreadsNeeded);
         } else if (order == 2 && !batchMode) {
             // second weak only has to remove the sec increase from the grow before (more ram efficient)
             const growThreads = getGrowThreads(ns, target);
 
             totalWeakenThreadsNeeded = getWeakenThreadsAfterGrow(ns, growThreads);
-
-            ns.print("Actual weaken2 threads needed: " + totalWeakenThreadsNeeded);
         } else if (order == 1 && batchMode) {
             // weak after previous hack
             totalWeakenThreadsNeeded = getWeakenThreadsAfterHack(ns, this.currentHackThreads);
-            ns.print("Actual weaken1 threads needed: " + totalWeakenThreadsNeeded);
         } else if (order == 2 && batchMode) {
             // weak after previous grow
             totalWeakenThreadsNeeded = getWeakenThreadsAfterGrow(ns, this.currentGrowThreads);
-            ns.print("Actual weaken2 threads needed: " + totalWeakenThreadsNeeded);
         } else {
             throw new Error("weaken order can only be either 1 or 2!");
         }
@@ -69,8 +66,11 @@ export class WGHAlgorithms {
         }
 
         // exec weaken.js with num of threads
-        const allHosts = getBestHostByRam(ns);
-        const weakenScriptRam = 1.75;
+        let allHosts: Server[] = getBestHostByRam(ns);
+        if (filterNotAllowedHosts) {
+            allHosts = allHosts.filter((host) => !host.name.includes("grow-") && !host.name.includes("hack-"));
+        }
+        const weakenScriptRam = Config.WEAKEN_SCRIPT_RAM;
 
         let threadsDispatched = 0;
         let threadsRemaining = totalWeakenThreadsNeeded;
@@ -137,6 +137,7 @@ export class WGHAlgorithms {
         batchMode: boolean,
         hackThreshold: number,
         delay: number,
+        filterNotAllowedHosts = true,
     ): boolean {
         let totalGrowThreadsNeeded = 0;
         if (!batchMode) {
@@ -146,16 +147,17 @@ export class WGHAlgorithms {
             this.currentGrowThreads = totalGrowThreadsNeeded;
         }
 
-        ns.print("Actual grow threads needed: " + totalGrowThreadsNeeded);
-
         if (totalGrowThreadsNeeded < 1) {
             ns.print("No grow threads needed, skipping growth process");
             return false;
         }
 
         // exec grow.js with num of threads
-        const allHosts = getBestHostByRam(ns);
-        const growingScriptRam = 1.75;
+        let allHosts = getBestHostByRam(ns);
+        if (filterNotAllowedHosts) {
+            allHosts = allHosts.filter((host) => !host.name.includes("weak-") && !host.name.includes("hack-"));
+        }
+        const growingScriptRam = Config.GROW_SCRIPT_RAM;
 
         for (let i = 0; i < allHosts.length; i++) {
             const host = allHosts[i];
@@ -202,10 +204,11 @@ export class WGHAlgorithms {
             totalHackThreadsNeeded = getHackThreadsFormulas(ns, target, threshold);
             this.currentHackThreads = totalHackThreadsNeeded;
         }
-        ns.print("actual hack threads needed: " + totalHackThreadsNeeded);
 
-        const allHosts = getBestHostByRam(ns);
-        const hackingScriptRam = 1.7;
+        const allHosts = getBestHostByRam(ns).filter(
+            (host) => !host.name.includes("weak-") && !host.name.includes("grow-"),
+        );
+        const hackingScriptRam = Config.HACK_SCRIPT_RAM;
 
         for (let i = 0; i < allHosts.length; i++) {
             const host = allHosts[i];

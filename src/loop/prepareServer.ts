@@ -27,6 +27,10 @@ export async function prepareServer(ns: NS, target: string, threshold = 0.8) {
         growThreads * Config.GROW_SCRIPT_RAM +
         weakenAfterGrowThreads * Config.WEAKEN_SCRIPT_RAM;
 
+    ns.print(
+        "needs " + totalRamNeeded + "GB of RAM and got " + sumAvailableRam + " to running parallel mode on " + target,
+    );
+
     if (totalRamNeeded < sumAvailableRam) {
         // -------------------------------- PARALLEL MODE --------------------------------
         ns.print(Colors.CYAN + "Preparing " + target + " in parallel mode");
@@ -34,13 +38,13 @@ export async function prepareServer(ns: NS, target: string, threshold = 0.8) {
         const weakTime = ns.getWeakenTime(target);
         const growTime = ns.getGrowTime(target);
 
-        WGHAlgorithms.weakenServer(ns, target, 1, 0, false);
+        WGHAlgorithms.weakenServer(ns, target, 1, 0, false, 0, false);
 
         const growDelay = weakTime - growTime + Config.DELAY_MARGIN_MS;
-        WGHAlgorithms.growServer(ns, target, 0, false, 0, growDelay);
+        WGHAlgorithms.growServer(ns, target, 0, false, 0, growDelay, false);
 
         const weak2delay = 2 * Config.DELAY_MARGIN_MS;
-        WGHAlgorithms.weakenServer(ns, target, 2, 0, false, weak2delay);
+        WGHAlgorithms.weakenServer(ns, target, 2, 0, false, weak2delay, false);
 
         // wait for prep to finish
         await ns.sleep(weakTime + 4 * Config.DELAY_MARGIN_MS);
