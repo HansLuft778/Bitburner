@@ -16,6 +16,19 @@ export class WGHAlgorithms {
     private static currentGrowThreads = 0;
     private static currentHackThreads = 0;
 
+    /**
+     * Weakens a server by executing the weaken.js script with the specified number of threads.
+     * The number of threads dispatched depends on the order, batch mode, and available resources.
+     *
+     * @param ns - The NetScriptJS object.
+     * @param target - The name of the target server to weaken.
+     * @param order - wether it is weaken I or weaken II.
+     * @param batchId - The ID of the parallel batch.
+     * @param batchMode - Set to true, of more than one batch should run in parallel mode.
+     * @param delay - Time in ms, by how much the weaken script should be delayed to enable precise parallel batch mode timing (default: 0).
+     * @returns A boolean indicating whether the weakening process was successful.
+     * @throws An error if the weaken order is not 1 or 2.
+     */
     static weakenServer(
         ns: NS,
         target: string,
@@ -34,9 +47,8 @@ export class WGHAlgorithms {
         } else if (order == 2 && !batchMode) {
             // second weak only has to remove the sec increase from the grow before (more ram efficient)
             const growThreads = getGrowThreads(ns, target);
-            const secIncrease = ns.growthAnalyzeSecurity(growThreads, target);
 
-            totalWeakenThreadsNeeded = Math.ceil(secIncrease / ns.weakenAnalyze(1));
+            totalWeakenThreadsNeeded = getWeakenThreadsAfterGrow(ns, growThreads);
 
             ns.print("Actual weaken2 threads needed: " + totalWeakenThreadsNeeded);
         } else if (order == 1 && batchMode) {
@@ -102,6 +114,22 @@ export class WGHAlgorithms {
         return true;
     }
 
+    /**
+     * Grows the specified server by executing the "grow.js" script with the specified number of threads.
+     * If batchMode is enabled, it calculates the number of threads needed using the getGrowThreadsFormulas function.
+     * Otherwise, it uses the getGrowThreads function to determine the number of threads needed.
+     * If there are no threads needed, the growth process is skipped.
+     * If there is an available host with enough RAM to execute the "grow.js" script, it is executed immediately.
+     * Otherwise, it attempts to upgrade or buy a server with enough RAM to execute the script.
+     *
+     * @param ns - The NetScript instance.
+     * @param target - The name of the server to grow.
+     * @param batchId - The ID of the batch.
+     * @param batchMode - Set to true, of more than one batch should run in parallel mode.
+     * @param hackThreshold - The hack threshold.
+     * @param delay - Time in ms, by how much the weaken script should be delayed to enable precise parallel batch mode timing (default: 0).
+     * @returns A boolean indicating whether the growth process was successful.
+     */
     static growServer(
         ns: NS,
         target: string,
@@ -155,6 +183,17 @@ export class WGHAlgorithms {
         return true;
     }
 
+    /**
+     * Hacks a given server by executing the "hack.js" script with the specified number of threads, on certain hosts.
+     *
+     * @param ns - The NetScript object.
+     * @param target - The name of the server to hack.
+     * @param threshold - The hacking threshold for the server.
+     * @param batchId - The ID of the current hacking batch.
+     * @param batchMode - Set to true, of more than one batch should run in parallel mode.
+     * @param delay - Time in ms, by how much the weaken script should be delayed to enable precise parallel batch mode timing (default: 0).
+     * @returns A boolean indicating whether the hacking was successful.
+     */
     static hackServer(ns: NS, target: string, threshold: number, batchId: number, batchMode: boolean, delay: number) {
         let totalHackThreadsNeeded = 0;
         if (!batchMode) {
