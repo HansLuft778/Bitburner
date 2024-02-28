@@ -4,17 +4,23 @@ export async function main(ns: NS) {
     let isUpgrade = false;
     let upgradeName = "";
     let upgradeRam = 0;
+    let upgradeUnit = "";
 
     let isBuy = false;
     let buyName = "";
     let buyRam = 0;
     let buyUnit = "";
 
+    let isRename = false;
+    let oldName = "";
+    let newName = "";
+
     if (ns.args.length == 3 || ns.args.length == 0) {
         if (ns.args[0] == "-u") {
             isUpgrade = true;
             upgradeName = ns.args[1].toString();
-            upgradeRam = Number(ns.args[2]);
+            upgradeRam = Number(String(ns.args[2]).slice(0, -1));
+            upgradeUnit = String(ns.args[2]).slice(-1);
         }
         if (ns.args[0] == "-b") {
             isBuy = true;
@@ -22,13 +28,24 @@ export async function main(ns: NS) {
             buyRam = Number(String(ns.args[2]).slice(0, -1));
             buyUnit = String(ns.args[2]).slice(-1);
         }
+        if (ns.args[0] == "-r") {
+            isRename = true;
+            oldName = ns.args[1].toString();
+            newName = ns.args[2].toString();
+        }
     } else {
-        ns.tprint("\nusage: sm.js [options]\n\nOptions:\n\t-u <Name> <Ram><G|T|P>\n\t-b <Name> <Ram><G|T|P>");
+        ns.tprint(
+            "\nusage: sm.js [options]\n\nOptions:\n\t-u <Name> <Ram><G|T|P>\n\t-b <Name> <Ram><G|T|P>\n\t-r <old name> <new name>",
+        );
         return;
     }
 
     if (isUpgrade) {
         // get current ram
+        const exponent = Math.ceil(Math.log2(upgradeRam));
+        upgradeRam = Math.pow(2, exponent);
+
+        upgradeRam = getGBfromAnyUnit(ns, upgradeRam, upgradeUnit);
         const servers = ns.getPurchasedServers();
         if (!servers.includes(upgradeName)) {
             ns.tprint("You do not own a server called " + upgradeName);
@@ -55,6 +72,11 @@ export async function main(ns: NS) {
             "buying the server (" + buyName + ") with " + buyRam + "GB of Ram, will cost " + ns.formatNumber(price),
         );
         if (answer) ns.purchaseServer(buyName, buyRam);
+    } else if (isRename) {
+        if (!ns.getPurchasedServers().includes(oldName)) {
+            ns.tprint("You do not own a server called " + oldName);
+        }
+        ns.renamePurchasedServer(oldName, newName);
     } else {
         const playerMoney = ns.getServerMoneyAvailable("home");
         let ramSize = 16;
@@ -85,7 +107,9 @@ function getGBfromAnyUnit(ns: NS, ram: number, unit: string): number {
     } else if (unit == "P") {
         return ram * 1024 * 1024;
     } else {
-        ns.tprint("\nusage: sm.js [options]\n\nOptions:\n\t-u <Name> <Ram><G|T|P>\n\t-b <Name> <Ram><G|T|P>");
+        ns.tprint(
+            "\nusage: sm.js [options]\n\nOptions:\n\t-u <Name> <Ram><G|T|P>\n\t-b <Name> <Ram><G|T|P>\n\t-r <old name> <new name>",
+        );
         return 0;
     }
 }
