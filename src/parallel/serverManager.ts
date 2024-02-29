@@ -13,22 +13,22 @@ export class ServerManager {
      * @param batchId - The batch ID of the server.
      * @returns The name of the upgraded server or an empty string if a new server cannot be bought/upgraded.
      */
-    static buyOrUpgradeServer(ns: NS, desiredRam: number, serverType: string, batchId: number): string {
-        const serverName = serverType + "-" + batchId;
-        const upgradeSuccessful = this.upgradeServer(ns, desiredRam, serverName);
-
-        if (upgradeSuccessful) {
-            ns.print(Colors.GREEN + "[server Manager] Upgraded Server '" + serverName + "'!");
-            return serverName;
+    static buyOrUpgradeServer(ns: NS, desiredRam: number, serverType: string): string {
+        const server = this.getBestServerToUpgrade(ns, desiredRam, serverType);
+        if (server.name !== "") {
+            const upgradeSuccessful = this.upgradeServer(ns, server.totalRam, server.name);
+            if (upgradeSuccessful) {
+                ns.print(Colors.GREEN + "[server Manager] Upgraded Server '" + serverType + "'!");
+                return server.name;
+            }
         }
 
-        const name = this.buyServer(ns, desiredRam, serverName);
+        const name = this.buyServer(ns, desiredRam, serverType);
         if (name === "") {
             ns.print(Colors.RED + "[server Manager] Failed to buy a new server!");
             return name;
         }
         ns.print(Colors.GREEN + "[server Manager] Bought Server '" + name + "'!");
-        nukeAll(ns);
         return name;
     }
 
@@ -64,13 +64,10 @@ export class ServerManager {
             return false;
         }
 
-        const serverMaxRam = ns.getServerMaxRam(serverName);
-        let totalRequiredRam = desiredRam + serverMaxRam;
+        const exponent = Math.ceil(Math.log2(desiredRam));
+        desiredRam = Math.pow(2, exponent);
 
-        const exponent = Math.ceil(Math.log2(totalRequiredRam));
-        totalRequiredRam = Math.pow(2, exponent);
-
-        const cost = ns.getPurchasedServerUpgradeCost(serverName, totalRequiredRam);
+        const cost = ns.getPurchasedServerUpgradeCost(serverName, desiredRam);
 
         if (cost > ns.getServerMoneyAvailable("home")) {
             ns.print(
@@ -79,7 +76,7 @@ export class ServerManager {
             return false;
         }
 
-        if (!ns.upgradePurchasedServer(serverName, totalRequiredRam)) {
+        if (!ns.upgradePurchasedServer(serverName, desiredRam)) {
             ns.print(Colors.RED + "[server Manager] attempted to upgrade Server, but the upgrade failed");
             return false;
         }
@@ -96,6 +93,14 @@ export class ServerManager {
      */
     static getBestServerToUpgrade(ns: NS, desiredRam: number, name: string) {
         const purchasedServers = ns.getPurchasedServers().filter((server) => server.includes(name));
+
+        if (purchasedServers.length === 0) {
+            return {
+                cost: 0,
+                name: "",
+                totalRam: 0,
+            };
+        }
 
         let minUpgradeCost = Number.MAX_VALUE;
         let serverToUpgrade = "";
@@ -119,9 +124,9 @@ export class ServerManager {
             }
         }
         return {
-            minUpgradeCost,
-            serverToUpgrade,
-            totalRequiredRam,
+            cost: minUpgradeCost,
+            name: serverToUpgrade,
+            totalRam: totalRequiredRam,
         };
     }
 }
