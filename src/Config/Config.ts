@@ -17,6 +17,16 @@ export class Config {
     public static readonly MAX_MONEY_TO_BUY = 0;
 
     /**
+     * The name of the grow/weak/hack servers.
+     * When the Daemon needs to buy a new server, the servername will start with the value of this property, appended with a trailing number.
+     * Example: "daemon-grow-0", "daemon-grow-1", ...
+     * Default: "daemon-grow", "daemon-weak", "daemon-hack"
+     */
+    public static readonly GROW_SERVER_NAME = "daemon-grow";
+    public static readonly WEAK_SERVER_NAME = "daemon-weak";
+    public static readonly HACK_SERVER_NAME = "daemon-hack";
+
+    /**
      * The maximum amount of money the daemon is allowed to hack from a server, leave at 0 to let the daemon decide.
      * Default: 0
      */
