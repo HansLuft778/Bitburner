@@ -114,6 +114,6 @@ export async function main(ns: NS) {
     while (true) {
         ns.clearLog();
         printServerStats(ns, ns.args[0].toString(), 0.9);
-        await ns.sleep(50);
+        await ns.sleep(100);
     }
 }

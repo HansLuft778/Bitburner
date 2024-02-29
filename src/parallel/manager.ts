@@ -76,11 +76,11 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
             ns.print(Colors.GREEN + "Cycle done. Beginning new cycle.." + Colors.RESET);
 
             await ns.sleep(4 * DELAY_MARGIN_MS);
-            time.substractTime(4 * DELAY_MARGIN_MS);
+            time.accumulateSleepTime(4 * DELAY_MARGIN_MS);
         }
         // sleep until next cycle
         await ns.sleep(weakTime - 4 * DELAY_MARGIN_MS * num_batches + DELAY_MARGIN_MS);
-        time.substractTime(weakTime - 4 * DELAY_MARGIN_MS * num_batches + DELAY_MARGIN_MS);
+        time.accumulateSleepTime(weakTime - 4 * DELAY_MARGIN_MS * num_batches + DELAY_MARGIN_MS);
     } else {
         ns.print(Colors.CYAN + "------------ SINGLE BATCH MODE ------------");
         const weakTime = ns.getWeakenTime(target);

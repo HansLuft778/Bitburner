@@ -27,8 +27,8 @@ export async function main(ns: NS) {
     const time = Time.getInstance();
     while (true) {
         time.startTime();
-        let target = getBestServerList(ns, false)[0].name;
-        target = "the-hub";
+        const target = getBestServerList(ns, false)[0].name;
+        // target = "the-hub";
 
         ns.print("lastTarget: " + lastTarget + " target: " + target);
         if (ns.fileExists("Formulas.exe", "home")) {
@@ -58,7 +58,7 @@ export async function main(ns: NS) {
 
             // ----------------- CHECK WHICH MODE TO USE -----------------
 
-            await parallelCycle(ns, target, hackThreshold, 60);
+            await parallelCycle(ns, target, hackThreshold, Config.LOOP_BATCH_COUNT);
         } else {
             // ----------------- PREPARE SERVER -----------------
 

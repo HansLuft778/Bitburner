@@ -166,6 +166,7 @@ export class WGHAlgorithms {
 
             if (maxThreadsOnHost >= totalGrowThreadsNeeded) {
                 ns.exec("grow.js", host.name, totalGrowThreadsNeeded, target, delay);
+                ns.print("Done deploying grow!");
                 return true;
             }
         }
@@ -217,6 +218,7 @@ export class WGHAlgorithms {
 
             if (maxThreadsOnHost >= totalHackThreadsNeeded) {
                 ns.exec("hack.js", host.name, totalHackThreadsNeeded, target, delay);
+                ns.print("Done deploying hack!");
                 return true;
             }
         }

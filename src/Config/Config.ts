@@ -46,13 +46,13 @@ export class Config {
      * This constant represents the amount of time to add as a margin when calling weak/grow/hack in parallel mode.
      * Default: 1000
      */
-    public static readonly DELAY_MARGIN_MS = 1000;
+    public static readonly DELAY_MARGIN_MS = 500;
 
     /**
      * The number of batches to use in parallel mode.
      * Default: 2
      */
-    public static readonly NUM_BATCHES = 2;
+    public static readonly LOOP_BATCH_COUNT = 100;
 
     /**
      * The amount of RAM (in gigabytes) required by the weaken, grow and hack script.

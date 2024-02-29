@@ -100,7 +100,7 @@ export function getGrowThreads(ns: NS, server: string) {
     const serverMaxMoney = ns.getServerMaxMoney(server);
     const serverCurrentMoney = ns.getServerMoneyAvailable(server);
     let moneyMultiplier = serverMaxMoney / serverCurrentMoney;
-    if (isNaN(moneyMultiplier) || moneyMultiplier == Infinity) moneyMultiplier = 1;
+    if (isNaN(moneyMultiplier) || moneyMultiplier == Infinity) moneyMultiplier = serverMaxMoney;
     const serverGrowThreads = Math.ceil(ns.growthAnalyze(server, moneyMultiplier));
 
     return serverGrowThreads;
