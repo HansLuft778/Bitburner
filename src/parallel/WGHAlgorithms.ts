@@ -34,7 +34,6 @@ export class WGHAlgorithms {
         ns: NS,
         target: string,
         order: number,
-        batchId: number,
         batchMode: boolean,
         delay = 0,
         filterNotAllowedHosts = true,
@@ -102,7 +101,7 @@ export class WGHAlgorithms {
         );
 
         const neededWeakenRam = threadsRemaining * weakenScriptRam;
-        const server = ServerManager.buyOrUpgradeServer(ns, neededWeakenRam, "weak", batchId);
+        const server = ServerManager.buyOrUpgradeServer(ns, neededWeakenRam, Config.WEAK_SERVER_NAME);
 
         if (server === "") {
             ns.tprint("Error! Could not buy server to weak " + target);
@@ -133,9 +132,8 @@ export class WGHAlgorithms {
     static growServer(
         ns: NS,
         target: string,
-        batchId: number,
-        batchMode: boolean,
         hackThreshold: number,
+        batchMode: boolean,
         delay: number,
         filterNotAllowedHosts = true,
     ): boolean {
@@ -174,7 +172,7 @@ export class WGHAlgorithms {
         ns.print(Colors.YELLOW + "No available host to grow " + target + ". Attempting to upgrade/buy server...");
 
         const neededGrowRam = totalGrowThreadsNeeded * growingScriptRam;
-        const server = ServerManager.buyOrUpgradeServer(ns, neededGrowRam, "grow", batchId);
+        const server = ServerManager.buyOrUpgradeServer(ns, neededGrowRam, "grow");
 
         if (server === "") {
             ns.tprint("Error! Could not buy server to grow " + target);
@@ -197,7 +195,7 @@ export class WGHAlgorithms {
      * @param delay - Time in ms, by how much the weaken script should be delayed to enable precise parallel batch mode timing (default: 0).
      * @returns A boolean indicating whether the hacking was successful.
      */
-    static hackServer(ns: NS, target: string, threshold: number, batchId: number, batchMode: boolean, delay: number) {
+    static hackServer(ns: NS, target: string, threshold: number, batchMode: boolean, delay: number) {
         let totalHackThreadsNeeded = 0;
         if (!batchMode) {
             totalHackThreadsNeeded = Math.ceil(threshold / ns.hackAnalyze(target));
@@ -226,7 +224,7 @@ export class WGHAlgorithms {
         ns.print(Colors.YELLOW + "No available host to hack " + target + ". Buying server...");
 
         const neededGrowRam = totalHackThreadsNeeded * hackingScriptRam;
-        const server = ServerManager.buyOrUpgradeServer(ns, neededGrowRam, "hack", batchId);
+        const server = ServerManager.buyOrUpgradeServer(ns, neededGrowRam, "hack");
 
         if (server === "") {
             ns.tprint("Error! Could not buy server to hack " + target);
