@@ -1,6 +1,7 @@
 import { NS } from "@ns";
 
 import { isHackable, nukeServer, serverScanner } from "./lib.js";
+import { Config } from "./Config/Config.js";
 
 export interface Server {
     name: string;
@@ -114,8 +115,8 @@ export function getBestHostByRam(ns: NS): Server[] {
 
     const home: Server = {
         name: "home",
-        maxRam: ns.getServerMaxRam("home") - 50,
-        availableRam: ns.getServerMaxRam("home") - ns.getServerUsedRam("home") - 50,
+        maxRam: ns.getServerMaxRam("home") - Config.HOME_FREE_RAM,
+        availableRam: ns.getServerMaxRam("home") - ns.getServerUsedRam("home") - Config.HOME_FREE_RAM,
         score: 0,
     }; // 10 some safety margin
     allHosts.push(home);

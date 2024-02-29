@@ -49,7 +49,7 @@ export class Config {
      * The maximum amount of RAM the daemon should leave free on the Home server.
      * Default: 50
      */
-    public static readonly HOME_FREE_RAM = 50;
+    public static readonly HOME_FREE_RAM = 100;
 
     /**
      * The delay time in milliseconds.
@@ -57,7 +57,7 @@ export class Config {
      * This value devided by 2 should not be less than 200ms.
      * Default: 1000
      */
-    public static readonly DELAY_MARGIN_MS = 200;
+    public static readonly DELAY_MARGIN_MS = 400;
 
     /**
      * The amount of time in milliseconds to wait before executing the next loop cycle.
