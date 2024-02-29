@@ -17,10 +17,7 @@ export class ServerManager {
         const server = this.getBestServerToUpgrade(ns, desiredRam, serverType);
         if (server.name !== "") {
             const upgradeSuccessful = this.upgradeServer(ns, server.totalRam, server.name);
-            if (upgradeSuccessful) {
-                ns.print(Colors.GREEN + "[server Manager] Upgraded Server '" + serverType + "'!");
-                return server.name;
-            }
+            if (upgradeSuccessful) return server.name;
         }
 
         const name = this.buyServer(ns, desiredRam, serverType);
@@ -50,7 +47,8 @@ export class ServerManager {
                     ns.formatNumber(cost) +
                     ", but the player does not have enough money",
             );
-            throw new Error("Not enough money to buy a new server");
+            // throw new Error("Not enough money to buy a new server");
+            return "";
         }
 
         const name = ns.purchaseServer(serverName, desiredRam);
@@ -64,7 +62,8 @@ export class ServerManager {
                     "GB for " +
                     ns.formatNumber(cost),
             );
-            throw new Error("Failed to buy a new server");
+            // throw new Error("Failed to buy a new server");
+            return "";
         }
         ns.print(
             Colors.GREEN +

@@ -27,7 +27,7 @@ export class WGHAlgorithms {
      * @param batchId - The ID of the parallel batch.
      * @param batchMode - Set to true, of more than one batch should run in parallel mode.
      * @param delay - Time in ms, by how much the weaken script should be delayed to enable precise parallel batch mode timing (default: 0).
-     * @returns A boolean indicating whether the weakening process was successful.
+     * @returns A number representing the PID of the script that was executed, or 0 if no script was executed.
      * @throws An error if the weaken order is not 1 or 2.
      */
     static weakenServer(
@@ -37,7 +37,7 @@ export class WGHAlgorithms {
         batchMode: boolean,
         delay = 0,
         filterNotAllowedHosts = true,
-    ): boolean {
+    ): number {
         let totalWeakenThreadsNeeded = 0;
         // calculate weakening threads based on the order
 
@@ -61,7 +61,7 @@ export class WGHAlgorithms {
 
         if (totalWeakenThreadsNeeded < 1) {
             ns.print("Weakenthreads are 0, skipping weak " + order);
-            return false;
+            return 0;
         }
 
         // exec weaken.js with num of threads
@@ -72,6 +72,7 @@ export class WGHAlgorithms {
             );
         }
         const weakenScriptRam = Config.WEAKEN_SCRIPT_RAM;
+        let pid = 0;
 
         let threadsDispatched = 0;
         let threadsRemaining = totalWeakenThreadsNeeded;
@@ -86,14 +87,14 @@ export class WGHAlgorithms {
             // if threadsRemaining is less than the threadSpace, then we can only dispatch threadsRemaining threads
             const threadsToDispatch = Math.min(threadsRemaining, threadSpace);
 
-            ns.exec("weaken.js", host.name, threadsToDispatch, target, delay);
+            pid = ns.exec("weaken.js", host.name, threadsToDispatch, target, delay);
             threadsRemaining -= threadsToDispatch;
             threadsDispatched += threadsToDispatch;
         }
 
         if (threadsRemaining <= 0) {
             ns.print("Done deploying weaken" + order + "!");
-            return true;
+            return pid;
         }
         ns.print(
             Colors.YELLOW +
@@ -105,14 +106,11 @@ export class WGHAlgorithms {
         const neededWeakenRam = threadsRemaining * weakenScriptRam;
         const server = ServerManager.buyOrUpgradeServer(ns, neededWeakenRam, Config.WEAK_SERVER_NAME);
 
-        if (server === "") {
-            ns.tprint("Error! Could not buy server to weak " + target);
-            throw new Error("Error! Could not buy server to weak " + target);
-        }
+        if (server === "") return 0;
 
-        ns.exec("weaken.js", server, threadsRemaining, target, delay);
+        pid = ns.exec("weaken.js", server, threadsRemaining, target, delay);
 
-        return true;
+        return pid;
     }
 
     /**
@@ -129,7 +127,7 @@ export class WGHAlgorithms {
      * @param batchMode - Set to true, of more than one batch should run in parallel mode.
      * @param hackThreshold - The hack threshold.
      * @param delay - Time in ms, by how much the weaken script should be delayed to enable precise parallel batch mode timing (default: 0).
-     * @returns A boolean indicating whether the growth process was successful.
+     * @returns A number representing the PID of the script that was executed, or 0 if no script was executed.
      */
     static growServer(
         ns: NS,
@@ -138,7 +136,7 @@ export class WGHAlgorithms {
         batchMode: boolean,
         delay: number,
         filterNotAllowedHosts = true,
-    ): boolean {
+    ): number {
         let totalGrowThreadsNeeded = 0;
         if (!batchMode) {
             totalGrowThreadsNeeded = getGrowThreads(ns, target);
@@ -149,7 +147,7 @@ export class WGHAlgorithms {
 
         if (totalGrowThreadsNeeded < 1) {
             ns.print("No grow threads needed, skipping growth process");
-            return false;
+            return 0;
         }
 
         // exec grow.js with num of threads
@@ -167,9 +165,9 @@ export class WGHAlgorithms {
             const maxThreadsOnHost = Math.floor(host.availableRam / growingScriptRam);
 
             if (maxThreadsOnHost >= totalGrowThreadsNeeded) {
-                ns.exec("grow.js", host.name, totalGrowThreadsNeeded, target, delay);
+                const pid = ns.exec("grow.js", host.name, totalGrowThreadsNeeded, target, delay);
                 ns.print("Done deploying grow!");
-                return true;
+                return pid;
             }
         }
 
@@ -178,14 +176,10 @@ export class WGHAlgorithms {
         const neededGrowRam = totalGrowThreadsNeeded * growingScriptRam;
         const server = ServerManager.buyOrUpgradeServer(ns, neededGrowRam, Config.GROW_SERVER_NAME);
 
-        if (server === "") {
-            ns.tprint("Error! Could not buy server to grow " + target);
-            throw new Error("Error! Could not buy server to grow " + target);
-        }
+        if (server === "") return 0;
 
-        ns.exec("grow.js", server, totalGrowThreadsNeeded, target, delay);
-
-        return true;
+        const pid = ns.exec("grow.js", server, totalGrowThreadsNeeded, target, delay);
+        return pid;
     }
 
     /**
@@ -197,9 +191,9 @@ export class WGHAlgorithms {
      * @param batchId - The ID of the current hacking batch.
      * @param batchMode - Set to true, of more than one batch should run in parallel mode.
      * @param delay - Time in ms, by how much the weaken script should be delayed to enable precise parallel batch mode timing (default: 0).
-     * @returns A boolean indicating whether the hacking was successful.
+     * @returns A number representing the PID of the script that was executed, or 0 if no script was executed.
      */
-    static hackServer(ns: NS, target: string, threshold: number, batchMode: boolean, delay: number) {
+    static hackServer(ns: NS, target: string, threshold: number, batchMode: boolean, delay: number): number {
         let totalHackThreadsNeeded = 0;
         if (!batchMode) {
             totalHackThreadsNeeded = Math.ceil(threshold / ns.hackAnalyze(target));
@@ -219,9 +213,9 @@ export class WGHAlgorithms {
             const maxThreadsOnHost = Math.floor(host.availableRam / hackingScriptRam);
 
             if (maxThreadsOnHost >= totalHackThreadsNeeded) {
-                ns.exec("hack.js", host.name, totalHackThreadsNeeded, target, delay);
+                const pid = ns.exec("hack.js", host.name, totalHackThreadsNeeded, target, delay);
                 ns.print("Done deploying hack!");
-                return true;
+                return pid;
             }
         }
 
@@ -230,13 +224,10 @@ export class WGHAlgorithms {
         const neededGrowRam = totalHackThreadsNeeded * hackingScriptRam;
         const server = ServerManager.buyOrUpgradeServer(ns, neededGrowRam, Config.HACK_SERVER_NAME);
 
-        if (server === "") {
-            ns.tprint("Error! Could not buy server to hack " + target);
-            throw new Error("Error! Could not buy server to hack " + target);
-        }
+        if (server === "") return 0;
 
-        ns.exec("hack.js", server, totalHackThreadsNeeded, target, delay);
+        const pid = ns.exec("hack.js", server, totalHackThreadsNeeded, target, delay);
 
-        return true;
+        return pid;
     }
 }

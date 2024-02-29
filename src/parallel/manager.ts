@@ -26,8 +26,8 @@ export async function main(ns: NS) {
         await parallelCycle(ns, target, 0.8);
     }
 }
-let cycleCounter = 0;
-let offset = 1;
+// let cycleCounter = 0;
+// let offset = 1;
 export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8, num_batches = 1) {
     const time = Time.getInstance();
 
@@ -48,23 +48,32 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
             // --------------------------------------
             // hacking
             const hackDelay = weakTime - hackTime - DELAY_MARGIN_MS;
-            WGHAlgorithms.hackServer(ns, target, hackThreshold, true, hackDelay);
+            const hackPid = WGHAlgorithms.hackServer(ns, target, hackThreshold, true, hackDelay);
 
             // --------------------------------------
             // weak I
-            WGHAlgorithms.weakenServer(ns, target, 1, true);
+            const weak1Pid = WGHAlgorithms.weakenServer(ns, target, 1, true);
 
             // --------------------------------------
             // grow
             const growDelay = weakTime - growTime + DELAY_MARGIN_MS;
-            WGHAlgorithms.growServer(ns, target, hackThreshold, true, growDelay);
+            const growPid = WGHAlgorithms.growServer(ns, target, hackThreshold, true, growDelay);
 
             // --------------------------------------
             // weak II
             const weak2delay = 2 * DELAY_MARGIN_MS;
-            WGHAlgorithms.weakenServer(ns, target, 2, true, weak2delay);
+            const weak2Pid = WGHAlgorithms.weakenServer(ns, target, 2, true, weak2delay);
 
             // --------------------------------------
+            // check if all processes were dispatched, kill them if not
+            if (weak1Pid == 0 || weak2Pid == 0 || growPid == 0 || hackPid == 0) {
+                ns.print(Colors.RED + "could not start all processes!" + Colors.RESET);
+                ns.kill(weak1Pid);
+                ns.kill(weak2Pid);
+                ns.kill(growPid);
+                ns.kill(hackPid);
+                break;
+            }
 
             ns.print(Colors.GREEN + "Cycle done. Beginning new cycle.." + Colors.RESET);
             const end = window.performance.now();
@@ -87,15 +96,15 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
         // the second batch, which messes up everything in the long run. Thats why we add the offset
         // for every second batch, so start the second batch in the middle of first batch completions.
 
-        if (cycleCounter % 2 == 0) offset = DELAY_MARGIN_MS / 2;
-        else offset = 0;
+        // if (cycleCounter % 2 == 0) offset = DELAY_MARGIN_MS / 2;
+        // else offset = 0;
 
-        const batchDeployTime = 4 * DELAY_MARGIN_MS * num_batches;
-        const sleepTime = weakTime - batchDeployTime + offset;
+        // const batchDeployTime = 4 * DELAY_MARGIN_MS * num_batches;
+        const sleepTime = weakTime; // - batchDeployTime + offset;
 
         await ns.sleep(sleepTime);
         time.accumulateSleepTime(sleepTime);
-        cycleCounter++;
+        // cycleCounter++;
     } else {
         ns.print(Colors.CYAN + "------------ SINGLE BATCH MODE ------------");
         const weakTime = ns.getWeakenTime(target);
