@@ -44,39 +44,31 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
 
         for (let batchId = 0; batchId < num_batches; batchId++) {
             ns.print(Colors.CYAN + "------------ BATCH " + batchId + " ------------");
-            // get execution times:
-
+            const start = window.performance.now();
             // --------------------------------------
             // hacking
-
-            // hack normal
-            // const hackDelay = weakTime - hackTime + 3 * DELAY_MARGIN_MS;
             const hackDelay = weakTime - hackTime - DELAY_MARGIN_MS;
             WGHAlgorithms.hackServer(ns, target, hackThreshold, true, hackDelay);
 
             // --------------------------------------
             // weak I
-
-            // weakenServer(ns, target, 1, batchId, true);
             WGHAlgorithms.weakenServer(ns, target, 1, true);
 
             // --------------------------------------
             // grow
-
             const growDelay = weakTime - growTime + DELAY_MARGIN_MS;
-            // growServer(ns, target, batchId, growDelay);
             WGHAlgorithms.growServer(ns, target, hackThreshold, true, growDelay);
 
             // --------------------------------------
             // weak II
-
             const weak2delay = 2 * DELAY_MARGIN_MS;
-            // weakenServer(ns, target, 2, batchId, true, weak2delay);
             WGHAlgorithms.weakenServer(ns, target, 2, true, weak2delay);
 
             // --------------------------------------
 
             ns.print(Colors.GREEN + "Cycle done. Beginning new cycle.." + Colors.RESET);
+            const end = window.performance.now();
+            ns.print(Colors.GREEN + "Cycle took: " + (end - start) + "ms" + Colors.RESET);
 
             await ns.sleep(4 * DELAY_MARGIN_MS);
             time.accumulateSleepTime(4 * DELAY_MARGIN_MS);
