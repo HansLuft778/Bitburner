@@ -5,6 +5,11 @@ grow can not safely be distributed, cause:
 
 
 
+haack skill level up:
+
+check if batch causes level up
+if it causes level up, change WGH threads accordingly
+
 
 
 weakTime: 44333.426612450436

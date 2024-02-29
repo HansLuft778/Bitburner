@@ -141,7 +141,7 @@ export class WGHAlgorithms {
         if (!batchMode) {
             totalGrowThreadsNeeded = getGrowThreads(ns, target);
         } else {
-            totalGrowThreadsNeeded = getGrowThreadsFormulas(ns, target, hackThreshold);
+            totalGrowThreadsNeeded = getGrowThreadsFormulas(ns, target, hackThreshold, this.currentHackThreads);
             this.currentGrowThreads = totalGrowThreadsNeeded;
         }
 

@@ -30,7 +30,7 @@ export async function main(ns: NS) {
 
         /* eslint-disable prefer-const */
         let target = getBestServerList(ns, false)[0].name;
-        // target = "phantasy";
+        target = "rho-construction";
         /* eslint-enable prefer-const */
 
         writeToPort(ns, 1, target);
@@ -45,7 +45,7 @@ export async function main(ns: NS) {
                     await prepareServer(ns, target);
                 }
                 hackThreshold = getHackThresholdBatch(ns, target);
-                ns.print("hackThreshold: " + hackThreshold);
+                ns.tprint(Colors.E_ORANGE + "hackThreshold: " + hackThreshold);
 
                 if (
                     ns.getServerMaxMoney(target) == parseFloat(ns.getServerMoneyAvailable(target).toFixed(5)) ||
@@ -175,15 +175,15 @@ function getHackThresholdBatch(ns: NS, target: string): number {
     // const moneyAllowedToUse = ns.getServerMoneyAvailable("home") * (2 / 3);
 
     while (true) {
+        // how many threads i need to hack the server
+        const serverHackThreads = getHackThreadsFormulas(ns, target, hackThreshold);
+
         // how many threads i need to grow the server from (1 - Threshold) to 1
         // needs threshold grow calculation, cause when the server is at max money, it would return 0 otherwise
-        const serverGrowThreads = getGrowThreadsFormulas(ns, target, hackThreshold);
+        const serverGrowThreads = getGrowThreadsFormulas(ns, target, hackThreshold, serverHackThreads);
 
         // how many threads i need to weaken security to 0 after growings
         const secondWeakenThreads = getWeakenThreadsAfterGrow(ns, serverGrowThreads);
-
-        // how many threads i need to hack the server
-        const serverHackThreads = getHackThreadsFormulas(ns, target, hackThreshold);
 
         // how many to weak to min sec lvl after [threshold]-hack
         const firstWeakenThreads = getWeakenThreadsAfterHack(ns, serverHackThreads);

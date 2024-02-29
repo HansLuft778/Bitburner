@@ -57,7 +57,7 @@ export class Config {
      * This value devided by 2 should not be less than 200ms.
      * Default: 1000
      */
-    public static readonly DELAY_MARGIN_MS = 400;
+    public static readonly DELAY_MARGIN_MS = 300;
 
     /**
      * The amount of time in milliseconds to wait before executing the next loop cycle.

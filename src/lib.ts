@@ -111,7 +111,8 @@ export function getGrowThreadsThreshold(ns: NS, server: string, threshold: numbe
     const maxMoney = ns.getServerMaxMoney(server);
     const minMoney = maxMoney * (1 - threshold);
     const moneyMultiplier = maxMoney / minMoney;
-    const serverGrowThreads = Math.ceil(ns.growthAnalyze(server, moneyMultiplier));
+    const serverGrowThreads = Math.ceil(ns.growthAnalyze(server, moneyMultiplier) * 1.01);
+    ns.print(serverGrowThreads + " grows needed");
 
     return serverGrowThreads;
 }
@@ -149,16 +150,23 @@ export function getHackThreads(ns: NS, server: string, moneyHackThreshold: numbe
 }
 
 // ----------------- FormulasAPI -----------------
-export function getGrowThreadsFormulas(ns: NS, server: string, hackThreshold: number) {
+export function getGrowThreadsFormulas(ns: NS, server: string, hackThreshold: number, hackThreads: number) {
     const serverObject = ns.getServer(server);
     const playerObject = ns.getPlayer();
 
     if (serverObject.moneyMax == undefined) return 0;
 
-    serverObject.moneyAvailable = serverObject.moneyMax * (1 - (hackThreshold + 0.01));
+    serverObject.moneyAvailable = serverObject.moneyMax;
     serverObject.baseDifficulty = serverObject.minDifficulty;
 
-    return ns.formulas.hacking.growThreads(serverObject, playerObject, serverObject.moneyMax);
+    const percentPerHack = ns.formulas.hacking.hackPercent(serverObject, playerObject);
+    const hackPercent = percentPerHack * hackThreads;
+    ns.print("hackPercent: " + hackPercent);
+
+    serverObject.moneyAvailable = serverObject.moneyMax * (1 - hackPercent);
+    serverObject.baseDifficulty = serverObject.minDifficulty;
+
+    return Math.ceil(ns.formulas.hacking.growThreads(serverObject, playerObject, serverObject.moneyMax) * 1.01);
 }
 
 export function getHackThreadsFormulas(ns: NS, server: string, hackThreshold: number) {
@@ -169,7 +177,7 @@ export function getHackThreadsFormulas(ns: NS, server: string, hackThreshold: nu
     serverObject.moneyAvailable = serverObject.moneyMax;
 
     // threads * percent == hackThreshold => threads == hackThreshold / percent
-    return Math.floor(hackThreshold / ns.formulas.hacking.hackPercent(serverObject, playerObject));
+    return Math.floor((hackThreshold / ns.formulas.hacking.hackPercent(serverObject, playerObject)) * 0.99);
 }
 
 // ----------------- Ports -----------------
@@ -187,8 +195,20 @@ export async function main(ns: NS) {
     ns.tail();
     ns.disableLog("ALL");
 
-    const server = "phantasy";
-    ns.print(getWeakenThreads(ns, server) + " weakens needed");
-    ns.print(getGrowThreads(ns, server) + " grows needed");
-    ns.print(getHackThreadsFormulas(ns, server, 0.9) + " hacks needed");
+    const server = "alpha-ent";
+    // ns.print(getWeakenThreads(ns, server) + " weakens needed");
+    // ns.print(getGrowThreads(ns, server) + " grows needed");
+    // ns.print(getHackThreadsFormulas(ns, server, 0.9) + " hacks needed");
+
+    const hackThreads = getHackThreadsFormulas(ns, server, 0.9);
+    ns.print(hackThreads + " hacks needed");
+    ns.print(getGrowThreadsFormulas(ns, server, 0.9, hackThreads) + " grows needed");
+
+    ns.print(getGrowThreadsThreshold(ns, server, 0.9) + " grows needed");
+
+    // ns.formulas.skills.calculateExp()
+    const player = ns.getPlayer();
+    const lvl = ns.formulas.skills.calculateSkill(player.exp.hacking, player.mults.hacking);
+    ns.print(lvl);
+    // ns.formulas.hacking.hackExp()
 }

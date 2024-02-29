@@ -29,7 +29,7 @@ export async function main(ns: NS) {
 // let cycleCounter = 0;
 // let offset = 1;
 export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8, num_batches = 1) {
-    const time = Time.getInstance();
+    // const time = Time.getInstance();
 
     const weakTime = ns.getWeakenTime(target);
     const growTime = ns.getGrowTime(target);
@@ -67,7 +67,7 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
             // --------------------------------------
             // check if all processes were dispatched, kill them if not
             if (weak1Pid == 0 || weak2Pid == 0 || growPid == 0 || hackPid == 0) {
-                ns.print(Colors.RED + "could not start all processes!" + Colors.RESET);
+                ns.print(Colors.RED + "could not start all processes, killing batch" + batchId);
                 ns.kill(weak1Pid);
                 ns.kill(weak2Pid);
                 ns.kill(growPid);
@@ -80,7 +80,6 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
             ns.print(Colors.GREEN + "Cycle took: " + (end - start) + "ms" + Colors.RESET);
 
             await ns.sleep(4 * DELAY_MARGIN_MS);
-            time.accumulateSleepTime(4 * DELAY_MARGIN_MS);
         }
         // whats happening here is a little hard to explain but ill try my best:
         // batchDeployTime should be obvious, it is the time it took to deploy all batches
@@ -103,7 +102,6 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
         const sleepTime = weakTime; // - batchDeployTime + offset;
 
         await ns.sleep(sleepTime);
-        time.accumulateSleepTime(sleepTime);
         // cycleCounter++;
     } else {
         ns.print(Colors.CYAN + "------------ SINGLE BATCH MODE ------------");
@@ -123,7 +121,6 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
             // weak2StartTime = weakTime + 2 * DELAY_MARGIN_MS - weakTime;
             weak2StartTime = 2 * DELAY_MARGIN_MS;
             await ns.sleep(weak2StartTime);
-            time.accumulateSleepTime(weak2StartTime);
         }
         // weak II
         ns.print("Attempting to start Weak II at " + getTimeH());
@@ -137,7 +134,6 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
             growStartTime = weakTime + DELAY_MARGIN_MS - growTime;
             const growDelay = growStartTime - weak2StartTime;
             await ns.sleep(growDelay);
-            time.accumulateSleepTime(growDelay);
         }
 
         // grow
@@ -159,28 +155,23 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
             );
             const hackStartTime = weakTime + DELAY_MARGIN_MS - hackTime;
             await ns.sleep(hackStartTime);
-            time.accumulateSleepTime(hackStartTime);
             ns.print("Attempting to start Hack at " + getTimeH());
             hackServer(ns, target, hackThreshold, 0);
             await ns.sleep(hackTime + DELAY_MARGIN_MS);
-            time.accumulateSleepTime(hackTime + DELAY_MARGIN_MS);
         } else if (weak1Dispatched == false && weak2Dispatched == false && growDispatched == false) {
             // scenario: weak1 and weak2 skipped
             ns.print(Colors.YELLOW + "Weak 1 and Weak 2 were skipped? Hacking now. " + getTimeH() + Colors.RESET);
             hackServer(ns, target, hackThreshold, 0);
             await ns.sleep(hackTime + DELAY_MARGIN_MS);
-            time.accumulateSleepTime(hackTime + DELAY_MARGIN_MS);
         } else if (weak1Dispatched == true && growDispatched == true && weak2Dispatched == true) {
             // hack normal
             ns.print(Colors.GREEN + "Hack is about to start as expected" + Colors.RESET);
             const hackStartTime = weakTime + 3 * DELAY_MARGIN_MS - hackTime;
             const hackDelayDiff = hackStartTime - growStartTime;
             await ns.sleep(hackDelayDiff);
-            time.accumulateSleepTime(hackDelayDiff);
             ns.print("Attempting to start Hack at " + getTimeH());
             hackServer(ns, target, hackThreshold, 0);
             await ns.sleep(hackTime + DELAY_MARGIN_MS);
-            time.accumulateSleepTime(hackTime + DELAY_MARGIN_MS);
         } else if (weak1Dispatched == false && weak2Dispatched == true && growDispatched == true) {
             // case weak1 was skipped, but weak2 and grow were dispatched
 
@@ -189,11 +180,9 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
             );
             const hackStartTime = weakTime + 2 * DELAY_MARGIN_MS - hackTime;
             await ns.sleep(hackStartTime - growStartTime);
-            time.accumulateSleepTime(hackStartTime - growStartTime);
             ns.print("Attempting to start Hack at " + getTimeH());
             hackServer(ns, target, hackThreshold, 0);
             await ns.sleep(hackTime + DELAY_MARGIN_MS);
-            time.accumulateSleepTime(hackTime + DELAY_MARGIN_MS);
         } else {
             ns.print(Colors.RED + "could not start hack!" + Colors.RESET);
             ns.print(

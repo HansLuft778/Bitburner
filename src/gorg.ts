@@ -15,6 +15,9 @@ export async function main(ns: NS) {
     }
     const end2 = Date.now();
 
+    ns.formulas.skills.calculateExp(ns.getHackingLevel() + 1);
+    ns.formulas.skills.calculateSkill;
+
     ns.print(Colors.GREEN + "normal: " + (end - start));
     ns.print(Colors.GREEN + "optimized: " + (end2 - end));
 }
