@@ -15,7 +15,10 @@ export async function main(ns: NS) {
     let oldName = "";
     let newName = "";
 
-    if (ns.args.length == 3 || ns.args.length == 0) {
+    let isDelete = false;
+    let deleteName = "";
+
+    if (ns.args.length == 3 || ns.args.length == 0 || ns.args.length == 2) {
         if (ns.args[0] == "-u") {
             isUpgrade = true;
             upgradeName = ns.args[1].toString();
@@ -33,9 +36,17 @@ export async function main(ns: NS) {
             oldName = ns.args[1].toString();
             newName = ns.args[2].toString();
         }
+        if (ns.args[0] == "-d") {
+            isDelete = true;
+            deleteName = ns.args[1].toString();
+        }
     } else {
         ns.tprint(
-            "\nusage: sm.js [options]\n\nOptions:\n\t-u <Name> <Ram><G|T|P>\n\t-b <Name> <Ram><G|T|P>\n\t-r <old name> <new name>",
+            "\nusage: sm.js [options]\n\nOptions:" +
+                "\n\t-u <Name> <Ram><G|T|P>" +
+                "\n\t-b <Name> <Ram><G|T|P>" +
+                "\n\t-r <old name> <new name>" +
+                "\n\t-d <server name>",
         );
         return;
     }
@@ -77,6 +88,8 @@ export async function main(ns: NS) {
             ns.tprint("You do not own a server called " + oldName);
         }
         ns.renamePurchasedServer(oldName, newName);
+    } else if (isDelete) {
+        ns.deleteServer(deleteName);
     } else {
         const playerMoney = ns.getServerMoneyAvailable("home");
         let ramSize = 16;
