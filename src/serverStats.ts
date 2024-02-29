@@ -44,6 +44,8 @@ export function printServerStats(ns: NS, server: string, hackThreshold: number) 
     printStatLine(ns, "Hack Threads: " + hackThreads + " | Hack percent: " + ns.formatNumber(hackingPercent, 5));
 
     ns.print(BORDER_COLOR + footerString + Colors.RESET);
+
+    return footerString.length;
 }
 
 export function printServerStatsConsole() {
@@ -109,12 +111,12 @@ export function autocomplete(data: AutocompleteData) {
 export async function main(ns: NS) {
     ns.clearLog();
     ns.tail();
-    ns.resizeTail(542, 375);
     ns.disableLog("ALL");
     if (ns.args.length == 1) {
         while (true) {
             ns.clearLog();
-            printServerStats(ns, ns.args[0].toString(), 0.9);
+            const width = printServerStats(ns, ns.args[0].toString(), 0.9);
+            ns.resizeTail((width - 1) * 10, 375);
             await ns.sleep(100);
         }
     } else {
@@ -126,7 +128,8 @@ export async function main(ns: NS) {
                 await ns.sleep(1000);
                 continue;
             }
-            printServerStats(ns, server.toString(), 0.9);
+            const width = printServerStats(ns, server.toString(), 0.9);
+            ns.resizeTail((width - 1) * 10, 375);
             await ns.sleep(100);
         }
     }
