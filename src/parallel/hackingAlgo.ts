@@ -1,65 +1,43 @@
-import { getBestHostByRam } from "@/bestServer";
-import { getHackThreads } from "@/lib";
+import { Config } from "@/Config/Config";
+import { getBestHostByRamOptimized } from "@/bestServer";
+import { Colors } from "@/lib";
 import { NS } from "@ns";
+import { ServerManager } from "./ServerManager";
 
 export async function main(ns: NS) {
     ns.tail();
-    hackServer(ns, "silver-helix", "hacker", 0.8);
+    hackServer(ns, "silver-helix", 0.8, 0);
 }
 
-export function hackServer(ns: NS, target: string, host: string, threshold: number) {
-    let totalHackThreadsNeeded = Math.ceil(threshold / ns.hackAnalyze(target));
-    // ns.print("threshold: " + threshold);
-    // ns.print("hackAnalyze: " + ns.hackAnalyze(target));
-    // ns.print("threshold / ns.hackAnalyze(target): " + threshold / ns.hackAnalyze(target));
+export function hackServer(ns: NS, target: string, threshold: number, batchId: number, delay = 0) {
+    const totalHackThreadsNeeded = Math.ceil(threshold / ns.hackAnalyze(target));
     ns.print("actual hack threads needed: " + totalHackThreadsNeeded);
 
-    // hackThreads = 100;
-    // const hackThreads = getHackThreads(ns, target, threshold);
-    // ns.print("hackThreads: " + hackThreads);
-
-    const allHosts = getBestHostByRam(ns);
+    const allHosts = getBestHostByRamOptimized(ns);
     const hackingScriptRam = 1.7;
 
-    let threadsDispatched = 0;
-    let threadsRemaining = totalHackThreadsNeeded;
     for (let i = 0; i < allHosts.length; i++) {
-        if (threadsDispatched >= totalHackThreadsNeeded) break;
-        const host = allHosts[i].name;
+        const host = allHosts[i];
 
-        const maxRam = ns.getServerMaxRam(host);
-        const freeRam = maxRam - ns.getServerUsedRam(host);
-        if (freeRam < hackingScriptRam) continue;
-        const threadSpace = Math.floor(freeRam / hackingScriptRam);
+        const maxThreadsOnHost = Math.floor(host.availableRam / hackingScriptRam);
 
-        // if threadsRemaining is less than the threadSpace, then we can only dispatch threadsRemaining threads
-        const threadsToDispatch = Math.min(threadsRemaining, threadSpace);
-
-        ns.exec("hack.js", host, threadsToDispatch, target);
-        threadsRemaining -= threadsToDispatch;
-        threadsDispatched += threadsToDispatch;
+        if (maxThreadsOnHost >= totalHackThreadsNeeded) {
+            ns.exec("hack.js", host.name, totalHackThreadsNeeded, target, delay);
+            return true;
+        }
     }
 
-    if (threadsRemaining > 0) {
-        ns.tprint("[HACK] Error! There are threads remaining after dispatching all threads");
-        throw new Error("[HACK] Error! There are threads remaining after dispatching all threads");
+    ns.print(Colors.YELLOW + "No available host to grow " + target + ". Buying server...");
+
+    const neededGrowRam = totalHackThreadsNeeded * hackingScriptRam;
+    const server = ServerManager.buyOrUpgradeServer(ns, neededGrowRam, Config.HACK_SERVER_NAME);
+
+    if (server === "") {
+        ns.tprint("Error! Could not buy server to hack " + target);
+        throw new Error("Error! Could not buy server to hack " + target);
     }
 
-    // const maxRam = ns.getServerMaxRam(host);
-    // const freeRam = maxRam - ns.getServerUsedRam(target);
+    ns.exec("hack.js", server, totalHackThreadsNeeded, target, delay);
 
-    // const maxThreadsOnHost = Math.floor(freeRam / hackingRam);
-
-    // if (maxThreadsOnHost < hackThreads)
-    //     throw new Error(
-    //         "can't onehit hack on server " +
-    //             target +
-    //             ".\nneed " +
-    //             hackThreads +
-    //             " Threads, only got " +
-    //             maxThreadsOnHost,
-    //     );
-
-    // ns.exec("hack.js", host, hackThreads, target);
-    // // ns.exec("hack.js", "aws-0", 1000, target);
+    return true;
 }

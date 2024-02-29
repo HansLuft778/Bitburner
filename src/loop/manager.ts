@@ -1,9 +1,7 @@
 import { NS } from "@ns";
 
-import { Colors, nukeAll } from "../lib.js";
 import { getBestServerListCheap } from "../bestServer.js";
-import { weakenServer } from "./weakenAlgo.js";
-import { growServer } from "./growingAlgo.js";
+import { Colors, nukeAll } from "../lib.js";
 import { hackServer } from "./hackingAlgo.js";
 import { prepareServer } from "./prepareServer.js";
 
@@ -26,10 +24,10 @@ export async function main(ns: NS) {
 }
 
 export async function loopCycle(ns: NS, target: string, threshold: number) {
-    ns.print(Colors.cyan + "------------ PREPARING ------------" + Colors.reset);
+    ns.print(Colors.CYAN + "------------ PREPARING ------------" + Colors.RESET);
     await prepareServer(ns, target, threshold);
 
-    ns.print(Colors.cyan + "------------- HACKING -------------" + Colors.reset);
+    ns.print(Colors.CYAN + "------------- HACKING -------------" + Colors.RESET);
     await hackServer(ns, target, threshold);
 }
 

@@ -1,60 +1,102 @@
 import { NS } from "@ns";
 
 export async function main(ns: NS) {
+    let primaryName = "";
+
     let isUpgrade = false;
-    let upgradeName = "";
     let upgradeRam = 0;
+    let upgradeUnit = "";
 
     let isBuy = false;
-    let buyName = "";
     let buyRam = 0;
     let buyUnit = "";
 
-    if (ns.args.length == 3 || ns.args.length == 0) {
-        if (ns.args[0] == "-u") {
+    let isRename = false;
+    let newName = "";
+
+    let isDelete = false;
+
+    let isKill = false;
+
+    if (ns.args.length > 1) {
+        if (ns.args[0] == "-u" && ns.args.length == 3) {
             isUpgrade = true;
-            upgradeName = ns.args[1].toString();
-            upgradeRam = Number(ns.args[2]);
+            primaryName = ns.args[1].toString();
+            upgradeRam = Number(String(ns.args[2]).slice(0, -1));
+            upgradeUnit = String(ns.args[2]).slice(-1);
         }
-        if (ns.args[0] == "-b") {
+        if (ns.args[0] == "-b" && ns.args.length == 3) {
             isBuy = true;
-            buyName = ns.args[1].toString();
+            primaryName = ns.args[1].toString();
             buyRam = Number(String(ns.args[2]).slice(0, -1));
             buyUnit = String(ns.args[2]).slice(-1);
         }
+        if (ns.args[0] == "-r" && ns.args.length == 3) {
+            isRename = true;
+            primaryName = ns.args[1].toString();
+            newName = ns.args[2].toString();
+        }
+        if (ns.args[0] == "-d" && ns.args.length == 2) {
+            isDelete = true;
+            primaryName = ns.args[1].toString();
+        }
+        if (ns.args[0] == "-k" && ns.args.length == 2) {
+            isKill = true;
+            primaryName = ns.args[1].toString();
+        }
     } else {
-        ns.tprint("\nusage: sm.js [options]\n\nOptions:\n\t-u <Name> <Ram><G|T|P>\n\t-b <Name> <Ram><G|T|P>");
+        ns.tprint(
+            "\nusage: sm.js [options]\n\nOptions:" +
+                "\n\t-u <Name> <Ram><G|T|P>" +
+                "\n\t-b <Name> <Ram><G|T|P>" +
+                "\n\t-r <old name> <new name>" +
+                "\n\t-d <server name>",
+        );
         return;
     }
 
     if (isUpgrade) {
         // get current ram
+        const exponent = Math.ceil(Math.log2(upgradeRam));
+        upgradeRam = Math.pow(2, exponent);
+
+        upgradeRam = getGBfromAnyUnit(ns, upgradeRam, upgradeUnit);
         const servers = ns.getPurchasedServers();
-        if (!servers.includes(upgradeName)) {
-            ns.tprint("You do not own a server called " + upgradeName);
+        if (!servers.includes(primaryName)) {
+            ns.tprint("You do not own a server called " + primaryName);
         }
 
-        let price = ns.getPurchasedServerUpgradeCost(upgradeName, upgradeRam);
+        const price = ns.getPurchasedServerUpgradeCost(primaryName, upgradeRam);
 
         const answer = await ns.prompt(
             "upgrading the server (" +
-                upgradeName +
+                primaryName +
                 ") to " +
                 upgradeRam +
                 "GB of Ram, will cost " +
                 ns.formatNumber(price),
         );
-        if (answer) ns.upgradePurchasedServer(upgradeName, upgradeRam);
+        if (answer) ns.upgradePurchasedServer(primaryName, upgradeRam);
     } else if (isBuy) {
         buyRam = getGBfromAnyUnit(ns, buyRam, buyUnit);
         if (buyRam < 1) return;
 
-        let price = ns.getPurchasedServerCost(buyRam);
+        const price = ns.getPurchasedServerCost(buyRam);
 
         const answer = await ns.prompt(
-            "buying the server (" + buyName + ") with " + buyRam + "GB of Ram, will cost " + ns.formatNumber(price),
+            "buying the server (" + primaryName + ") with " + buyRam + "GB of Ram, will cost " + ns.formatNumber(price),
         );
-        if (answer) ns.purchaseServer(buyName, buyRam);
+        if (answer) ns.purchaseServer(primaryName, buyRam);
+    } else if (isRename) {
+        if (!ns.getPurchasedServers().includes(primaryName)) {
+            ns.tprint("You do not own a server called " + primaryName);
+        }
+        ns.renamePurchasedServer(primaryName, newName);
+    } else if (isDelete) {
+        ns.deleteServer(primaryName);
+    } else if (isKill) {
+        ns.tprint("Killing server " + primaryName);
+        ns.killall(primaryName);
     } else {
         const playerMoney = ns.getServerMoneyAvailable("home");
         let ramSize = 16;
@@ -85,7 +127,9 @@ function getGBfromAnyUnit(ns: NS, ram: number, unit: string): number {
     } else if (unit == "P") {
         return ram * 1024 * 1024;
     } else {
-        ns.tprint("\nusage: sm.js [options]\n\nOptions:\n\t-u <Name> <Ram><G|T|P>\n\t-b <Name> <Ram><G|T|P>");
+        ns.tprint(
+            "\nusage: sm.js [options]\n\nOptions:\n\t-u <Name> <Ram><G|T|P>\n\t-b <Name> <Ram><G|T|P>\n\t-r <old name> <new name>",
+        );
         return 0;
     }
 }

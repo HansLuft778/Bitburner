@@ -1,7 +1,7 @@
 import { NS } from "@ns";
 import { Colors } from "./lib";
 
-const BORDER_COLOR = Colors.cyan;
+const BORDER_COLOR = Colors.CYAN;
 
 let maxMoney = 0;
 let curMoney = 0;
@@ -14,28 +14,15 @@ let freeRam = 0;
 let moneyMultiplier = 0;
 let growingThreads = 0;
 let serverWeakenThreadsCur = 0;
-let lowerMoneyBound = 0;
-let hackAmount = 0;
 let hackThreads = 0;
 let headerString = "";
 let footerString = "";
 let hackingPercent = 0;
 
-export async function main(ns: NS) {
-    ns.clearLog();
-    ns.tail();
-    ns.disableLog("ALL");
-    while (true) {
-        ns.clearLog();
-        printServerStats(ns, ns.args[0].toString(), 0.9);
-        await ns.sleep(200);
-    }
-}
-
 export function printServerStats(ns: NS, server: string, hackThreshold: number) {
     setStats(ns, server, hackThreshold);
 
-    ns.print(BORDER_COLOR + headerString + Colors.reset);
+    ns.print(BORDER_COLOR + headerString + Colors.RESET);
 
     printStatLine(ns, "Money:", false);
     printStatLine(ns, "Max Money: " + ns.formatNumber(maxMoney) + " | Current Money: " + ns.formatNumber(curMoney));
@@ -56,10 +43,12 @@ export function printServerStats(ns: NS, server: string, hackThreshold: number) 
     printStatLine(ns, "Weaken Threads " + serverWeakenThreadsCur);
     printStatLine(ns, "Hack Threads: " + hackThreads + " | Hack percent: " + ns.formatNumber(hackingPercent, 5));
 
-    ns.print(BORDER_COLOR + footerString + Colors.reset);
+    ns.print(BORDER_COLOR + footerString + Colors.RESET);
+
+    return footerString.length;
 }
 
-export function printServerStatsConsole(ns: NS, server: string) {
+export function printServerStatsConsole() {
     // todo
 }
 
@@ -84,8 +73,6 @@ function setStats(ns: NS, server: string, hackThreshold: number) {
 
     serverWeakenThreadsCur = Math.ceil((curSec - ns.getServerMinSecurityLevel(server)) / 0.05);
 
-    lowerMoneyBound = maxMoney * hackThreshold;
-    hackAmount = maxMoney - lowerMoneyBound;
     hackingPercent = ns.hackAnalyze(server);
     hackThreads = Math.ceil(hackThreshold / hackingPercent);
     if (isNaN(hackThreads) || hackThreads == Infinity) hackThreads = 0;
@@ -95,17 +82,55 @@ function setStats(ns: NS, server: string, hackThreshold: number) {
     footerString = "└" + "─".repeat(headerString.length - 2) + "┘";
 }
 
-function printStatLine(ns: NS, value: string, indent: boolean = true) {
+function printStatLine(ns: NS, value: string, indent = true) {
     if (indent) value = "\t" + value;
     const offset = indent ? 8 : 3; // the offset to subtract the border and indent
     ns.print(
         BORDER_COLOR +
             "│ " +
-            Colors.reset +
+            Colors.RESET +
             value +
             " ".repeat(headerString.length - value.length - offset) +
             BORDER_COLOR +
             "│" +
-            Colors.reset,
+            Colors.RESET,
     );
+}
+
+interface AutocompleteData {
+    servers: string[];
+    txts: string[];
+    scripts: string[];
+    flags: string[];
+}
+
+export function autocomplete(data: AutocompleteData) {
+    return [...data.servers];
+}
+
+export async function main(ns: NS) {
+    ns.clearLog();
+    ns.tail();
+    ns.disableLog("ALL");
+    if (ns.args.length == 1) {
+        while (true) {
+            ns.clearLog();
+            const width = printServerStats(ns, ns.args[0].toString(), 0.9);
+            ns.resizeTail((width - 1) * 10, 375);
+            await ns.sleep(100);
+        }
+    } else {
+        while (true) {
+            ns.clearLog();
+            const server = ns.peek(1);
+            if (server === "NULL PORT DATA") {
+                ns.print("No server found");
+                await ns.sleep(1000);
+                continue;
+            }
+            const width = printServerStats(ns, server.toString(), 0.9);
+            ns.resizeTail((width - 1) * 10, 375);
+            await ns.sleep(100);
+        }
+    }
 }

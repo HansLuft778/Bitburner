@@ -1,23 +1,24 @@
 import { NS } from "@ns";
 
 export enum Colors {
-    reset = "\x1b[0m",
-    black = "\x1b[30m",
-    red = "\x1b[31m",
-    green = "\x1b[32m",
-    yellow = "\x1b[33m",
-    blue = "\x1b[34m",
-    magenta = "\x1b[35m",
-    cyan = "\x1b[36m",
-    white = "\x1b[37m",
+    RESET = "\x1b[0m",
+    BLACK = "\x1b[30m",
+    RED = "\x1b[31m",
+    GREEN = "\x1b[32m",
+    YELLOW = "\x1b[33m",
+    BLUE = "\x1b[34m",
+    MAGENTA = "\x1b[35m",
+    CYAN = "\x1b[36m",
+    WHITE = "\x1b[37m",
+    E_ORANGE = "\x1b[38;5;178m",
 }
 
 export function serverScanner(ns: NS) {
-    let uncheckedHosts = ["home"];
-    let checkedHosts = [];
+    const uncheckedHosts = ["home"];
+    const checkedHosts = [];
 
     for (let i = 0; i < uncheckedHosts.length; i++) {
-        let newHosts = ns.scan(uncheckedHosts[i]);
+        const newHosts = ns.scan(uncheckedHosts[i]);
         checkedHosts.push(uncheckedHosts[i]);
 
         for (let n = 0; n < newHosts.length; n++) {
@@ -53,6 +54,7 @@ export function nukeAll(ns: NS) {
     for (let i = 0; i < hosts.length; i++) {
         // check if the host is hackable
         if (isHackable(ns, hosts[i]) || ns.getPurchasedServers().includes(hosts[i])) {
+            // TODO: getPurchasedServers() is not needed
             openPorts(ns, hosts[i]);
             ns.nuke(hosts[i]);
 
@@ -64,6 +66,15 @@ export function nukeAll(ns: NS) {
             continue;
         }
     }
+}
+
+export function nukeServer(ns: NS, server: string) {
+    openPorts(ns, server);
+    ns.nuke(server);
+
+    ns.scp("hack.js", server);
+    ns.scp("grow.js", server);
+    ns.scp("weaken.js", server);
 }
 
 export function openPorts(ns: NS, target: string) {
@@ -90,8 +101,7 @@ export function getGrowThreads(ns: NS, server: string) {
     const serverMaxMoney = ns.getServerMaxMoney(server);
     const serverCurrentMoney = ns.getServerMoneyAvailable(server);
     let moneyMultiplier = serverMaxMoney / serverCurrentMoney;
-    ns.print("moneyMultiplier: " + moneyMultiplier);
-    if (isNaN(moneyMultiplier) || moneyMultiplier == Infinity) moneyMultiplier = 1;
+    if (isNaN(moneyMultiplier) || moneyMultiplier == Infinity) moneyMultiplier = serverMaxMoney;
     const serverGrowThreads = Math.ceil(ns.growthAnalyze(server, moneyMultiplier));
 
     return serverGrowThreads;
@@ -101,7 +111,8 @@ export function getGrowThreadsThreshold(ns: NS, server: string, threshold: numbe
     const maxMoney = ns.getServerMaxMoney(server);
     const minMoney = maxMoney * (1 - threshold);
     const moneyMultiplier = maxMoney / minMoney;
-    const serverGrowThreads = Math.ceil(ns.growthAnalyze(server, moneyMultiplier));
+    const serverGrowThreads = Math.ceil(ns.growthAnalyze(server, moneyMultiplier) * 1.01);
+    ns.print(serverGrowThreads + " grows needed");
 
     return serverGrowThreads;
 }
@@ -114,7 +125,15 @@ export function getWeakenThreadsAfterHack(ns: NS, numHackThreads: number): numbe
     return serverWeakenThreads;
 }
 
-export function getWeakenThreadsEff(ns: NS, server: string) {
+export function getWeakenThreadsAfterGrow(ns: NS, numGrowThreads: number): number {
+    const hackSecLvlIncrease = ns.growthAnalyzeSecurity(numGrowThreads);
+
+    const serverWeakenThreads = Math.ceil(hackSecLvlIncrease / ns.weakenAnalyze(1));
+
+    return serverWeakenThreads;
+}
+
+export function getWeakenThreads(ns: NS, server: string) {
     const serverSecLvl = ns.getServerSecurityLevel(server);
     const serverWeakenThreads = Math.ceil((serverSecLvl - ns.getServerMinSecurityLevel(server)) / ns.weakenAnalyze(1));
 
@@ -125,17 +144,71 @@ export function getHackThreads(ns: NS, server: string, moneyHackThreshold: numbe
     const serverMaxMoney = ns.getServerMaxMoney(server);
     const lowerMoneyBound = serverMaxMoney * (1 - moneyHackThreshold);
     const hackAmount = serverMaxMoney - lowerMoneyBound;
-    const serverHackThreads = Math.ceil(ns.hackAnalyzeThreads(server, hackAmount));
+    const serverHackThreads = Math.floor(ns.hackAnalyzeThreads(server, hackAmount));
 
     return serverHackThreads;
+}
+
+// ----------------- FormulasAPI -----------------
+export function getGrowThreadsFormulas(ns: NS, server: string, hackThreshold: number, hackThreads: number) {
+    const serverObject = ns.getServer(server);
+    const playerObject = ns.getPlayer();
+
+    if (serverObject.moneyMax == undefined) return 0;
+
+    serverObject.moneyAvailable = serverObject.moneyMax;
+    serverObject.baseDifficulty = serverObject.minDifficulty;
+
+    const percentPerHack = ns.formulas.hacking.hackPercent(serverObject, playerObject);
+    const hackPercent = percentPerHack * hackThreads;
+    ns.print("hackPercent: " + hackPercent);
+
+    serverObject.moneyAvailable = serverObject.moneyMax * (1 - hackPercent);
+    serverObject.baseDifficulty = serverObject.minDifficulty;
+
+    return Math.ceil(ns.formulas.hacking.growThreads(serverObject, playerObject, serverObject.moneyMax) * 1.01);
+}
+
+export function getHackThreadsFormulas(ns: NS, server: string, hackThreshold: number) {
+    const serverObject = ns.getServer(server);
+    const playerObject = ns.getPlayer();
+
+    serverObject.baseDifficulty = serverObject.minDifficulty;
+    serverObject.moneyAvailable = serverObject.moneyMax;
+
+    // threads * percent == hackThreshold => threads == hackThreshold / percent
+    return Math.floor((hackThreshold / ns.formulas.hacking.hackPercent(serverObject, playerObject)) * 0.99);
+}
+
+// ----------------- Ports -----------------
+export function writeToPort(ns: NS, port: number, data: string) {
+    const currentData = ns.peek(port);
+    if (currentData == "NULL PORT DATA") {
+        ns.writePort(port, data);
+    } else {
+        ns.writePort(port, data);
+        ns.readPort(port);
+    }
 }
 
 export async function main(ns: NS) {
     ns.tail();
     ns.disableLog("ALL");
 
-    const server = "the-hub";
-    ns.print(getWeakenThreadsEff(ns, server) + " weakens needed");
-    ns.print(getGrowThreads(ns, server) + " grows needed");
-    ns.print(getHackThreads(ns, server, 0.9) + " hacks needed");
+    const server = "alpha-ent";
+    // ns.print(getWeakenThreads(ns, server) + " weakens needed");
+    // ns.print(getGrowThreads(ns, server) + " grows needed");
+    // ns.print(getHackThreadsFormulas(ns, server, 0.9) + " hacks needed");
+
+    const hackThreads = getHackThreadsFormulas(ns, server, 0.9);
+    ns.print(hackThreads + " hacks needed");
+    ns.print(getGrowThreadsFormulas(ns, server, 0.9, hackThreads) + " grows needed");
+
+    ns.print(getGrowThreadsThreshold(ns, server, 0.9) + " grows needed");
+
+    // ns.formulas.skills.calculateExp()
+    const player = ns.getPlayer();
+    const lvl = ns.formulas.skills.calculateSkill(player.exp.hacking, player.mults.hacking);
+    ns.print(lvl);
+    // ns.formulas.hacking.hackExp()
 }

@@ -1,6 +1,7 @@
 import { NS } from "@ns";
 
-import { serverScanner, isHackable } from "./lib.js";
+import { isHackable, nukeServer, serverScanner } from "./lib.js";
+import { Config } from "./Config/Config.js";
 
 export interface Server {
     name: string;
@@ -8,6 +9,7 @@ export interface Server {
     hackingChance?: number;
     weakeningTime?: number;
     maxRam: number;
+    availableRam: number;
     score: number;
 }
 
@@ -20,47 +22,46 @@ export async function main(ns: NS) {
 export function getBestServerList(ns: NS, shouldPrint: boolean) {
     const serverList = serverScanner(ns);
 
-    // relevant stats are max money and hack chance
-    // possible formula: (Max Money / weaktime + 3) * (1 / weak time) * (chance to hack)
     const servers: Server[] = [];
 
     for (let i = 0; i < serverList.length; i++) {
-        if (isHackable(ns, serverList[i])) {
-            const maxMoney = ns.getServerMaxMoney(serverList[i]);
-            const hackingChance = ns.hackAnalyzeChance(serverList[i]);
-            let weakeningTime = ns.getWeakenTime(serverList[i]);
-            const maxRam = ns.getServerMaxRam(serverList[i]);
+        const serverName = serverList[i];
+        if (!isHackable(ns, serverName)) continue;
 
-            // filter server with no money or the hacking level above players hacking level
-            if (maxMoney < 1 || ns.getServerRequiredHackingLevel(serverList[i]) > ns.getHackingLevel()) continue;
+        nukeServer(ns, serverName); // 50 ms for 500 itterations
 
-            // const score = (maxMoney / (weakeningTime + 3)) * hackingChance * (1 / weakeningTime)
-            // const score = ns.formatNumber(((maxMoney / (weakeningTime)) * hackingChance) / 1000)
-            let score = maxMoney / ns.getServerMinSecurityLevel(serverList[i]) / 1000000;
+        const maxMoney = ns.getServerMaxMoney(serverName);
+        const hackingChance = ns.hackAnalyzeChance(serverName);
+        let weakeningTime = ns.getWeakenTime(serverName);
+        const maxRam = ns.getServerMaxRam(serverName);
 
-            if (ns.fileExists("formulas.exe", "home")) {
-                const server = ns.getServer(serverList[i]);
-                const player = ns.getPlayer();
-                server.hackDifficulty = server.minDifficulty;
-                const maxMoney = server.moneyMax == undefined ? 0 : server.moneyMax;
-                weakeningTime = ns.formulas.hacking.weakenTime(server, player);
-                score =
-                    ((maxMoney / weakeningTime) *
-                        ns.formulas.hacking.hackChance(server, player)) /
-                    1000;
-            }
+        // filter server with no money or the hacking level above players hacking level
+        if (maxMoney < 1 || ns.getServerRequiredHackingLevel(serverName) > ns.getHackingLevel()) continue;
 
-            const server: Server = {
-                name: serverList[i],
-                maxMoney: maxMoney,
-                hackingChance: hackingChance,
-                weakeningTime: weakeningTime,
-                maxRam: maxRam,
-                score: score,
-            };
+        // const score = (maxMoney / (weakeningTime + 3)) * hackingChance * (1 / weakeningTime)
+        // const score = ns.formatNumber(((maxMoney / (weakeningTime)) * hackingChance) / 1000)
+        let score = maxMoney / ns.getServerMinSecurityLevel(serverName) / 1000000;
 
-            servers.push(server);
+        if (ns.fileExists("formulas.exe", "home")) {
+            const server = ns.getServer(serverName);
+            const player = ns.getPlayer();
+            server.hackDifficulty = server.minDifficulty;
+            const maxMoney = server.moneyMax == undefined ? 0 : server.moneyMax;
+            weakeningTime = ns.formulas.hacking.weakenTime(server, player);
+            score = ((maxMoney / weakeningTime) * ns.formulas.hacking.hackChance(server, player)) / 1000;
         }
+
+        const server: Server = {
+            name: serverName,
+            maxMoney: maxMoney,
+            hackingChance: hackingChance,
+            weakeningTime: weakeningTime,
+            maxRam: maxRam,
+            availableRam: maxRam - ns.getServerUsedRam(serverName),
+            score: score,
+        };
+
+        servers.push(server);
     }
 
     servers.sort((a, b) => {
@@ -77,15 +78,45 @@ export function getBestServer(ns: NS): string {
     return servers[0].name;
 }
 
-// TODO: change to available ram
-export function getBestHostByRam(ns: NS): Server[] {
-    let allHosts = getBestServerListCheap(ns, false).filter((server) => {
-        return server.maxRam > 2;
+export function getBestHostByRamOptimized(ns: NS): Server[] {
+    const allHosts: Server[] = [];
+    const allServers = serverScanner(ns);
+
+    for (let i = 0; i < allServers.length; i++) {
+        const server = ns.getServer(allServers[i]);
+
+        if (server.maxRam - server.ramUsed < 2) continue;
+        if (!server.hasAdminRights) continue;
+
+        const serverObj: Server = {
+            name: server.hostname,
+            maxRam: server.maxRam,
+            availableRam: server.maxRam - server.ramUsed,
+            score: 0,
+        };
+        allHosts.push(serverObj);
+    }
+
+    // sort by ram in ascending order
+    allHosts.sort((a, b) => {
+        return a.availableRam - b.availableRam;
     });
 
-    let home: Server = {
+    return allHosts;
+}
+
+/**
+ * @deprecated use getBestHostByRamOptimized instead
+ */
+export function getBestHostByRam(ns: NS): Server[] {
+    const allHosts = getBestServerListCheap(ns, false).filter((server) => {
+        return server.availableRam > 2;
+    });
+
+    const home: Server = {
         name: "home",
-        maxRam: ns.getServerMaxRam("home") - ns.getScriptRam("loop/manager.js") - 10,
+        maxRam: ns.getServerMaxRam("home") - Config.HOME_FREE_RAM,
+        availableRam: ns.getServerMaxRam("home") - ns.getServerUsedRam("home") - Config.HOME_FREE_RAM,
         score: 0,
     }; // 10 some safety margin
     allHosts.push(home);
@@ -95,6 +126,7 @@ export function getBestHostByRam(ns: NS): Server[] {
         const server: Server = {
             name: purchasedServers[i],
             maxRam: ns.getServerMaxRam(purchasedServers[i]),
+            availableRam: ns.getServerMaxRam(purchasedServers[i]) - ns.getServerUsedRam(purchasedServers[i]),
             score: 0,
         };
         if (server.maxRam > 2) {
@@ -104,7 +136,7 @@ export function getBestHostByRam(ns: NS): Server[] {
 
     // sort by ram in ascending order
     allHosts.sort((a, b) => {
-        return a.maxRam - b.maxRam;
+        return a.availableRam - b.availableRam;
     });
 
     return allHosts;
@@ -117,7 +149,14 @@ export function getBestServerListCheap(ns: NS, shouldPrint: boolean): Server[] {
 
     for (let i = 0; i < serverList.length; i++) {
         const serverName = serverList[i];
+        // const so = ns.getServer(serverName);
+        // const player = ns.getPlayer();
+
         if (!isHackable(ns, serverName)) continue;
+
+        // const canOpenPorts = so.numOpenPortsRequired <= getNumHacks(ns);
+        // const canHack = so.requiredHackingSkill <= player.skills.hacking;
+        // if (!(canOpenPorts && canHack)) continue;
 
         const maxMoney = ns.getServerMaxMoney(serverName);
         const maxRam = ns.getServerMaxRam(serverName);
@@ -125,12 +164,13 @@ export function getBestServerListCheap(ns: NS, shouldPrint: boolean): Server[] {
         // filter server with no money or the hacking level above players hacking level
         if (maxMoney < 1 || ns.getServerRequiredHackingLevel(serverList[i]) > ns.getHackingLevel()) continue;
 
-        let score = maxMoney / ns.getServerMinSecurityLevel(serverName) / 1000000;
+        const score = maxMoney / ns.getServerMinSecurityLevel(serverName) / 1000000;
 
         const server: Server = {
             name: serverName,
             maxMoney: maxMoney,
             maxRam: maxRam,
+            availableRam: maxRam - ns.getServerUsedRam(serverName),
             score: score,
         };
         servers.push(server);
