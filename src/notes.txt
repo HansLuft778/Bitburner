@@ -7,24 +7,26 @@ grow can not safely be distributed, cause:
 
 
 
-firstWeakenThreads: 2 // um den hack wieder gut zu machen
-serverGrowThreads: 589
-secondWeakenThreads: 48
-serverHackThreads: 4492
+weakTime: 44333.426612450436
+Config.LOOP_SAFETY_MARGIN_MS: 10000
+4 * DELAY_MARGIN_MS: 1600
+all: 21.458391632781524
+num_batches: 21
 
-needs 8754.65GB of RAM and got 9581.7. Running parallel mode on the-hub
-hackThreshold: 0.55
+weakTime: 44333.426612450436
+Config.LOOP_SAFETY_MARGIN_MS: 10000
+4 * DELAY_MARGIN_MS: 1600
+all: 21.458391632781524
+num_batches: 21
 
-fix:
-grow threads conservative calculation by adding the THRESHOLD_STEP on top -> will help when we overshoot the threshold target
-first weak threads now take the security increase if the hack into account
+weakTime: 44210.106927853914
+Config.LOOP_SAFETY_MARGIN_MS: 10000
+4 * DELAY_MARGIN_MS: 1600
+all: 21.381316829908698
+num_batches: 21
 
-
-
-predicted threads needed:
-firstWeakenThreads: 121
-serverGrowThreads: 2196
-secondWeakenThreads: 176
-serverHackThreads: 3016
-needs 9489.95GB of RAM and got 9581.7. Running parallel mode on the-hub
-hackThreshold: 0.9
+weakTime: 44148.70400156523
+Config.LOOP_SAFETY_MARGIN_MS: 10000
+4 * DELAY_MARGIN_MS: 1600
+all: 21.34294000097827
+num_batches: 21
