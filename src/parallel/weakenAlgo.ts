@@ -1,4 +1,5 @@
-import { getBestHostByRam } from "@/bestServer";
+import { Config } from "@/Config/Config";
+import { getBestHostByRamOptimized } from "@/bestServer";
 import { Colors, getGrowThreads, getWeakenThreads } from "@/lib";
 import { NS } from "@ns";
 import { ServerManager } from "./ServerManager";
@@ -45,7 +46,7 @@ export function weakenServer(ns: NS, target: string, order: number, batchId: num
     }
 
     // exec weaken.js with num of threads
-    const allHosts = getBestHostByRam(ns);
+    const allHosts = getBestHostByRamOptimized(ns);
     const weakenScriptRam = 1.75;
 
     let threadsDispatched = 0;
@@ -78,7 +79,7 @@ export function weakenServer(ns: NS, target: string, order: number, batchId: num
     );
 
     const neededWeakenRam = threadsRemaining * weakenScriptRam;
-    const server = ServerManager.buyOrUpgradeServer(ns, neededWeakenRam, "weak", batchId);
+    const server = ServerManager.buyOrUpgradeServer(ns, neededWeakenRam, Config.WEAK_SERVER_NAME);
 
     if (server === "") {
         ns.tprint("Error! Could not buy server to weak " + target);

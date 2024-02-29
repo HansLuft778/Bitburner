@@ -1,7 +1,7 @@
 import { NS } from "@ns";
 
 import { Config } from "@/Config/Config";
-import { Server, getBestHostByRam } from "@/bestServer";
+import { Server, getBestHostByRamOptimized } from "@/bestServer";
 import {
     Colors,
     getGrowThreads,
@@ -65,7 +65,7 @@ export class WGHAlgorithms {
         }
 
         // exec weaken.js with num of threads
-        let allHosts: Server[] = getBestHostByRam(ns);
+        let allHosts: Server[] = getBestHostByRamOptimized(ns);
         if (filterNotAllowedHosts) {
             allHosts = allHosts.filter(
                 (host) => !host.name.includes(Config.GROW_SERVER_NAME) && !host.name.includes(Config.HACK_SERVER_NAME),
@@ -153,7 +153,7 @@ export class WGHAlgorithms {
         }
 
         // exec grow.js with num of threads
-        let allHosts = getBestHostByRam(ns);
+        let allHosts = getBestHostByRamOptimized(ns);
         if (filterNotAllowedHosts) {
             allHosts = allHosts.filter(
                 (host) => !host.name.includes(Config.WEAK_SERVER_NAME) && !host.name.includes(Config.HACK_SERVER_NAME),
@@ -208,7 +208,7 @@ export class WGHAlgorithms {
             this.currentHackThreads = totalHackThreadsNeeded;
         }
 
-        const allHosts = getBestHostByRam(ns).filter(
+        const allHosts = getBestHostByRamOptimized(ns).filter(
             (host) => !host.name.includes(Config.WEAK_SERVER_NAME) && !host.name.includes(Config.GROW_SERVER_NAME),
         );
         const hackingScriptRam = Config.HACK_SCRIPT_RAM;

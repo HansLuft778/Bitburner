@@ -1,7 +1,8 @@
-import { getBestHostByRam } from "@/bestServer";
+import { Config } from "@/Config/Config";
+import { getBestHostByRamOptimized } from "@/bestServer";
+import { Colors } from "@/lib";
 import { NS } from "@ns";
 import { ServerManager } from "./ServerManager";
-import { Colors } from "@/lib";
 
 export async function main(ns: NS) {
     ns.tail();
@@ -23,7 +24,7 @@ export function growServer(ns: NS, target: string, batchId: number, delay = 0): 
     }
 
     // exec grow.js with num of threads
-    const allHosts = getBestHostByRam(ns);
+    const allHosts = getBestHostByRamOptimized(ns);
     const growingScriptRam = 1.75;
 
     for (let i = 0; i < allHosts.length; i++) {
@@ -40,7 +41,7 @@ export function growServer(ns: NS, target: string, batchId: number, delay = 0): 
     ns.print(Colors.YELLOW + "No available host to grow " + target + ". Attempting to upgrade/buy server...");
 
     const neededGrowRam = totalGrowThreadsNeeded * growingScriptRam;
-    const server = ServerManager.buyOrUpgradeServer(ns, neededGrowRam, "grow", batchId);
+    const server = ServerManager.buyOrUpgradeServer(ns, neededGrowRam, Config.GROW_SERVER_NAME);
 
     if (server === "") {
         ns.tprint("Error! Could not buy server to grow " + target);

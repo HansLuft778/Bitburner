@@ -1,5 +1,5 @@
 import { Config } from "@/Config/Config";
-import { getBestHostByRam } from "@/bestServer";
+import { getBestHostByRamOptimized } from "@/bestServer";
 import { getHackThreads } from "@/lib";
 import { NS } from "@ns";
 
@@ -19,7 +19,7 @@ export async function hackServer(ns: NS, target: string, threshold: number) {
         "total hack threads needed: " + targetHackThreads + " money available: " + ns.getServerMoneyAvailable(target),
     );
 
-    const allHosts = getBestHostByRam(ns);
+    const allHosts = getBestHostByRamOptimized(ns);
 
     const totalMaxRam = allHosts.reduce((acc, server) => {
         return acc + server.maxRam;

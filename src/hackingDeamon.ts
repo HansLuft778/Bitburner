@@ -1,7 +1,8 @@
 import { NS } from "@ns";
 
 import { Config } from "./Config/Config";
-import { getBestHostByRam, getBestServerList } from "./bestServer";
+import { Time } from "./Time";
+import { getBestHostByRamOptimized, getBestServerList } from "./bestServer";
 import {
     Colors,
     getGrowThreadsFormulas,
@@ -14,7 +15,6 @@ import {
 import { prepareServer } from "./loop/prepareServer";
 import { ServerManager } from "./parallel/ServerManager";
 import { parallelCycle } from "./parallel/manager";
-import { Time } from "./Time";
 
 export async function main(ns: NS) {
     ns.tail();
@@ -22,17 +22,18 @@ export async function main(ns: NS) {
     // either start loop or parallelize, depending on the number of servers and money the player has
 
     let hackThreshold = 0.5;
-    // let target = getBestServerList(ns, false)[0].name;
     let lastTarget = "";
 
     const time = Time.getInstance();
     while (true) {
         time.startTime();
 
-        const target = getBestServerList(ns, false)[0].name;
+        /* eslint-disable prefer-const */
+        let target = getBestServerList(ns, false)[0].name;
         // target = "phantasy";
-        writeToPort(ns, 1, target);
+        /* eslint-enable prefer-const */
 
+        writeToPort(ns, 1, target);
         ns.print("lastTarget: " + lastTarget + " target: " + target);
         if (ns.fileExists("Formulas.exe", "home")) {
             if (lastTarget !== target) {
@@ -102,7 +103,7 @@ export async function main(ns: NS) {
  *
  */
 function getHackThreshold(ns: NS, target: string): number {
-    const allHosts = getBestHostByRam(ns);
+    const allHosts = getBestHostByRamOptimized(ns);
     const totalMaxRam = allHosts.reduce((acc, server) => {
         return acc + server.maxRam;
     }, 0);
@@ -162,7 +163,7 @@ function getHackThreshold(ns: NS, target: string): number {
 }
 
 function getHackThresholdBatch(ns: NS, target: string): number {
-    const allHosts = getBestHostByRam(ns);
+    const allHosts = getBestHostByRamOptimized(ns);
     const totalMaxRam = allHosts.reduce((acc, server) => {
         return acc + server.maxRam;
     }, 0);

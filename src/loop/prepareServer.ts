@@ -3,7 +3,7 @@ import { Colors, getGrowThreads, getWeakenThreads, getWeakenThreadsAfterGrow } f
 import { WGHAlgorithms } from "@/parallel/WGHAlgorithms";
 import { printServerStats } from "@/serverStats";
 import { NS } from "@ns";
-import { getBestHostByRam } from "../bestServer";
+import { getBestHostByRamOptimized } from "../bestServer";
 
 export async function main(ns: NS) {
     ns.tail();
@@ -12,7 +12,7 @@ export async function main(ns: NS) {
 
 export async function prepareServer(ns: NS, target: string, threshold = 0.8) {
     // either prepare in loop or parallel mode
-    const allHosts = getBestHostByRam(ns);
+    const allHosts = getBestHostByRamOptimized(ns);
     const sumAvailableRam = allHosts.reduce((acc, server) => {
         return acc + server.availableRam;
     }, 0);

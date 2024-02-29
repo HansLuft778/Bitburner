@@ -1,7 +1,8 @@
-import { getBestHostByRam } from "@/bestServer";
+import { Config } from "@/Config/Config";
+import { getBestHostByRamOptimized } from "@/bestServer";
+import { Colors } from "@/lib";
 import { NS } from "@ns";
 import { ServerManager } from "./ServerManager";
-import { Colors } from "@/lib";
 
 export async function main(ns: NS) {
     ns.tail();
@@ -12,7 +13,7 @@ export function hackServer(ns: NS, target: string, threshold: number, batchId: n
     const totalHackThreadsNeeded = Math.ceil(threshold / ns.hackAnalyze(target));
     ns.print("actual hack threads needed: " + totalHackThreadsNeeded);
 
-    const allHosts = getBestHostByRam(ns);
+    const allHosts = getBestHostByRamOptimized(ns);
     const hackingScriptRam = 1.7;
 
     for (let i = 0; i < allHosts.length; i++) {
@@ -29,7 +30,7 @@ export function hackServer(ns: NS, target: string, threshold: number, batchId: n
     ns.print(Colors.YELLOW + "No available host to grow " + target + ". Buying server...");
 
     const neededGrowRam = totalHackThreadsNeeded * hackingScriptRam;
-    const server = ServerManager.buyOrUpgradeServer(ns, neededGrowRam, "hack", batchId);
+    const server = ServerManager.buyOrUpgradeServer(ns, neededGrowRam, Config.HACK_SERVER_NAME);
 
     if (server === "") {
         ns.tprint("Error! Could not buy server to hack " + target);
