@@ -67,7 +67,9 @@ export class WGHAlgorithms {
         // exec weaken.js with num of threads
         let allHosts: Server[] = getBestHostByRam(ns);
         if (filterNotAllowedHosts) {
-            allHosts = allHosts.filter((host) => !host.name.includes("grow-") && !host.name.includes("hack-"));
+            allHosts = allHosts.filter(
+                (host) => !host.name.includes(Config.GROW_SERVER_NAME) && !host.name.includes(Config.HACK_SERVER_NAME),
+            );
         }
         const weakenScriptRam = Config.WEAKEN_SCRIPT_RAM;
 
@@ -153,7 +155,9 @@ export class WGHAlgorithms {
         // exec grow.js with num of threads
         let allHosts = getBestHostByRam(ns);
         if (filterNotAllowedHosts) {
-            allHosts = allHosts.filter((host) => !host.name.includes("weak-") && !host.name.includes("hack-"));
+            allHosts = allHosts.filter(
+                (host) => !host.name.includes(Config.WEAK_SERVER_NAME) && !host.name.includes(Config.HACK_SERVER_NAME),
+            );
         }
         const growingScriptRam = Config.GROW_SCRIPT_RAM;
 
@@ -172,7 +176,7 @@ export class WGHAlgorithms {
         ns.print(Colors.YELLOW + "No available host to grow " + target + ". Attempting to upgrade/buy server...");
 
         const neededGrowRam = totalGrowThreadsNeeded * growingScriptRam;
-        const server = ServerManager.buyOrUpgradeServer(ns, neededGrowRam, "grow");
+        const server = ServerManager.buyOrUpgradeServer(ns, neededGrowRam, Config.GROW_SERVER_NAME);
 
         if (server === "") {
             ns.tprint("Error! Could not buy server to grow " + target);
@@ -205,7 +209,7 @@ export class WGHAlgorithms {
         }
 
         const allHosts = getBestHostByRam(ns).filter(
-            (host) => !host.name.includes("weak-") && !host.name.includes("grow-"),
+            (host) => !host.name.includes(Config.WEAK_SERVER_NAME) && !host.name.includes(Config.GROW_SERVER_NAME),
         );
         const hackingScriptRam = Config.HACK_SCRIPT_RAM;
 
@@ -224,7 +228,7 @@ export class WGHAlgorithms {
         ns.print(Colors.YELLOW + "No available host to hack " + target + ". Buying server...");
 
         const neededGrowRam = totalHackThreadsNeeded * hackingScriptRam;
-        const server = ServerManager.buyOrUpgradeServer(ns, neededGrowRam, "hack");
+        const server = ServerManager.buyOrUpgradeServer(ns, neededGrowRam, Config.HACK_SERVER_NAME);
 
         if (server === "") {
             ns.tprint("Error! Could not buy server to hack " + target);

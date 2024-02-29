@@ -29,8 +29,8 @@ export async function main(ns: NS) {
     while (true) {
         time.startTime();
 
-        let target = getBestServerList(ns, false)[0].name;
-        target = "phantasy";
+        const target = getBestServerList(ns, false)[0].name;
+        // target = "phantasy";
         writeToPort(ns, 1, target);
 
         ns.print("lastTarget: " + lastTarget + " target: " + target);

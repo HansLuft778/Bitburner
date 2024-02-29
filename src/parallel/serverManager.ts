@@ -1,4 +1,4 @@
-import { Colors, nukeAll, nukeServer } from "@/lib";
+import { Colors, nukeServer } from "@/lib";
 import { NS } from "@ns";
 
 export class ServerManager {
@@ -24,11 +24,6 @@ export class ServerManager {
         }
 
         const name = this.buyServer(ns, desiredRam, serverType);
-        if (name === "") {
-            ns.print(Colors.RED + "[server Manager] Failed to buy a new server!");
-            return name;
-        }
-        ns.print(Colors.GREEN + "[server Manager] Bought Server '" + name + "'!");
         return name;
     }
 
@@ -45,14 +40,42 @@ export class ServerManager {
 
         const cost = ns.getPurchasedServerCost(desiredRam);
         if (cost > ns.getServerMoneyAvailable("home")) {
-            ns.print(
+            ns.tprint(
                 Colors.RED +
-                    "[server Manager] attempted to buy a new server, but the player does not have enough money",
+                    "[server Manager] attempted to buy a new server: '" +
+                    serverName +
+                    "' with " +
+                    desiredRam +
+                    "GB, for " +
+                    ns.formatNumber(cost) +
+                    ", but the player does not have enough money",
             );
-            return "";
+            throw new Error("Not enough money to buy a new server");
         }
 
         const name = ns.purchaseServer(serverName, desiredRam);
+        if (name === "") {
+            ns.tprint(
+                Colors.RED +
+                    "[server Manager] Failed to buy a new server: '" +
+                    serverName +
+                    "' with " +
+                    desiredRam +
+                    "GB for " +
+                    ns.formatNumber(cost),
+            );
+            throw new Error("Failed to buy a new server");
+        }
+        ns.print(
+            Colors.GREEN +
+                "[server Manager] Bought Server '" +
+                serverName +
+                "' with " +
+                desiredRam +
+                "GB for " +
+                ns.formatNumber(cost) +
+                "!",
+        );
         nukeServer(ns, name);
         return name;
     }
@@ -71,7 +94,14 @@ export class ServerManager {
 
         if (cost > ns.getServerMoneyAvailable("home")) {
             ns.print(
-                Colors.RED + "[server Manager] attempted to upgrade Server, but the player does not have enough money",
+                Colors.RED +
+                    "[server Manager] attempted to upgrade Server: '" +
+                    serverName +
+                    "' with " +
+                    desiredRam +
+                    "GB for " +
+                    ns.formatNumber(cost) +
+                    ", but the player does not have enough money",
             );
             return false;
         }
@@ -80,6 +110,16 @@ export class ServerManager {
             ns.print(Colors.RED + "[server Manager] attempted to upgrade Server, but the upgrade failed");
             return false;
         }
+        ns.print(
+            Colors.GREEN +
+                "[server Manager] Upgraded Server '" +
+                serverName +
+                "' with " +
+                desiredRam +
+                "GB for " +
+                ns.formatNumber(cost) +
+                "!",
+        );
         return true;
     }
 
