@@ -9,6 +9,7 @@ import {
     getHackThreadsFormulas,
     getWeakenThreadsAfterGrow,
     getWeakenThreadsAfterHack,
+    writeToPort,
 } from "./lib";
 import { prepareServer } from "./loop/prepareServer";
 import { ServerManager } from "./parallel/ServerManager";
@@ -27,8 +28,10 @@ export async function main(ns: NS) {
     const time = Time.getInstance();
     while (true) {
         time.startTime();
-        const target = getBestServerList(ns, false)[0].name;
-        // target = "the-hub";
+
+        let target = getBestServerList(ns, false)[0].name;
+        target = "phantasy";
+        writeToPort(ns, 1, target);
 
         ns.print("lastTarget: " + lastTarget + " target: " + target);
         if (ns.fileExists("Formulas.exe", "home")) {
@@ -60,28 +63,31 @@ export async function main(ns: NS) {
 
             await parallelCycle(ns, target, hackThreshold, Config.LOOP_BATCH_COUNT);
         } else {
-            // ----------------- PREPARE SERVER -----------------
+            if (lastTarget !== target) {
+                // ----------------- PREPARE SERVER -----------------
 
-            // prepare when money is not at max or sec lvl is not at min
-            if (
-                ns.getServerMaxMoney(target) != ns.getServerMoneyAvailable(target) ||
-                ns.getServerSecurityLevel(target) != ns.getServerMinSecurityLevel(target)
-            ) {
-                await prepareServer(ns, target);
+                // prepare when money is not at max or sec lvl is not at min
+                if (
+                    ns.getServerMaxMoney(target) != ns.getServerMoneyAvailable(target) ||
+                    ns.getServerSecurityLevel(target) != ns.getServerMinSecurityLevel(target)
+                ) {
+                    await prepareServer(ns, target);
+                }
                 hackThreshold = getHackThreshold(ns, target);
                 ns.print("hackThreshold: " + hackThreshold);
-            }
 
-            if (
-                ns.getServerMaxMoney(target) == ns.getServerMoneyAvailable(target) &&
-                ns.getServerSecurityLevel(target) == ns.getServerMinSecurityLevel(target)
-            ) {
-                ns.print(Colors.GREEN + "Preparation finished, starting parallel mode");
-            } else {
-                ns.tprint(Colors.RED + "Preparation failed, starting loop mode");
-                throw new Error("Preparation failed, starting loop mode");
-            }
+                if (
+                    ns.getServerMaxMoney(target) == ns.getServerMoneyAvailable(target) &&
+                    ns.getServerSecurityLevel(target) == ns.getServerMinSecurityLevel(target)
+                ) {
+                    ns.print(Colors.GREEN + "Preparation finished, starting parallel mode");
+                } else {
+                    ns.tprint(Colors.RED + "Preparation failed, starting loop mode");
+                    throw new Error("Preparation failed, starting loop mode");
+                }
 
+                lastTarget = target;
+            }
             // ----------------- CHECK WHICH MODE TO USE -----------------
 
             await parallelCycle(ns, target, hackThreshold);
@@ -216,10 +222,10 @@ function getHackThresholdBatch(ns: NS, target: string): number {
                 ". Attempting to upgrade/buy server...",
         );
         // i need some sort of logic, to find
-        const hackServer = ServerManager.buyOrUpgradeServer(ns, hackRamNeeded, "hack", 0);
-        const Server = ServerManager.buyOrUpgradeServer(ns, growRamNeeded, "grow", 0);
-        const weaken1Server = ServerManager.buyOrUpgradeServer(ns, weaken1RamNeeded, "weak_1", 0);
-        const weaken2Server = ServerManager.buyOrUpgradeServer(ns, weaken2RamNeeded, "weak_2", 0);
+        const hackServer = ServerManager.buyOrUpgradeServer(ns, hackRamNeeded, Config.HACK_SERVER_NAME);
+        const Server = ServerManager.buyOrUpgradeServer(ns, growRamNeeded, Config.GROW_SERVER_NAME);
+        const weaken1Server = ServerManager.buyOrUpgradeServer(ns, weaken1RamNeeded, Config.WEAK_SERVER_NAME);
+        const weaken2Server = ServerManager.buyOrUpgradeServer(ns, weaken2RamNeeded, Config.WEAK_SERVER_NAME);
 
         if (hackServer !== "" && Server !== "" && weaken1Server !== "" && weaken2Server !== "") {
             ns.print(Colors.GREEN + "Servers bought, running parallel mode on " + target);
