@@ -10,6 +10,7 @@ export enum Colors {
     MAGENTA = "\x1b[35m",
     CYAN = "\x1b[36m",
     WHITE = "\x1b[37m",
+    E_ORANGE = "\x1b[38;5;178m",
 }
 
 export function serverScanner(ns: NS) {
@@ -169,6 +170,17 @@ export function getHackThreadsFormulas(ns: NS, server: string, hackThreshold: nu
 
     // threads * percent == hackThreshold => threads == hackThreshold / percent
     return Math.floor(hackThreshold / ns.formulas.hacking.hackPercent(serverObject, playerObject));
+}
+
+// ----------------- Ports -----------------
+export function writeToPort(ns: NS, port: number, data: string) {
+    const currentData = ns.peek(port);
+    if (currentData == "NULL PORT DATA") {
+        ns.writePort(port, data);
+    } else {
+        ns.writePort(port, data);
+        ns.readPort(port);
+    }
 }
 
 export async function main(ns: NS) {
