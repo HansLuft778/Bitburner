@@ -111,9 +111,23 @@ export async function main(ns: NS) {
     ns.tail();
     ns.resizeTail(542, 375);
     ns.disableLog("ALL");
-    while (true) {
-        ns.clearLog();
-        printServerStats(ns, ns.args[0].toString(), 0.9);
-        await ns.sleep(100);
+    if (ns.args.length == 1) {
+        while (true) {
+            ns.clearLog();
+            printServerStats(ns, ns.args[0].toString(), 0.9);
+            await ns.sleep(100);
+        }
+    } else {
+        while (true) {
+            ns.clearLog();
+            const server = ns.peek(1);
+            if (server === "NULL PORT DATA") {
+                ns.print("No server found");
+                await ns.sleep(1000);
+                continue;
+            }
+            printServerStats(ns, server.toString(), 0.9);
+            await ns.sleep(100);
+        }
     }
 }
