@@ -1,5 +1,6 @@
 import { NS } from "@ns";
 
+import { Config } from "@/Config/Config.js";
 import { getBestServer } from "../bestServer.js";
 import { Colors, getTimeH } from "../lib.js";
 import { printServerStats } from "../serverStats.js";
@@ -7,8 +8,6 @@ import { WGHAlgorithms } from "./WGHAlgorithms.js";
 import { growServer } from "./growingAlgo.js";
 import { hackServer } from "./hackingAlgo.js";
 import { weakenServer } from "./weakenAlgo.js";
-import { Time } from "@/Time.js";
-import { Config } from "@/Config/Config.js";
 
 const DELAY_MARGIN_MS = Config.DELAY_MARGIN_MS;
 
@@ -40,7 +39,7 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
 
         num_batches = Math.floor((weakTime - Config.LOOP_SAFETY_MARGIN_MS) / (4 * DELAY_MARGIN_MS));
 
-        ns.print(Colors.E_ORANGE + "num_batches: " + num_batches);
+        ns.tprint(Colors.E_ORANGE + "num_batches: " + num_batches);
 
         for (let batchId = 0; batchId < num_batches; batchId++) {
             ns.print(Colors.CYAN + "------------ BATCH " + batchId + " ------------");
@@ -57,7 +56,7 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
             // --------------------------------------
             // grow
             const growDelay = weakTime - growTime + DELAY_MARGIN_MS;
-            const growPid = WGHAlgorithms.growServer(ns, target, hackThreshold, true, growDelay);
+            const growPid = WGHAlgorithms.growServer(ns, target, true, growDelay);
 
             // --------------------------------------
             // weak II

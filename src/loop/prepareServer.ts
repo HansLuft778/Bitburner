@@ -41,7 +41,7 @@ export async function prepareServer(ns: NS, target: string, threshold = 0.8) {
         WGHAlgorithms.weakenServer(ns, target, 1, false, 0, false);
 
         const growDelay = weakTime - growTime + Config.DELAY_MARGIN_MS;
-        WGHAlgorithms.growServer(ns, target, 0, false, growDelay, false);
+        WGHAlgorithms.growServer(ns, target, false, growDelay, false);
 
         const weak2delay = 2 * Config.DELAY_MARGIN_MS;
         WGHAlgorithms.weakenServer(ns, target, 2, false, weak2delay, false);
