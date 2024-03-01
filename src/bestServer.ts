@@ -40,6 +40,7 @@ export function getBestServerList(ns: NS, shouldPrint: boolean) {
 
         // const score = (maxMoney / (weakeningTime + 3)) * hackingChance * (1 / weakeningTime)
         // const score = ns.formatNumber(((maxMoney / (weakeningTime)) * hackingChance) / 1000)
+
         let score = maxMoney / ns.getServerMinSecurityLevel(serverName) / 1000000;
 
         if (ns.fileExists("formulas.exe", "home")) {
@@ -49,6 +50,10 @@ export function getBestServerList(ns: NS, shouldPrint: boolean) {
             const maxMoney = server.moneyMax == undefined ? 0 : server.moneyMax;
             weakeningTime = ns.formulas.hacking.weakenTime(server, player);
             score = ((maxMoney / weakeningTime) * ns.formulas.hacking.hackChance(server, player)) / 1000;
+        } else {
+            const serverLvl = ns.getServerRequiredHackingLevel(serverName);
+            const playerLvl = ns.getHackingLevel();
+            if (playerLvl / serverLvl < 2) score = 0;
         }
 
         const server: Server = {
@@ -74,8 +79,8 @@ export function getBestServerList(ns: NS, shouldPrint: boolean) {
 }
 
 export function getBestServer(ns: NS): string {
-    const servers = getBestServerList(ns, false);
-    return servers[0].name;
+    if (Config.TARGET !== "") return Config.TARGET;
+    else return getBestServerList(ns, false)[0].name;
 }
 
 export function getBestHostByRamOptimized(ns: NS): Server[] {
