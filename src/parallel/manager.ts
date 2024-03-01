@@ -43,34 +43,41 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
 
         for (let batchId = 0; batchId < num_batches; batchId++) {
             ns.print(Colors.CYAN + "------------ BATCH " + batchId + " ------------");
+
             const start = window.performance.now();
+            const pids = [];
             // --------------------------------------
             // hacking
             const hackDelay = weakTime - hackTime - DELAY_MARGIN_MS;
             const hackPid = WGHAlgorithms.hackServer(ns, target, hackThreshold, true, hackDelay);
+            pids.push(hackPid);
 
             // --------------------------------------
             // weak I
             const weak1Pid = WGHAlgorithms.weakenServer(ns, target, 1, true);
+            pids.push(weak1Pid);
 
             // --------------------------------------
             // grow
             const growDelay = weakTime - growTime + DELAY_MARGIN_MS;
             const growPid = WGHAlgorithms.growServer(ns, target, true, growDelay);
+            pids.push(growPid);
 
             // --------------------------------------
             // weak II
             const weak2delay = 2 * DELAY_MARGIN_MS;
             const weak2Pid = WGHAlgorithms.weakenServer(ns, target, 2, true, weak2delay);
+            pids.push(weak2Pid);
 
             // --------------------------------------
             // check if all processes were dispatched, kill them if not
             if (weak1Pid == 0 || weak2Pid == 0 || growPid == 0 || hackPid == 0) {
                 ns.print(Colors.RED + "could not start all processes, killing batch" + batchId);
-                ns.kill(weak1Pid);
-                ns.kill(weak2Pid);
-                ns.kill(growPid);
-                ns.kill(hackPid);
+
+                for (const pid of pids) {
+                    const success = ns.kill(pid);
+                    if (!success) throw new Error("could not kill all processes");
+                }
                 break;
             }
 
