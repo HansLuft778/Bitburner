@@ -1,5 +1,15 @@
 import { NS } from "@ns";
 
+interface AutocompleteData {
+    servers: string[];
+    txts: string[];
+    scripts: string[];
+    flags: string[];
+}
+export function autocomplete(data: AutocompleteData) {
+    return [...data.servers];
+}
+
 export async function main(ns: NS) {
     let primaryName = "";
 
