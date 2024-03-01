@@ -1,4 +1,5 @@
 import { NS } from "@ns";
+import { PlayerManager } from "./parallel/PlayerManager";
 
 export enum Colors {
     RESET = "\x1b[0m",
@@ -102,7 +103,7 @@ export function getGrowThreads(ns: NS, server: string) {
     const serverCurrentMoney = ns.getServerMoneyAvailable(server);
     let moneyMultiplier = serverMaxMoney / serverCurrentMoney;
     if (isNaN(moneyMultiplier) || moneyMultiplier == Infinity) moneyMultiplier = serverMaxMoney;
-    const serverGrowThreads = Math.ceil(ns.growthAnalyze(server, moneyMultiplier));
+    const serverGrowThreads = Math.ceil(ns.growthAnalyze(server, moneyMultiplier) * 1.01);
 
     return serverGrowThreads;
 }
@@ -150,9 +151,9 @@ export function getHackThreads(ns: NS, server: string, moneyHackThreshold: numbe
 }
 
 // ----------------- FormulasAPI -----------------
-export function getGrowThreadsFormulas(ns: NS, server: string, hackThreshold: number, hackThreads: number) {
+export function getGrowThreadsFormulas(ns: NS, server: string, hackThreads: number) {
     const serverObject = ns.getServer(server);
-    const playerObject = ns.getPlayer();
+    const playerObject = PlayerManager.getInstance(ns).getPlayer();
 
     if (serverObject.moneyMax == undefined) return 0;
 
@@ -161,7 +162,6 @@ export function getGrowThreadsFormulas(ns: NS, server: string, hackThreshold: nu
 
     const percentPerHack = ns.formulas.hacking.hackPercent(serverObject, playerObject);
     const hackPercent = percentPerHack * hackThreads;
-    ns.print("hackPercent: " + hackPercent);
 
     serverObject.moneyAvailable = serverObject.moneyMax * (1 - hackPercent);
     serverObject.baseDifficulty = serverObject.minDifficulty;
@@ -171,13 +171,13 @@ export function getGrowThreadsFormulas(ns: NS, server: string, hackThreshold: nu
 
 export function getHackThreadsFormulas(ns: NS, server: string, hackThreshold: number) {
     const serverObject = ns.getServer(server);
-    const playerObject = ns.getPlayer();
+    const playerObject = PlayerManager.getInstance(ns).getPlayer();
 
     serverObject.baseDifficulty = serverObject.minDifficulty;
     serverObject.moneyAvailable = serverObject.moneyMax;
 
     // threads * percent == hackThreshold => threads == hackThreshold / percent
-    return Math.floor((hackThreshold / ns.formulas.hacking.hackPercent(serverObject, playerObject)) * 0.99);
+    return Math.floor(hackThreshold / ns.formulas.hacking.hackPercent(serverObject, playerObject));
 }
 
 // ----------------- Ports -----------------
@@ -202,7 +202,7 @@ export async function main(ns: NS) {
 
     const hackThreads = getHackThreadsFormulas(ns, server, 0.9);
     ns.print(hackThreads + " hacks needed");
-    ns.print(getGrowThreadsFormulas(ns, server, 0.9, hackThreads) + " grows needed");
+    ns.print(getGrowThreadsFormulas(ns, server, hackThreads) + " grows needed");
 
     ns.print(getGrowThreadsThreshold(ns, server, 0.9) + " grows needed");
 

@@ -12,6 +12,7 @@ import {
     getWeakenThreadsAfterHack,
 } from "@/lib";
 import { ServerManager } from "./ServerManager";
+import { PlayerManager } from "./PlayerManager";
 
 export class WGHAlgorithms {
     private static currentGrowThreads = 0;
@@ -64,6 +65,10 @@ export class WGHAlgorithms {
             return 0;
         }
 
+        // hack xp
+        const pm = PlayerManager.getInstance(ns);
+        pm.addHackingExp(ns, target, totalWeakenThreadsNeeded);
+
         // exec weaken.js with num of threads
         let allHosts: Server[] = getBestHostByRamOptimized(ns);
         if (filterNotAllowedHosts) {
@@ -93,7 +98,7 @@ export class WGHAlgorithms {
         }
 
         if (threadsRemaining <= 0) {
-            ns.print("Done deploying weaken" + order + "!");
+            ns.print("Done deploying " + totalWeakenThreadsNeeded + " weaken" + order + " threads!");
             return pid;
         }
         ns.print(
@@ -109,7 +114,7 @@ export class WGHAlgorithms {
         if (server === "") return 0;
 
         pid = ns.exec("weaken.js", server, threadsRemaining, target, delay);
-
+        ns.print("Done deploying " + totalWeakenThreadsNeeded + " weaken" + order + " threads!");
         return pid;
     }
 
@@ -125,23 +130,15 @@ export class WGHAlgorithms {
      * @param target - The name of the server to grow.
      * @param batchId - The ID of the batch.
      * @param batchMode - Set to true, of more than one batch should run in parallel mode.
-     * @param hackThreshold - The hack threshold.
      * @param delay - Time in ms, by how much the weaken script should be delayed to enable precise parallel batch mode timing (default: 0).
      * @returns A number representing the PID of the script that was executed, or 0 if no script was executed.
      */
-    static growServer(
-        ns: NS,
-        target: string,
-        hackThreshold: number,
-        batchMode: boolean,
-        delay: number,
-        filterNotAllowedHosts = true,
-    ): number {
+    static growServer(ns: NS, target: string, batchMode: boolean, delay: number, filterNotAllowedHosts = true): number {
         let totalGrowThreadsNeeded = 0;
         if (!batchMode) {
             totalGrowThreadsNeeded = getGrowThreads(ns, target);
         } else {
-            totalGrowThreadsNeeded = getGrowThreadsFormulas(ns, target, hackThreshold, this.currentHackThreads);
+            totalGrowThreadsNeeded = getGrowThreadsFormulas(ns, target, this.currentHackThreads);
             this.currentGrowThreads = totalGrowThreadsNeeded;
         }
 
@@ -149,6 +146,10 @@ export class WGHAlgorithms {
             ns.print("No grow threads needed, skipping growth process");
             return 0;
         }
+
+        // hack xp
+        const pm = PlayerManager.getInstance(ns);
+        pm.addHackingExp(ns, target, totalGrowThreadsNeeded);
 
         // exec grow.js with num of threads
         let allHosts = getBestHostByRamOptimized(ns);
@@ -166,7 +167,7 @@ export class WGHAlgorithms {
 
             if (maxThreadsOnHost >= totalGrowThreadsNeeded) {
                 const pid = ns.exec("grow.js", host.name, totalGrowThreadsNeeded, target, delay);
-                ns.print("Done deploying grow!");
+                ns.print("Done deploying " + totalGrowThreadsNeeded + " grow threads!");
                 return pid;
             }
         }
@@ -179,6 +180,7 @@ export class WGHAlgorithms {
         if (server === "") return 0;
 
         const pid = ns.exec("grow.js", server, totalGrowThreadsNeeded, target, delay);
+        ns.print("Done deploying " + totalGrowThreadsNeeded + " grow threads!");
         return pid;
     }
 
@@ -202,6 +204,10 @@ export class WGHAlgorithms {
             this.currentHackThreads = totalHackThreadsNeeded;
         }
 
+        // hack xp
+        const pm = PlayerManager.getInstance(ns);
+        pm.addHackingExp(ns, target, totalHackThreadsNeeded);
+
         const allHosts = getBestHostByRamOptimized(ns).filter(
             (host) => !host.name.includes(Config.WEAK_SERVER_NAME) && !host.name.includes(Config.GROW_SERVER_NAME),
         );
@@ -214,7 +220,7 @@ export class WGHAlgorithms {
 
             if (maxThreadsOnHost >= totalHackThreadsNeeded) {
                 const pid = ns.exec("hack.js", host.name, totalHackThreadsNeeded, target, delay);
-                ns.print("Done deploying hack!");
+                ns.print("Done deploying " + totalHackThreadsNeeded + " hack threads!");
                 return pid;
             }
         }
@@ -227,7 +233,7 @@ export class WGHAlgorithms {
         if (server === "") return 0;
 
         const pid = ns.exec("hack.js", server, totalHackThreadsNeeded, target, delay);
-
+        ns.print("Done deploying " + totalHackThreadsNeeded + " hack threads!");
         return pid;
     }
 }

@@ -2,7 +2,7 @@ import { NS } from "@ns";
 
 import { Config } from "./Config/Config";
 import { Time } from "./Time";
-import { getBestHostByRamOptimized, getBestServerList } from "./bestServer";
+import { getBestHostByRamOptimized, getBestServer } from "./bestServer";
 import {
     Colors,
     getGrowThreadsFormulas,
@@ -13,6 +13,7 @@ import {
     writeToPort,
 } from "./lib";
 import { prepareServer } from "./loop/prepareServer";
+import { PlayerManager } from "./parallel/PlayerManager";
 import { ServerManager } from "./parallel/ServerManager";
 import { parallelCycle } from "./parallel/manager";
 
@@ -28,10 +29,9 @@ export async function main(ns: NS) {
     while (true) {
         time.startTime();
 
-        /* eslint-disable prefer-const */
-        let target = getBestServerList(ns, false)[0].name;
-        target = "rho-construction";
-        /* eslint-enable prefer-const */
+        PlayerManager.getInstance(ns).resetPlayer(ns);
+
+        const target = getBestServer(ns);
 
         writeToPort(ns, 1, target);
         ns.print("lastTarget: " + lastTarget + " target: " + target);
@@ -61,7 +61,7 @@ export async function main(ns: NS) {
             }
 
             // ----------------- CHECK WHICH MODE TO USE -----------------
-
+            PlayerManager.getInstance(ns).resetPlayer(ns);
             await parallelCycle(ns, target, hackThreshold, Config.LOOP_BATCH_COUNT);
         } else {
             if (lastTarget !== target) {
@@ -180,7 +180,7 @@ function getHackThresholdBatch(ns: NS, target: string): number {
 
         // how many threads i need to grow the server from (1 - Threshold) to 1
         // needs threshold grow calculation, cause when the server is at max money, it would return 0 otherwise
-        const serverGrowThreads = getGrowThreadsFormulas(ns, target, hackThreshold, serverHackThreads);
+        const serverGrowThreads = getGrowThreadsFormulas(ns, target, serverHackThreads);
 
         // how many threads i need to weaken security to 0 after growings
         const secondWeakenThreads = getWeakenThreadsAfterGrow(ns, serverGrowThreads);
@@ -222,7 +222,7 @@ function getHackThresholdBatch(ns: NS, target: string): number {
                 target +
                 ". Attempting to upgrade/buy server...",
         );
-        // i need some sort of logic, to find
+
         const hackServer = ServerManager.buyOrUpgradeServer(ns, hackRamNeeded, Config.HACK_SERVER_NAME);
         const Server = ServerManager.buyOrUpgradeServer(ns, growRamNeeded, Config.GROW_SERVER_NAME);
         const weaken1Server = ServerManager.buyOrUpgradeServer(ns, weaken1RamNeeded, Config.WEAK_SERVER_NAME);
