@@ -124,13 +124,13 @@ export async function main(ns: NS) {
             ns.clearLog();
             const server = ns.peek(1);
             if (server === "NULL PORT DATA") {
-                ns.print("No server found");
-                await ns.sleep(1000);
+                ns.print("No server found, waiting for data...");
+                await ns.getPortHandle(1).nextWrite();
                 continue;
             }
             const width = printServerStats(ns, server.toString(), 0.9);
             ns.resizeTail((width - 1) * 10, 375);
-            await ns.sleep(100);
+            await ns.sleep(20);
         }
     }
 }
