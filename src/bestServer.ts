@@ -99,6 +99,7 @@ export function getBestHostByRamOptimized(ns: NS): Server[] {
             availableRam: server.maxRam - server.ramUsed,
             score: 0,
         };
+        if (serverObj.name === "home") serverObj.availableRam -= Config.HOME_FREE_RAM;
         allHosts.push(serverObj);
     }
 
