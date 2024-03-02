@@ -1,5 +1,6 @@
 import { NS } from "@ns";
 import { Colors } from "./lib";
+import { getBestHostByRamOptimized } from "./bestServer";
 
 const BORDER_COLOR = Colors.CYAN;
 
@@ -97,6 +98,22 @@ function printStatLine(ns: NS, value: string, indent = true) {
     );
 }
 
+export function getNumThreadsActive(ns: NS) {
+    const hosts = getBestHostByRamOptimized(ns);
+
+    let totalThreads = 0;
+    for (let i = 0; i < hosts.length; i++) {
+        const host = hosts[i];
+
+        const processes = ns.ps(host.name);
+
+        processes.forEach((process) => {
+            totalThreads += process.threads;
+        });
+    }
+    return totalThreads;
+}
+
 interface AutocompleteData {
     servers: string[];
     txts: string[];
@@ -112,6 +129,11 @@ export async function main(ns: NS) {
     ns.clearLog();
     ns.tail();
     ns.disableLog("ALL");
+    // while (true) {
+    //     ns.clearLog();
+    //     ns.print(getNumThreadsActive(ns));
+    //     await ns.sleep(1000);
+    // }
     if (ns.args.length == 1) {
         while (true) {
             ns.clearLog();
