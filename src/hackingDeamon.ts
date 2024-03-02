@@ -20,7 +20,10 @@ import { parallelCycle } from "./parallel/manager";
 export async function main(ns: NS) {
     ns.tail();
     ns.disableLog("ALL");
-    // either start loop or parallelize, depending on the number of servers and money the player has
+
+    // start stock manager if player has WSE account
+    // if (ns.stock.hasWSEAccount() && ns.stock.has4SData() && ns.stock.has4SDataTIXAPI() && ns.stock.hasTIXAPIAccess())
+    //     ns.exec("Stock/manager.js", "home");
 
     let hackThreshold = 0.5;
     let lastTarget = "";
@@ -91,7 +94,11 @@ export async function main(ns: NS) {
             }
             // ----------------- CHECK WHICH MODE TO USE -----------------
 
+            // if (parallelMode) {
             await parallelCycle(ns, target, hackThreshold);
+            // } else {
+            //     await loopCycle(ns, target, hackThreshold);
+            // }
         }
         time.endTime();
         ns.print("Cycle took: " + time.getTime(ns));
@@ -111,6 +118,33 @@ function getHackThreshold(ns: NS, target: string): number {
     const RAM_WEAKEN = Config.WEAKEN_SCRIPT_RAM;
     const RAM_GROW = Config.GROW_SCRIPT_RAM;
     const RAM_HACK = Config.HACK_SCRIPT_RAM;
+
+    const totalNotExclusiveRam = allHosts
+        .filter(
+            (host) =>
+                !host.name.includes(Config.WEAK_SERVER_NAME) &&
+                !host.name.includes(Config.GROW_SERVER_NAME) &&
+                !host.name.includes(Config.HACK_SERVER_NAME),
+        )
+        .reduce((acc, server) => {
+            return acc + server.maxRam;
+        }, 0);
+
+    const totalWeakenRamAvailable = allHosts
+        .filter((host) => host.name.includes(Config.WEAK_SERVER_NAME))
+        .reduce((acc, server) => {
+            return acc + server.maxRam;
+        }, 0);
+    const totalGrowRamAvailable = allHosts
+        .filter((host) => host.name.includes(Config.GROW_SERVER_NAME))
+        .reduce((acc, server) => {
+            return acc + server.maxRam;
+        }, 0);
+    const totalHackRamAvailable = allHosts
+        .filter((host) => host.name.includes(Config.HACK_SERVER_NAME))
+        .reduce((acc, server) => {
+            return acc + server.maxRam;
+        }, 0);
 
     while (true) {
         let serverHackThreads = 0;
@@ -137,6 +171,10 @@ function getHackThreshold(ns: NS, target: string): number {
 
         const totalRamNeeded = weaken1RamNeeded + weaken2RamNeeded + growRamNeeded + hackRamNeeded;
 
+        const canWeaken = totalWeakenRamAvailable + totalNotExclusiveRam > weaken1RamNeeded + weaken2RamNeeded;
+        const caanGrow = totalGrowRamAvailable + totalNotExclusiveRam > growRamNeeded;
+        const canHack = totalHackRamAvailable + totalNotExclusiveRam > hackRamNeeded;
+
         // log all
         ns.print("predicted threads needed:");
         ns.print("firstWeakenThreads: " + firstWeakenThreads + " with " + weaken1RamNeeded + "GB of RAM");
@@ -144,20 +182,24 @@ function getHackThreshold(ns: NS, target: string): number {
         ns.print("secondWeakenThreads: " + secondWeakenThreads + " with " + weaken2RamNeeded + "GB of RAM");
         ns.print("serverHackThreads: " + serverHackThreads + " with " + hackRamNeeded + "GB of RAM");
 
-        if (totalRamNeeded < totalMaxRam) {
+        ns.print(
+            "needs " + totalRamNeeded + "GB of RAM and got " + totalMaxRam + ". Running parallel mode on " + target,
+        );
+
+        if (canHack && caanGrow && canWeaken) {
             ns.print(
                 "needs " + totalRamNeeded + "GB of RAM and got " + totalMaxRam + ". Running parallel mode on " + target,
             );
             return hackThreshold;
         }
-        ns.print(
-            Colors.YELLOW +
-                "Not enough RAM to run parallel mode on " +
-                target +
-                ". Attempting to upgrade/buy server...",
-        );
 
         if (ns.fileExists("Formulas.exe", "home")) {
+            ns.print(
+                Colors.YELLOW +
+                    "Not enough RAM to run parallel mode on " +
+                    target +
+                    ". Attempting to upgrade/buy server...",
+            );
             const hackServer = ServerManager.buyOrUpgradeServer(ns, hackRamNeeded, Config.HACK_SERVER_NAME);
             const Server = ServerManager.buyOrUpgradeServer(ns, growRamNeeded, Config.GROW_SERVER_NAME);
             const weaken1Server = ServerManager.buyOrUpgradeServer(ns, weaken1RamNeeded, Config.WEAK_SERVER_NAME);
