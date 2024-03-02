@@ -195,20 +195,5 @@ export async function main(ns: NS) {
     ns.tail();
     ns.disableLog("ALL");
 
-    const server = "alpha-ent";
-    // ns.print(getWeakenThreads(ns, server) + " weakens needed");
-    // ns.print(getGrowThreads(ns, server) + " grows needed");
-    // ns.print(getHackThreadsFormulas(ns, server, 0.9) + " hacks needed");
-
-    const hackThreads = getHackThreadsFormulas(ns, server, 0.9);
-    ns.print(hackThreads + " hacks needed");
-    ns.print(getGrowThreadsFormulas(ns, server, hackThreads) + " grows needed");
-
-    ns.print(getGrowThreadsThreshold(ns, server, 0.9) + " grows needed");
-
-    // ns.formulas.skills.calculateExp()
-    const player = ns.getPlayer();
-    const lvl = ns.formulas.skills.calculateSkill(player.exp.hacking, player.mults.hacking);
-    ns.print(lvl);
-    // ns.formulas.hacking.hackExp()
+    // const server = "alpha-ent";
 }
