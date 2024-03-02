@@ -44,7 +44,6 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
         for (let batchId = 0; batchId < num_batches; batchId++) {
             ns.print(Colors.CYAN + "------------ BATCH " + batchId + " ------------");
 
-            const start = window.performance.now();
             const pids = [];
             // --------------------------------------
             // hacking
@@ -73,17 +72,17 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
             // check if all processes were dispatched, kill them if not
             if (weak1Pid == 0 || weak2Pid == 0 || growPid == 0 || hackPid == 0) {
                 ns.print(Colors.RED + "could not start all processes, killing batch" + batchId);
+                ns.print("pids: " + pids);
 
                 for (const pid of pids) {
-                    const success = ns.kill(pid);
-                    if (!success) throw new Error("could not kill all processes");
+                    ns.kill(pid);
                 }
                 break;
             }
 
+            pids.length = 0;
+
             ns.print(Colors.GREEN + "Cycle done. Beginning new cycle.." + Colors.RESET);
-            const end = window.performance.now();
-            ns.print(Colors.GREEN + "Cycle took: " + (end - start) + "ms" + Colors.RESET);
 
             await ns.sleep(4 * DELAY_MARGIN_MS);
         }
