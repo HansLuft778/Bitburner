@@ -39,6 +39,7 @@ export class WGHAlgorithms {
         delay = 0,
         filterNotAllowedHosts = true,
     ): number {
+        ns.print("----------------- WEAKEN " + target + " -----------------");
         let totalWeakenThreadsNeeded = 0;
         // calculate weakening threads based on the order
 
@@ -98,7 +99,15 @@ export class WGHAlgorithms {
         }
 
         if (threadsRemaining <= 0) {
-            ns.print("Done deploying " + totalWeakenThreadsNeeded + " weaken" + order + " threads!");
+            ns.print(
+                "Done deploying " +
+                    threadsDispatched +
+                    "/" +
+                    totalWeakenThreadsNeeded +
+                    " weaken" +
+                    order +
+                    " threads!",
+            );
             return pid;
         }
         ns.print(
@@ -114,7 +123,7 @@ export class WGHAlgorithms {
         if (server === "") return 0;
 
         pid = ns.exec("weaken.js", server, threadsRemaining, target, delay);
-        ns.print("Done deploying " + totalWeakenThreadsNeeded + " weaken" + order + " threads!");
+        ns.print("Done deploying " + totalWeakenThreadsNeeded + " weaken" + order + " threads on " + server + "!");
         return pid;
     }
 
@@ -130,10 +139,11 @@ export class WGHAlgorithms {
      * @param target - The name of the server to grow.
      * @param batchId - The ID of the batch.
      * @param batchMode - Set to true, of more than one batch should run in parallel mode.
-     * @param delay - Time in ms, by how much the weaken script should be delayed to enable precise parallel batch mode timing (default: 0).
+     * @param delay - Time in ms, by how much the grow script should be delayed to enable precise parallel batch mode timing (default: 0).
      * @returns A number representing the PID of the script that was executed, or 0 if no script was executed.
      */
     static growServer(ns: NS, target: string, batchMode: boolean, delay: number, filterNotAllowedHosts = true): number {
+        ns.print("----------------- GROWING " + target + " -----------------");
         let totalGrowThreadsNeeded = 0;
         if (!batchMode) {
             totalGrowThreadsNeeded = getGrowThreads(ns, target);
@@ -167,7 +177,7 @@ export class WGHAlgorithms {
 
             if (maxThreadsOnHost >= totalGrowThreadsNeeded) {
                 const pid = ns.exec("grow.js", host.name, totalGrowThreadsNeeded, target, delay);
-                ns.print("Done deploying " + totalGrowThreadsNeeded + " grow threads!");
+                ns.print("Done deploying " + totalGrowThreadsNeeded + " grow threads on " + host.name + "!");
                 return pid;
             }
         }
@@ -180,7 +190,7 @@ export class WGHAlgorithms {
         if (server === "") return 0;
 
         const pid = ns.exec("grow.js", server, totalGrowThreadsNeeded, target, delay);
-        ns.print("Done deploying " + totalGrowThreadsNeeded + " grow threads!");
+        ns.print("Done deploying " + totalGrowThreadsNeeded + " grow threads on " + server + "!");
         return pid;
     }
 
@@ -192,10 +202,11 @@ export class WGHAlgorithms {
      * @param threshold - The hacking threshold for the server.
      * @param batchId - The ID of the current hacking batch.
      * @param batchMode - Set to true, of more than one batch should run in parallel mode.
-     * @param delay - Time in ms, by how much the weaken script should be delayed to enable precise parallel batch mode timing (default: 0).
+     * @param delay - Time in ms, by how much the hack script should be delayed to enable precise parallel batch mode timing (default: 0).
      * @returns A number representing the PID of the script that was executed, or 0 if no script was executed.
      */
     static hackServer(ns: NS, target: string, threshold: number, batchMode: boolean, delay: number): number {
+        ns.print("----------------- HACKING " + target + " -----------------");
         let totalHackThreadsNeeded = 0;
         if (!batchMode) {
             totalHackThreadsNeeded = Math.ceil(threshold / ns.hackAnalyze(target));
@@ -220,7 +231,7 @@ export class WGHAlgorithms {
 
             if (maxThreadsOnHost >= totalHackThreadsNeeded) {
                 const pid = ns.exec("hack.js", host.name, totalHackThreadsNeeded, target, delay);
-                ns.print("Done deploying " + totalHackThreadsNeeded + " hack threads!");
+                ns.print("Done deploying " + totalHackThreadsNeeded + " hack threads on " + host.name + "!");
                 return pid;
             }
         }
