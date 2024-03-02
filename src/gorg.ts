@@ -1,15 +1,16 @@
 import { NS } from "@ns";
+import { getHackThreads, getHackThreadsFormulas, isHackable } from "./lib";
+import { PlayerManager } from "./parallel/PlayerManager";
+import { getBestServer } from "./bestServer";
 
 export async function main(ns: NS) {
     ns.tail();
     ns.disableLog("ALL");
     ns.print("\n");
 
-    const start = Date.now();
-    for (let index = 0; index < 400; index++) {
-        const exists = ns.fileExists("Formulas.exe", "home");
-    }
-    const end = Date.now();
+    PlayerManager.getInstance(ns).resetPlayer(ns);
 
-    ns.print("Time: " + (end - start));
+    ns.print(isHackable(ns, "I.I.I.I"));
+
+    const target = getBestServer(ns);
 }
