@@ -26,7 +26,7 @@ export function getBestServerList(ns: NS, shouldPrint: boolean) {
 
     for (let i = 0; i < serverList.length; i++) {
         const serverName = serverList[i];
-        if (!isHackable(ns, serverName)) continue;
+        if (!isHackable(ns, serverName) && !ns.hasRootAccess(serverName)) continue;
 
         nukeServer(ns, serverName); // 50 ms for 500 itterations
 
@@ -79,13 +79,16 @@ export function getBestServerList(ns: NS, shouldPrint: boolean) {
 }
 
 export function getBestServer(ns: NS): string {
+    const best = getBestServerList(ns, false)[0].name;
     if (Config.TARGET !== "") return Config.TARGET;
-    else return getBestServerList(ns, false)[0].name;
+    return best;
 }
 
 export function getBestHostByRamOptimized(ns: NS): Server[] {
     const allHosts: Server[] = [];
     const allServers = serverScanner(ns);
+    let homeIdx = -1;
+    let home: Server | undefined = undefined;
 
     for (let i = 0; i < allServers.length; i++) {
         const server = ns.getServer(allServers[i]);
@@ -99,7 +102,11 @@ export function getBestHostByRamOptimized(ns: NS): Server[] {
             availableRam: server.maxRam - server.ramUsed,
             score: 0,
         };
-        if (serverObj.name === "home") serverObj.availableRam -= Config.HOME_FREE_RAM;
+        if (serverObj.name === "home") {
+            serverObj.availableRam -= Config.HOME_FREE_RAM;
+            homeIdx = i;
+            home = serverObj;
+        }
         allHosts.push(serverObj);
     }
 
@@ -107,6 +114,11 @@ export function getBestHostByRamOptimized(ns: NS): Server[] {
     allHosts.sort((a, b) => {
         return a.availableRam - b.availableRam;
     });
+
+    if (home !== undefined && homeIdx !== -1) {
+        allHosts.splice(homeIdx, 1);
+        allHosts.unshift(home);
+    }
 
     return allHosts;
 }
