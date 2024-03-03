@@ -14,7 +14,6 @@ import {
 } from "./lib";
 import { prepareServer } from "./loop/prepareServer";
 import { PlayerManager } from "./parallel/PlayerManager";
-import { ServerManager } from "./parallel/ServerManager";
 import { parallelCycle } from "./parallel/manager";
 
 export async function main(ns: NS) {
@@ -24,10 +23,7 @@ export async function main(ns: NS) {
     let hackThreshold = 0.5;
     let lastTarget = "";
 
-    const time = Time.getInstance();
     while (true) {
-        time.startTime();
-
         // start stock manager if player has WSE account
         const stockManagerRunning: boolean = ns.ps().find((p) => p.filename === "Stock/manager.js") !== undefined;
         if (
@@ -67,51 +63,20 @@ export async function main(ns: NS) {
 
             await parallelCycle(ns, target, hackThreshold);
         }
-        time.endTime();
-        ns.print("Cycle took: " + time.getTime(ns));
     }
 }
 
-function getHackThreshold(ns: NS, target: string): number {
-    const allHosts = getBestHostByRamOptimized(ns);
-    const totalMaxRam = allHosts.reduce((acc, server) => {
-        return acc + server.maxRam;
-    }, 0);
+function getHackThreshold(ns: NS, target: string) {
+    const hackingScriptRam = Config.HACK_SCRIPT_RAM;
+    const weakenScriptRam = Config.WEAKEN_SCRIPT_RAM;
+    const growingScriptRam = Config.GROW_SCRIPT_RAM;
 
-    let hackThreshold = 0.9;
     const THRESHOLD_STEP = Config.THRESHOLD_STEP;
+    let hackThreshold = 0.9;
 
-    // const moneyAllowedToUse = ns.getServerMoneyAvailable("home") * (2 / 3);
-    const RAM_WEAKEN = Config.WEAKEN_SCRIPT_RAM;
-    const RAM_GROW = Config.GROW_SCRIPT_RAM;
-    const RAM_HACK = Config.HACK_SCRIPT_RAM;
+    if (hackThreshold < Config.MIN_HACK_THRESHOLD) throw new Error("Hack threshold is too low");
 
-    const totalNotExclusiveRam = allHosts
-        .filter(
-            (host) =>
-                !host.name.includes(Config.WEAK_SERVER_NAME) &&
-                !host.name.includes(Config.GROW_SERVER_NAME) &&
-                !host.name.includes(Config.HACK_SERVER_NAME),
-        )
-        .reduce((acc, server) => {
-            return acc + server.maxRam;
-        }, 0);
-
-    const totalWeakenRamAvailable = allHosts
-        .filter((host) => host.name.includes(Config.WEAK_SERVER_NAME))
-        .reduce((acc, server) => {
-            return acc + server.maxRam;
-        }, 0);
-    const totalGrowRamAvailable = allHosts
-        .filter((host) => host.name.includes(Config.GROW_SERVER_NAME))
-        .reduce((acc, server) => {
-            return acc + server.maxRam;
-        }, 0);
-    const totalHackRamAvailable = allHosts
-        .filter((host) => host.name.includes(Config.HACK_SERVER_NAME))
-        .reduce((acc, server) => {
-            return acc + server.maxRam;
-        }, 0);
+    ns.print(Colors.E_ORANGE + "Starting hack threshold: " + hackThreshold);
 
     while (true) {
         let serverHackThreads = 0;
@@ -130,64 +95,108 @@ function getHackThreshold(ns: NS, target: string): number {
 
         const secondWeakenThreads = getWeakenThreadsAfterGrow(ns, serverGrowThreads);
 
-        // this var describes the total amount of threads i need to run parallel mode
-        const weaken1RamNeeded = RAM_WEAKEN * firstWeakenThreads;
-        const weaken2RamNeeded = RAM_WEAKEN * secondWeakenThreads;
-        const growRamNeeded = RAM_GROW * serverGrowThreads;
-        const hackRamNeeded = RAM_HACK * serverHackThreads;
+        const allHosts = getBestHostByRamOptimized(ns);
+        // ----------------- Simulate hack -----------------
+        let hackDeployed = false;
+        for (let i = 0; i < allHosts.length; i++) {
+            const host = allHosts[i];
+            if (host.name.includes(Config.WEAK_SERVER_NAME) || host.name.includes(Config.GROW_SERVER_NAME)) continue;
 
-        const totalRamNeeded = weaken1RamNeeded + weaken2RamNeeded + growRamNeeded + hackRamNeeded;
+            const maxThreadsOnHost = Math.floor(host.availableRam / hackingScriptRam);
 
-        const canWeaken = totalWeakenRamAvailable + totalNotExclusiveRam > weaken1RamNeeded + weaken2RamNeeded;
-        const caanGrow = totalGrowRamAvailable + totalNotExclusiveRam > growRamNeeded;
-        const canHack = totalHackRamAvailable + totalNotExclusiveRam > hackRamNeeded;
-
-        // log all
-        ns.print("predicted threads needed:");
-        ns.print("firstWeakenThreads: " + firstWeakenThreads + " with " + weaken1RamNeeded + "GB of RAM");
-        ns.print("serverGrowThreads: " + serverGrowThreads + " with " + growRamNeeded + "GB of RAM");
-        ns.print("secondWeakenThreads: " + secondWeakenThreads + " with " + weaken2RamNeeded + "GB of RAM");
-        ns.print("serverHackThreads: " + serverHackThreads + " with " + hackRamNeeded + "GB of RAM");
-
-        ns.print(
-            "needs " + totalRamNeeded + "GB of RAM and got " + totalMaxRam + ". Running parallel mode on " + target,
-        );
-
-        if (canHack && caanGrow && canWeaken) {
-            ns.print(
-                "needs " + totalRamNeeded + "GB of RAM and got " + totalMaxRam + ". Running parallel mode on " + target,
-            );
-            return hackThreshold;
-        }
-
-        if (ns.fileExists("Formulas.exe", "home")) {
-            ns.print(
-                Colors.YELLOW +
-                    "Not enough RAM to run parallel mode on " +
-                    target +
-                    ". Attempting to upgrade/buy server...",
-            );
-            const hackServer = ServerManager.buyOrUpgradeServer(ns, hackRamNeeded, Config.HACK_SERVER_NAME);
-            const Server = ServerManager.buyOrUpgradeServer(ns, growRamNeeded, Config.GROW_SERVER_NAME);
-            const weaken1Server = ServerManager.buyOrUpgradeServer(ns, weaken1RamNeeded, Config.WEAK_SERVER_NAME);
-            const weaken2Server = ServerManager.buyOrUpgradeServer(ns, weaken2RamNeeded, Config.WEAK_SERVER_NAME);
-
-            if (hackServer !== "" && Server !== "" && weaken1Server !== "" && weaken2Server !== "") {
-                ns.print(Colors.GREEN + "Servers bought, running parallel mode on " + target);
-                return hackThreshold;
+            if (maxThreadsOnHost >= serverHackThreads) {
+                host.availableRam -= serverHackThreads * hackingScriptRam;
+                hackDeployed = true;
+                break;
             }
         }
 
-        hackThreshold = Math.round((hackThreshold - THRESHOLD_STEP) * 100) / 100;
-        if (hackThreshold < Config.MIN_HACK_THRESHOLD) {
-            ns.tprint(Colors.RED + "Error! Not enough RAM to run parallel mode on " + target);
-            throw new Error("Error! Not enough RAM to run parallel mode on " + target);
+        if (!hackDeployed) {
+            hackThreshold -= THRESHOLD_STEP;
+            ns.print("Threshold too high, decreasing to: " + hackThreshold);
+            continue;
         }
-        ns.print("Threshold is too high, trying with: " + hackThreshold);
+
+        // ----------------- Simulate weak1 -----------------
+
+        let threadsDispatched = 0;
+        let threadsRemaining = firstWeakenThreads;
+        for (let i = 0; i < allHosts.length; i++) {
+            if (threadsDispatched >= firstWeakenThreads) break;
+            const host = allHosts[i];
+            if (host.name.includes(Config.GROW_SERVER_NAME) || host.name.includes(Config.HACK_SERVER_NAME)) continue;
+
+            const freeRam = host.availableRam;
+            if (freeRam < weakenScriptRam) continue;
+            const threadSpace = Math.floor(freeRam / weakenScriptRam);
+
+            const threadsToDispatch = Math.min(threadsRemaining, threadSpace);
+
+            // simulate weaken
+            host.availableRam -= threadsToDispatch * weakenScriptRam;
+            threadsRemaining -= threadsToDispatch;
+            threadsDispatched += threadsToDispatch;
+        }
+
+        if (threadsRemaining > 0) {
+            hackThreshold -= THRESHOLD_STEP;
+            ns.print("Threshold too high, decreasing to: " + hackThreshold);
+            continue;
+        }
+
+        // ----------------- Simulate grow -----------------
+        let growDeployed = false;
+        for (let i = 0; i < allHosts.length; i++) {
+            const host = allHosts[i];
+            if (host.name.includes(Config.WEAK_SERVER_NAME) || host.name.includes(Config.HACK_SERVER_NAME)) continue;
+
+            const maxThreadsOnHost = Math.floor(host.availableRam / growingScriptRam);
+
+            if (maxThreadsOnHost >= serverGrowThreads) {
+                host.availableRam -= serverGrowThreads * growingScriptRam;
+                growDeployed = true;
+            }
+        }
+
+        if (!growDeployed) {
+            hackThreshold -= THRESHOLD_STEP;
+            ns.print("Threshold too high, decreasing to: " + hackThreshold);
+            continue;
+        }
+        // ----------------- Simulate weak2 -----------------
+
+        threadsDispatched = 0;
+        threadsRemaining = secondWeakenThreads;
+        for (let i = 0; i < allHosts.length; i++) {
+            if (threadsDispatched >= secondWeakenThreads) break;
+            const host = allHosts[i];
+            if (host.name.includes(Config.GROW_SERVER_NAME) || host.name.includes(Config.HACK_SERVER_NAME)) continue;
+
+            const freeRam = host.availableRam;
+            if (freeRam < weakenScriptRam) continue;
+            const threadSpace = Math.floor(freeRam / weakenScriptRam);
+
+            const threadsToDispatch = Math.min(threadsRemaining, threadSpace);
+
+            // simulate weaken
+            host.availableRam -= threadsToDispatch * weakenScriptRam;
+            threadsRemaining -= threadsToDispatch;
+            threadsDispatched += threadsToDispatch;
+        }
+
+        if (threadsRemaining > 0) {
+            hackThreshold -= THRESHOLD_STEP;
+            ns.print("Threshold too high, decreasing to: " + hackThreshold);
+            continue;
+        }
+
+        ns.print(Colors.GREEN + "All simulations passed, hackThreshold: " + hackThreshold);
+
+        return hackThreshold;
     }
 }
 
-async function prepare(ns: NS, target: string, hackThreshold: number) {
+export async function prepare(ns: NS, target: string, hackThreshold: number) {
     if (
         ns.getServerMaxMoney(target) != parseFloat(ns.getServerMoneyAvailable(target).toFixed(5)) ||
         parseFloat(ns.getServerSecurityLevel(target).toFixed(5)) != ns.getServerMinSecurityLevel(target)
