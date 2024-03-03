@@ -1,7 +1,7 @@
 import { NS } from "@ns";
 
-import { isHackable, nukeServer, serverScanner } from "./lib.js";
 import { Config } from "./Config/Config.js";
+import { isHackable, nukeServer, serverScanner } from "./lib.js";
 
 export interface Server {
     name: string;

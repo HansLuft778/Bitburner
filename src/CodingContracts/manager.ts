@@ -58,8 +58,10 @@ export async function main(ns: NS) {
                 case "Sanitize Parentheses in Expression":
                     break;
                 case "Find All Valid Math Expressions":
+                    findAllValidMathExpressions(ns, contract, server);
                     break;
                 case "HammingCodes: Integer to Encoded Binary":
+                    hammingCodesIntegertoEncodedBinary(ns, contract, server);
                     break;
                 case "HammingCodes: Encoded Binary to Integer":
                     break;
@@ -199,4 +201,62 @@ export function totalWaysToSum(ns: NS, contract: string, server: string) {
     }
 
     ns.print(Colors.GREEN + success);
+}
+
+function findAllValidMathExpressions(ns: NS, contract: string, server: string) {
+    const data = ns.codingcontract.getData(contract, server);
+
+    function opStr(mu: number, len: number) {
+        const ops = ["", "-", "+", "*"];
+        const s: string[] = [];
+        while (mu >= 4) {
+            s.push(ops[mu % 4]);
+            mu -= mu % 4;
+            mu /= 4;
+        }
+        s.push(ops[mu]);
+        while (s.length < len) {
+            s.push(ops[0]);
+        }
+        return s;
+    }
+    // ["012345", N], where N is the assertion
+    // each gap between two digits can be one of 4 things (blank, -, +, *),
+    // so there are 4^d permutations, where d=length-1
+    const answers = [];
+    const digits = data[0];
+    const assertion = data[1];
+
+    const permutations = Math.pow(4, digits.length - 1);
+    for (let i = 0; i < permutations; i++) {
+        // turn the permutation number into a list of operators
+        const ops = opStr(i, digits.length - 1);
+        // interleave digits and ops
+        let expr = "";
+        for (let j = 0; j < ops.length; j++) {
+            expr += digits[j] + ops[j];
+        }
+        expr += digits[ops.length];
+        // leading 0s sometimes throw an error about octals
+        try {
+            if (eval(expr) == assertion) {
+                answers.push(expr);
+            }
+        } catch (e) {
+            //
+        }
+    }
+
+    const success = ns.codingcontract.attempt(answers, contract, server);
+
+    if (success === "") {
+        ns.tprint(Colors.RED + "failed to solve contract " + contract + " on server " + server);
+        return;
+    }
+
+    ns.print(Colors.GREEN + success);
+}
+
+function hammingCodesIntegertoEncodedBinary(ns: NS, contract: string, server: string) {
+    const data = ns.codingcontract.getData(contract, server);
 }
