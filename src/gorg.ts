@@ -1,7 +1,13 @@
 import { NS } from "@ns";
-import { getHackThreads, getHackThreadsFormulas, isHackable } from "./lib";
 import { PlayerManager } from "./parallel/PlayerManager";
-import { getBestServer } from "./bestServer";
+
+class Gorg {
+    name = "";
+
+    constructor() {
+        //
+    }
+}
 
 export async function main(ns: NS) {
     ns.tail();
@@ -10,7 +16,6 @@ export async function main(ns: NS) {
 
     PlayerManager.getInstance(ns).resetPlayer(ns);
 
-    ns.print(isHackable(ns, "I.I.I.I"));
-
-    const target = getBestServer(ns);
+    const gorg = new Gorg();
+    gorg.name = "Gorg";
 }
