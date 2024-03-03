@@ -194,6 +194,4 @@ export function writeToPort(ns: NS, port: number, data: string) {
 export async function main(ns: NS) {
     ns.tail();
     ns.disableLog("ALL");
-
-    // const server = "alpha-ent";
 }

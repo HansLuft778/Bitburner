@@ -19,7 +19,10 @@ export class ServerManager {
             const upgradeSuccessful = this.upgradeServer(ns, server.totalRam, server.name);
             if (upgradeSuccessful) return server.name;
         }
-
+        ns.print(
+            Colors.YELLOW +
+                "[server Manager] attempted to upgrade Server, but the upgrade failed, trying to buy a new server",
+        );
         const name = this.buyServer(ns, desiredRam, serverType);
         return name;
     }
