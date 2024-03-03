@@ -20,7 +20,6 @@ export async function main(ns: NS) {
 
             switch (contractType) {
                 case "Find Largest Prime Factor":
-                    //
                     break;
                 case "Subarray with Maximum Sum":
                     break;
@@ -77,26 +76,13 @@ export async function main(ns: NS) {
                 case "Encryption II: Vigenère Cipher":
                     break;
                 default:
-                    break;
+                    throw new Error("unknown contract type: " + contractType);
             }
         }
     }
 }
 
-function generateSwitchCase(ns: NS) {
-    let switchCase = "";
-    switchCase += "switch (contractType) {\n";
-    for (const contractType of ns.codingcontract.getContractTypes()) {
-        switchCase += `case "${contractType}":\n`;
-        switchCase += `break;\n`;
-    }
-    switchCase += "default:\n";
-    switchCase += "break;\n";
-    switchCase += "}\n";
-    return switchCase;
-}
-
-function findShortestPath(ns: NS, contract: string, server: string) {
+export function findShortestPath(ns: NS, contract: string, server: string) {
     const data: number[][] = ns.codingcontract.getData(contract, server);
 
     if (data.length === 0 || data[0][0] === 1 || data[data.length - 1][data[0].length - 1] === 1) {
@@ -168,75 +154,20 @@ function findShortestPath(ns: NS, contract: string, server: string) {
 
     const success = ns.codingcontract.attempt(moves[0], contract, server);
     if (success === "") {
-        ns.tprint(`failed to solve contract ${contract} on server ${server}`);
+        ns.tprint(Colors.RED + `failed to solve contract ${contract} on server ${server}`);
         throw new Error("failed to solve contract");
     }
 
     ns.print(Colors.GREEN + success);
 }
 
-function totalWaysToSum(ns: NS, contract: string, server: string) {
-    const data = ns.codingcontract.getData(contract, server);
+export function totalWaysToSum(ns: NS, contract: string, server: string) {
+    const data: number = ns.codingcontract.getData(contract, server);
 
-    // 64
-    ns.print(data);
-
-    /**
-    
-    1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1
-    1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+2
-    1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+3
-    1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+4
-    1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+5
-    ...
-    1+63
-
-    => 63 -> n - 1
-
-
-    2+62
-    3+61
-    4+60
-    5+59
-    ...
-    31+33
-    32+32
-
-    => floor(n / 2) - 1
-
-
-
-    for 7:
-    1+1+1+1+1+1+1
-    1+1+1+1+1+2
-    1+1+1+1+3
-    1+1+1+4
-    1+1+5
-    1+6
-     => n-1
-
-    2+2+2+1
-    2+2+3
-    2+5
-     => floor(n / 2) - 1
-
-    3+3+1
-    3+4
-
-    2+5
-    3+4
-     => floor(n / 2) - 1
-
-    ----------
-
-    1+
-    2+
-    3+
-    4+
-    5+
-    6+
-
-     */
+    if (typeof data !== "number" || data < 1) {
+        ns.tprint(Colors.RED + "invalid data for contract " + contract + " on server " + server);
+        return;
+    }
 
     function sumCombinations(target: number, current: number[] = [], start = 1, result: number[][] = []) {
         if (target === 0) {
@@ -246,25 +177,26 @@ function totalWaysToSum(ns: NS, contract: string, server: string) {
 
         for (let i = start; i <= target; i++) {
             current.push(i);
-            sumCombinations(target - i, current, i, result); // Recursive call with updated target and current combination
-            current.pop(); // Backtrack by removing the last element from the current combination
+            sumCombinations(target - i, current, i, result);
+            current.pop();
         }
 
         return result;
     }
 
-    const found: Set<string> = new Set();
+    ns.print(sumCombinations(data));
 
-    // for (let i = 1; i <= 7; i++) {
-    //     const gorg = 7 - i;
-    //     found.add([i, gorg].sort().join(","));
+    const res = sumCombinations(data)?.filter((arr) => arr.length !== 1).length;
+    if (res === undefined) {
+        ns.tprint(Colors.RED + "failed to solve contract " + contract + " on server " + server);
+        return;
+    }
+    const success = ns.codingcontract.attempt(res, contract, server);
 
-    //     // can i be split into two numbers?
-    //     if (i > 2) {
-    //         const half = Math.floor(i / 2);
-    //         found.add([half, i - half].sort().join(","));
-    //     }
-    // }
+    if (success === "") {
+        ns.tprint(Colors.RED + "failed to solve contract " + contract + " on server " + server);
+        return;
+    }
 
-    ns.print(sumCombinations(7));
+    ns.print(Colors.GREEN + success);
 }
