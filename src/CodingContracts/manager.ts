@@ -1,5 +1,6 @@
-import { Colors, serverScanner } from "@/lib";
 import { NS } from "@ns";
+import { Colors, serverScanner } from "@/lib";
+
 export async function main(ns: NS) {
     ns.tail();
     ns.disableLog("ALL");
@@ -18,16 +19,18 @@ export async function main(ns: NS) {
             const contractType = cc.getContractType(contract, server);
             ns.print(`contract ${contract} is of type ${contractType}`);
 
+            let result;
             switch (contractType) {
                 case "Find Largest Prime Factor":
                     break;
                 case "Subarray with Maximum Sum":
-                    subarraywithMaximumSum(ns, contract, server);
+                    result = subarraywithMaximumSum(ns, contract, server);
                     break;
                 case "Total Ways to Sum":
-                    totalWaysToSum(ns, contract, server);
+                    result = totalWaysToSum(ns, contract, server);
                     break;
                 case "Total Ways to Sum II":
+                    result = totalWaysToSumII(ns, contract, server);
                     break;
                 case "Spiralize Matrix":
                     break;
@@ -42,27 +45,28 @@ export async function main(ns: NS) {
                 case "Algorithmic Stock Trader I":
                     break;
                 case "Algorithmic Stock Trader II":
-                    algorithmicStockTraderII(ns, contract, server);
+                    result = algorithmicStockTraderII(ns, contract, server);
                     break;
                 case "Algorithmic Stock Trader III":
-                    algorithmicStockTraderIII(ns, contract, server);
+                    result = algorithmicStockTraderIII(ns, contract, server);
                     break;
                 case "Algorithmic Stock Trader IV":
+                    result = algorithmicStockTraderIV(ns, contract, server);
                     break;
                 case "Minimum Path Sum in a Triangle":
-                    minimumPathSumInATriangle(ns, contract, server);
+                    result = minimumPathSumInATriangle(ns, contract, server);
                     break;
                 case "Unique Paths in a Grid I":
                     break;
                 case "Unique Paths in a Grid II":
                     break;
                 case "Shortest Path in a Grid":
-                    findShortestPath(ns, contract, server);
+                    result = findShortestPath(ns, contract, server);
                     break;
                 case "Sanitize Parentheses in Expression":
                     break;
                 case "Find All Valid Math Expressions":
-                    findAllValidMathExpressions(ns, contract, server);
+                    result = findAllValidMathExpressions(ns, contract, server);
                     break;
                 case "HammingCodes: Integer to Encoded Binary":
                     break;
@@ -83,6 +87,16 @@ export async function main(ns: NS) {
                 default:
                     throw new Error("unknown contract type: " + contractType);
             }
+
+            if (result === undefined) continue;
+
+            const success = ns.codingcontract.attempt(result, contract, server);
+            if (success === "") {
+                ns.tprint(Colors.RED + `failed to solve contract ${contract} on server ${server}`);
+                throw new Error("failed to solve contract");
+            }
+
+            ns.print(Colors.GREEN + success);
         }
     }
 }
@@ -155,15 +169,7 @@ export function findShortestPath(ns: NS, contract: string, server: string) {
 
     findPath(data, visited, startX, startY, endX, endY, moves, min, currentPath, directions);
 
-    ns.print(moves[0]);
-
-    const success = ns.codingcontract.attempt(moves[0], contract, server);
-    if (success === "") {
-        ns.tprint(Colors.RED + `failed to solve contract ${contract} on server ${server}`);
-        throw new Error("failed to solve contract");
-    }
-
-    ns.print(Colors.GREEN + success);
+    return moves[0];
 }
 
 export function totalWaysToSum(ns: NS, contract: string, server: string) {
@@ -196,14 +202,39 @@ export function totalWaysToSum(ns: NS, contract: string, server: string) {
         ns.tprint(Colors.RED + "failed to solve contract " + contract + " on server " + server);
         return;
     }
-    const success = ns.codingcontract.attempt(res, contract, server);
+    return res;
+}
 
-    if (success === "") {
+function totalWaysToSumII(ns: NS, contract: string, server: string) {
+    const data = ns.codingcontract.getData(contract, server);
+    const target: number = data[0];
+    const nums: number[] = data[1];
+
+    /**
+     *  How many different distinct ways can the number 58 be written as a sum of integers contained in the set:
+
+        [2,7,8,9,11,13,14,15,18,19]?
+
+        You may use each integer in the set zero or more times.
+     */
+
+    const dp = Array(target + 1).fill(0);
+    dp[0] = 1;
+
+    for (const number of nums) {
+        for (let i = number; i < target + 1; i++) {
+            dp[i] += dp[i - number];
+        }
+    }
+
+    const res = dp[target];
+    ns.print(res);
+    if (res === undefined) {
         ns.tprint(Colors.RED + "failed to solve contract " + contract + " on server " + server);
         return;
     }
 
-    ns.print(Colors.GREEN + success);
+    return res;
 }
 
 function findAllValidMathExpressions(ns: NS, contract: string, server: string) {
@@ -250,14 +281,7 @@ function findAllValidMathExpressions(ns: NS, contract: string, server: string) {
         }
     }
 
-    const success = ns.codingcontract.attempt(answers, contract, server);
-
-    if (success === "") {
-        ns.tprint(Colors.RED + "failed to solve contract " + contract + " on server " + server);
-        return;
-    }
-
-    ns.print(Colors.GREEN + success);
+    return answers;
 }
 
 function algorithmicStockTraderII(ns: NS, contract: string, server: string) {
@@ -274,110 +298,65 @@ function algorithmicStockTraderII(ns: NS, contract: string, server: string) {
 
     profit = Math.max(profit, 0);
 
-    const success = ns.codingcontract.attempt(profit, contract, server);
-
-    if (success === "") {
-        ns.tprint(Colors.RED + "failed to solve contract " + contract + " on server " + server);
-        return;
-    }
-
-    ns.print(Colors.GREEN + success + " from " + contract);
+    return profit;
 }
 
 export function algorithmicStockTraderIII(ns: NS, contract: string, server: string) {
-    const stockPrice: number[] = [
-        11, 76, 116, 182, 56, 33, 13, 149, 69, 150, 88, 15, 45, 117, 142, 80, 78, 150, 50, 5, 104, 79, 23, 21, 107, 38,
-        54, 181,
-    ]; //ns.codingcontract.getData(contract, server);
+    const stockPrice: number[] = ns.codingcontract.getData(contract, server);
 
-    stockPrice.push(-1);
+    let hold1 = Number.MIN_SAFE_INTEGER;
+    let hold2 = Number.MIN_SAFE_INTEGER;
+    let release1 = 0;
+    let release2 = 0;
+    for (const price of stockPrice) {
+        release2 = Math.max(release2, hold2 + price);
+        hold2 = Math.max(hold2, release1 - price);
+        release1 = Math.max(release1, hold1 + price);
+        hold1 = Math.max(hold1, price * -1);
+    }
 
-    // 11,76,116,182,56,33,13,149,69,150,88,15,45,117,142,80,78,150,50,5,104,79,23,21,107,38,54,181
-    //     171               136    81           127           72       99          86        134
-    const maximums: number[] = [];
+    return release2;
+}
 
-    let profit = 0;
-    for (let i = 0; i < stockPrice.length; i++) {
-        if (stockPrice[i] < stockPrice[i + 1]) {
-            profit += stockPrice[i + 1] - stockPrice[i];
-        }
-        if (stockPrice[i] > stockPrice[i + 1]) {
-            maximums.push(profit);
-            profit = 0;
+function algorithmicStockTraderIV(ns: NS, contract: string, server: string) {
+    const data = ns.codingcontract.getData(contract, server);
+    const k: number = data[0];
+    const prices: number[] = data[1];
+
+    const len = prices.length;
+
+    // if (k > len / 2) {
+    //     let res = 0;
+    //     for (let i = 1; i < len; ++i) {
+    //         res += Math.max(prices[i] - prices[i - 1], 0);
+    //     }
+
+    //     return res;
+    // }
+
+    const hold: number[] = [];
+    const rele: number[] = [];
+    hold.length = k + 1;
+    rele.length = k + 1;
+    for (let i = 0; i <= k; ++i) {
+        hold[i] = Number.MIN_SAFE_INTEGER;
+        rele[i] = 0;
+    }
+
+    let cur: number;
+    for (let i = 0; i < len; ++i) {
+        cur = prices[i];
+        for (let j = k; j > 0; --j) {
+            rele[j] = Math.max(rele[j], hold[j] + cur);
+            hold[j] = Math.max(hold[j], rele[j - 1] - cur);
         }
     }
 
-    // best top 2 profits
-    maximums.sort((a, b) => b - a);
-    const best = maximums.slice(0, 2);
-    const sum = best.reduce((a, b) => a + b, 0);
-    ns.print(Colors.E_ORANGE + sum + " | " + best + " | " + maximums);
-
-    stockPrice.pop();
-    maximums.length = 0;
-    // second method
-    // find two lowest numbers in stockprice, and add them to maximums
-    const min = Math.min(...stockPrice);
-    const minIdx = stockPrice.indexOf(min);
-
-    const secMin = Math.min(...stockPrice.filter((p) => p !== min));
-    const secMinIdx = stockPrice.indexOf(secMin);
-
-    const max = Math.max(...stockPrice);
-    const maxIdx = stockPrice.indexOf(max);
-
-    const secMax = Math.max(...stockPrice.filter((p) => p !== max));
-    const secMaxIdx = stockPrice.indexOf(secMax);
-
-    ns.print(min + " " + minIdx + "|" + secMin + " " + secMinIdx);
-    ns.print(max + " " + maxIdx + "|" + secMax + " " + secMaxIdx);
-
-    if (minIdx < secMinIdx) {
-        if (maxIdx < secMaxIdx) {
-            // match min with max
-            maximums.push(max - min);
-            maximums.push(secMax - secMin);
-            ns.print("here");
-        } else {
-            // match min with max2
-            maximums.push(secMax - min);
-            maximums.push(max - secMin);
-            ns.print("here2");
-        }
-    } else {
-        if (maxIdx < secMaxIdx) {
-            // match min2 with max
-            maximums.push(secMax - min);
-            maximums.push(max - secMin);
-            ns.print("here3");
-        } else {
-            // match min2 with max2
-            maximums.push(secMax - secMin);
-            maximums.push(max - min);
-            ns.print("here4");
-        }
-    }
-    const sum2 = maximums.reduce((a, b) => a + b, 0);
-
-    ns.print(Colors.E_ORANGE + maximums + " | " + sum2);
-
-    const success = ns.codingcontract.attempt(sum, contract, server);
-
-    if (success === "") {
-        ns.tprint(Colors.RED + "failed to solve contract " + contract + " on server " + server);
-        return;
-    }
-
-    ns.print(Colors.GREEN + success + " from " + contract);
+    return rele[k];
 }
 
 function minimumPathSumInATriangle(ns: NS, contract: string, server: string) {
     const triangle: number[][] = ns.codingcontract.getData(contract, server);
-
-    if (triangle.length === 0) {
-        ns.tprint(Colors.RED + "invalid data for contract " + contract + " on server " + server);
-        return;
-    }
 
     let pathSum = 0;
     pathSum += triangle[0][0];
@@ -391,23 +370,11 @@ function minimumPathSumInATriangle(ns: NS, contract: string, server: string) {
         pathSum += move;
     }
 
-    const success = ns.codingcontract.attempt(pathSum, contract, server);
-
-    if (success === "") {
-        ns.tprint(Colors.RED + "failed to solve contract " + contract + " on server " + server);
-        return;
-    }
-
-    ns.print(Colors.GREEN + success);
+    return pathSum;
 }
 
 function subarraywithMaximumSum(ns: NS, contract: string, server: string) {
     const data: number[] = ns.codingcontract.getData(contract, server);
-
-    if (data.length === 0) {
-        ns.tprint(Colors.RED + "invalid data for contract " + contract + " on server " + server);
-        return;
-    }
 
     let maxSum = -Infinity;
     let currentSum = 0;
@@ -417,12 +384,5 @@ function subarraywithMaximumSum(ns: NS, contract: string, server: string) {
         maxSum = Math.max(maxSum, currentSum);
     }
 
-    const success = ns.codingcontract.attempt(maxSum, contract, server);
-
-    if (success === "") {
-        ns.tprint(Colors.RED + "failed to solve contract " + contract + " on server " + server);
-        return;
-    }
-
-    ns.print(Colors.GREEN + success);
+    return maxSum;
 }
