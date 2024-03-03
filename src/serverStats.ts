@@ -1,6 +1,7 @@
 import { NS } from "@ns";
 import { Colors } from "./lib";
 import { getBestHostByRamOptimized } from "./bestServer";
+import { Config } from "./Config/Config";
 
 const BORDER_COLOR = Colors.CYAN;
 
@@ -152,7 +153,7 @@ export async function main(ns: NS) {
             }
             const width = printServerStats(ns, server.toString(), 0.9);
             ns.resizeTail((width - 1) * 10, 375);
-            await ns.sleep(20);
+            await ns.sleep(Config.DELAY_MARGIN_MS);
         }
     }
 }
