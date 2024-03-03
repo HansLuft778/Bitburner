@@ -13,6 +13,7 @@ interface Stock {
     bidPrice: number;
     askPrice: number;
     price: number;
+    previousPrice: number;
     forecast: number;
     volatility: number;
     maxShares: number;
@@ -21,7 +22,6 @@ interface Stock {
     profitPotential: number;
 }
 
-const BUY_VALUE = 10_000_000;
 const COMMISSION_FEE = 100_000;
 
 function getAllStocks(ns: NS): Stock[] {
@@ -42,6 +42,7 @@ function getAllStocks(ns: NS): Stock[] {
             bidPrice: ns.stock.getBidPrice(symbol),
             askPrice: ns.stock.getAskPrice(symbol),
             price: ns.stock.getPrice(symbol),
+            previousPrice: -1,
             forecast: ns.stock.getForecast(symbol),
             volatility: ns.stock.getVolatility(symbol),
             maxShares: ns.stock.getMaxShares(symbol),
@@ -55,6 +56,24 @@ function getAllStocks(ns: NS): Stock[] {
         stock.profitPotential = 2 * Math.abs(stock.forecast - 0.5) * stock.volatility;
 
         stocks.push(stock);
+    }
+
+    return stocks;
+}
+
+function updateStocks(ns: NS, stocks: Stock[]) {
+    for (const stock of stocks) {
+        const position = ns.stock.getPosition(stock.symbol);
+        stock.longShares = position[0];
+        stock.longPrice = position[1];
+        stock.shortShares = position[2];
+        stock.shortPrice = position[3];
+        stock.bidPrice = ns.stock.getBidPrice(stock.symbol);
+        stock.askPrice = ns.stock.getAskPrice(stock.symbol);
+        stock.price = ns.stock.getPrice(stock.symbol);
+        stock.forecast = ns.stock.getForecast(stock.symbol);
+        stock.volatility = ns.stock.getVolatility(stock.symbol);
+        stock.maxShares = ns.stock.getMaxShares(stock.symbol);
     }
 
     return stocks;
@@ -112,20 +131,15 @@ export async function main(ns: NS) {
     ns.disableLog("ALL");
     const s = ns.stock;
 
-    const stocks: Stock[] = loadMarket(ns);
-    if (stocks.length === 0) {
-        ns.print(Colors.YELLOW + "Unable to load market, fetching new data");
-        const allStocks = getAllStocks(ns);
-        stocks.push(...allStocks);
-    }
+    let initialStocks: Stock[] = getAllStocks(ns);
 
-    ns.print(stocks.length);
+    ns.print(initialStocks.length);
 
     let totalProfit = 0;
     while (true) {
         ns.clearLog();
 
-        const stocks: Stock[] = getAllStocks(ns);
+        const stocks: Stock[] = updateStocks(ns, initialStocks);
 
         for (const stock of stocks) {
             if (stock.observedMinPrice === -1 || stock.price < stock.observedMinPrice) {
@@ -133,6 +147,9 @@ export async function main(ns: NS) {
             }
             if (stock.observedMaxPrice === -1 || stock.price > stock.observedMaxPrice) {
                 stock.observedMaxPrice = stock.price;
+            }
+            if (stock.previousPrice === -1) {
+                stock.previousPrice = stock.price;
             }
 
             // buy long stock
@@ -158,13 +175,19 @@ export async function main(ns: NS) {
             }
 
             const color = stock.longShares > 0 ? Colors.E_ORANGE : "";
+            const arrow = stock.price > stock.previousPrice ? "↗" : stock.price < stock.previousPrice ? "↘" : "→";
 
             ns.print(
                 color +
                     `${stock.symbol}:\t${ns.formatNumber(stock.price)} (min: ${ns.formatNumber(
                         stock.observedMinPrice,
-                    )}, max: ${ns.formatNumber(stock.observedMaxPrice)})\tforecast: ${ns.formatNumber(stock.forecast)}`,
+                    )}, max: ${ns.formatNumber(stock.observedMaxPrice)})\tforecast: ${ns.formatNumber(
+                        stock.forecast,
+                    )} ${arrow}`,
             );
+
+            stock.previousPrice = stock.price;
+            initialStocks = stocks;
         }
         const color = totalProfit < 0 ? Colors.RED : Colors.GREEN;
         ns.print(color + "Total profit: " + ns.formatNumber(totalProfit));
