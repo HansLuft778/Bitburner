@@ -54,7 +54,6 @@ export class Config {
     /**
      * The delay time in milliseconds.
      * This constant represents the amount of time to add as a margin when calling weak/grow/hack in parallel mode.
-     * This value devided by 2 should not be less than 200ms.
      * Default: 1000
      */
     public static readonly DELAY_MARGIN_MS: number = 50;
