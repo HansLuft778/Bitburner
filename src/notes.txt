@@ -3,7 +3,7 @@ grow can not safely be distributed, cause:
     multiple instances cant finish at the same time, effect is calculated at the end, 
     thus if its spread across multiple instances they'll increase security for one another
 
-
+https://bitburner.readthedocs.io/en/latest/guidesandtips/recommendedbitnodeorder.html
 
 haack skill level up:
 
