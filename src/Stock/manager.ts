@@ -1,5 +1,5 @@
-import { NS } from "@ns";
 import { Colors } from "@/lib";
+import { NS } from "@ns";
 
 interface Stock {
     symbol: string;
@@ -21,7 +21,7 @@ interface Stock {
     profitPotential: number;
 }
 
-const BUY_VALUE = 1_000_000;
+const BUY_VALUE = 10_000_000;
 const COMMISSION_FEE = 100_000;
 
 function getAllStocks(ns: NS): Stock[] {
@@ -75,6 +75,37 @@ function loadMarket(ns: NS): Stock[] {
     }
 }
 
+function getPercentage(money: number) {
+    return 1 / (1 + Math.exp(0.0000000005 * money)) + 0.1;
+}
+
+function logPositions(ns: NS, stock: Stock, isBuy: boolean, profit = 0) {
+    if (isBuy)
+        ns.write(
+            "Stock/log.txt",
+            "buying " +
+                ns.formatNumber(stock.longShares) +
+                " shares of " +
+                stock.symbol +
+                " for " +
+                ns.formatNumber(stock.longPrice * stock.longShares) +
+                "\n",
+            "a",
+        );
+    else
+        ns.write(
+            "Stock/log.txt",
+            "selling " +
+                ns.formatNumber(stock.longShares) +
+                " shares of " +
+                stock.symbol +
+                " for " +
+                ns.formatNumber(profit) +
+                "\n",
+            "a",
+        );
+}
+
 export async function main(ns: NS) {
     ns.print("asd");
     ns.tail();
@@ -106,19 +137,24 @@ export async function main(ns: NS) {
 
             // buy long stock
             if (stock.forecast >= 0.6 && stock.longShares === 0) {
-                const numShares = Math.round(BUY_VALUE / stock.bidPrice);
+                const money = getPercentage(ns.getServerMoneyAvailable("home")) * ns.getServerMoneyAvailable("home");
+                const numShares = Math.min(Math.round(money / stock.bidPrice), stock.maxShares);
+
                 const buyPrice = s.buyStock(stock.symbol, numShares);
                 stock.longPrice = buyPrice;
                 stock.longShares = numShares;
-                ns.print(Colors.E_ORANGE + "buying " + stock.symbol + " for " + buyPrice);
+                ns.print(Colors.E_ORANGE + "buying " + numShares + " shares of " + stock.symbol + " for " + buyPrice);
+                logPositions(ns, stock, true);
             }
             // sell long stock
             if (stock.longShares > 0 && stock.forecast <= 0.5) {
                 const sellPrice = s.sellStock(stock.symbol, stock.longShares);
-                totalProfit += sellPrice * stock.longShares - stock.longPrice * stock.longShares - 2 * COMMISSION_FEE;
+                const profit = sellPrice * stock.longShares - stock.longPrice * stock.longShares - 2 * COMMISSION_FEE;
                 stock.longShares = 0;
                 stock.longPrice = 0;
-                ns.print(Colors.E_ORANGE + "selling " + stock.symbol + " for " + totalProfit);
+                totalProfit += profit;
+                ns.print(Colors.E_ORANGE + "selling " + stock.symbol + " for " + profit);
+                logPositions(ns, stock, false, profit);
             }
 
             const color = stock.longShares > 0 ? Colors.E_ORANGE : "";
@@ -127,7 +163,7 @@ export async function main(ns: NS) {
                 color +
                     `${stock.symbol}:\t${ns.formatNumber(stock.price)} (min: ${ns.formatNumber(
                         stock.observedMinPrice,
-                    )}, max: ${ns.formatNumber(stock.observedMaxPrice)})\tforecast: ${stock.forecast}`,
+                    )}, max: ${ns.formatNumber(stock.observedMaxPrice)})\tforecast: ${ns.formatNumber(stock.forecast)}`,
             );
         }
         const color = totalProfit < 0 ? Colors.RED : Colors.GREEN;

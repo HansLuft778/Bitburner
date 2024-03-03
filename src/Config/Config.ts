@@ -63,7 +63,7 @@ export class Config {
      * The amount of time in milliseconds to wait before executing the next loop cycle.
      * Default: 10000 (10 seconds)
      */
-    public static readonly LOOP_SAFETY_MARGIN_MS: number = 10000;
+    public static readonly LOOP_SAFETY_MARGIN_MS: number = 500;
 
     /**
      * The number of batches to use in parallel mode.
@@ -78,4 +78,10 @@ export class Config {
     public static readonly WEAKEN_SCRIPT_RAM: number = 1.75;
     public static readonly GROW_SCRIPT_RAM: number = 1.75;
     public static readonly HACK_SCRIPT_RAM: number = 1.7;
+
+    /**
+     * The minimum amount of money required on the home server to start investing in the stock market.
+     * Default: 10_000_000_000
+     */
+    public static readonly STOCK_MARKET_MIN_HOME_MONEY: number = 10_000_000_000;
 }
