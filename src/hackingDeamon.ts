@@ -21,10 +21,6 @@ export async function main(ns: NS) {
     ns.tail();
     ns.disableLog("ALL");
 
-    // start stock manager if player has WSE account
-    // if (ns.stock.hasWSEAccount() && ns.stock.has4SData() && ns.stock.has4SDataTIXAPI() && ns.stock.hasTIXAPIAccess())
-    //     ns.exec("Stock/manager.js", "home");
-
     let hackThreshold = 0.5;
     let lastTarget = "";
 
@@ -32,34 +28,28 @@ export async function main(ns: NS) {
     while (true) {
         time.startTime();
 
+        // start stock manager if player has WSE account
+        const stockManagerRunning: boolean = ns.ps().find((p) => p.filename === "Stock/manager.js") !== undefined;
+        if (
+            ns.stock.hasWSEAccount() &&
+            ns.stock.has4SData() &&
+            ns.stock.has4SDataTIXAPI() &&
+            ns.stock.hasTIXAPIAccess() &&
+            ns.getServerMoneyAvailable("home") > Config.STOCK_MARKET_MIN_HOME_MONEY &&
+            !stockManagerRunning
+        )
+            ns.exec("Stock/manager.js", "home");
+
         PlayerManager.getInstance(ns).resetPlayer(ns);
 
-        const target = getBestServer(ns);
+        const target = ns.args[0] === undefined ? getBestServer(ns) : ns.args[0].toString();
 
         writeToPort(ns, 1, target);
         ns.print("lastTarget: " + lastTarget + " target: " + target);
         if (ns.fileExists("Formulas.exe", "home")) {
             if (lastTarget !== target) {
                 // ----------------- PREPARE SERVER -----------------
-                if (
-                    ns.getServerMaxMoney(target) != parseFloat(ns.getServerMoneyAvailable(target).toFixed(5)) ||
-                    parseFloat(ns.getServerSecurityLevel(target).toFixed(5)) != ns.getServerMinSecurityLevel(target)
-                ) {
-                    await prepareServer(ns, target);
-                }
-                hackThreshold = getHackThreshold(ns, target);
-                ns.tprint(Colors.E_ORANGE + "hackThreshold: " + hackThreshold);
-
-                if (
-                    ns.getServerMaxMoney(target) == parseFloat(ns.getServerMoneyAvailable(target).toFixed(5)) ||
-                    parseFloat(ns.getServerSecurityLevel(target).toFixed(5)) == ns.getServerMinSecurityLevel(target)
-                ) {
-                    ns.print(Colors.GREEN + "Preparation finished, starting parallel mode");
-                } else {
-                    ns.tprint(Colors.RED + "Preparation failed");
-                    throw new Error("Preparation failed");
-                }
-
+                hackThreshold = await prepare(ns, target, hackThreshold);
                 lastTarget = target;
             }
 
@@ -70,35 +60,12 @@ export async function main(ns: NS) {
             if (lastTarget !== target) {
                 // ----------------- PREPARE SERVER -----------------
 
-                // prepare when money is not at max or sec lvl is not at min
-                if (
-                    ns.getServerMaxMoney(target) != ns.getServerMoneyAvailable(target) ||
-                    ns.getServerSecurityLevel(target) != ns.getServerMinSecurityLevel(target)
-                ) {
-                    await prepareServer(ns, target);
-                }
-                hackThreshold = getHackThreshold(ns, target);
-                ns.print("hackThreshold: " + hackThreshold);
-
-                if (
-                    ns.getServerMaxMoney(target) == ns.getServerMoneyAvailable(target) &&
-                    ns.getServerSecurityLevel(target) == ns.getServerMinSecurityLevel(target)
-                ) {
-                    ns.print(Colors.GREEN + "Preparation finished, starting parallel mode");
-                } else {
-                    ns.tprint(Colors.RED + "Preparation failed, starting loop mode");
-                    throw new Error("Preparation failed, starting loop mode");
-                }
-
+                hackThreshold = await prepare(ns, target, hackThreshold);
                 lastTarget = target;
             }
             // ----------------- CHECK WHICH MODE TO USE -----------------
 
-            // if (parallelMode) {
             await parallelCycle(ns, target, hackThreshold);
-            // } else {
-            //     await loopCycle(ns, target, hackThreshold);
-            // }
         }
         time.endTime();
         ns.print("Cycle took: " + time.getTime(ns));
@@ -218,4 +185,27 @@ function getHackThreshold(ns: NS, target: string): number {
         }
         ns.print("Threshold is too high, trying with: " + hackThreshold);
     }
+}
+
+async function prepare(ns: NS, target: string, hackThreshold: number) {
+    if (
+        ns.getServerMaxMoney(target) != parseFloat(ns.getServerMoneyAvailable(target).toFixed(5)) ||
+        parseFloat(ns.getServerSecurityLevel(target).toFixed(5)) != ns.getServerMinSecurityLevel(target)
+    ) {
+        await prepareServer(ns, target);
+    }
+    hackThreshold = getHackThreshold(ns, target);
+    ns.tprint(Colors.E_ORANGE + "hackThreshold: " + hackThreshold);
+
+    if (
+        ns.getServerMaxMoney(target) == parseFloat(ns.getServerMoneyAvailable(target).toFixed(5)) ||
+        parseFloat(ns.getServerSecurityLevel(target).toFixed(5)) == ns.getServerMinSecurityLevel(target)
+    ) {
+        ns.print(Colors.GREEN + "Preparation finished, starting parallel mode");
+    } else {
+        ns.tprint(Colors.RED + "Preparation failed");
+        throw new Error("Preparation failed");
+    }
+
+    return hackThreshold;
 }
