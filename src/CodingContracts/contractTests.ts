@@ -1,4 +1,5 @@
 import { NS } from "@ns";
+import { algorithmicStockTraderIII } from "./manager";
 
 function sumCombinations(target: number, current: number[] = [], start = 1, result: number[][] = []) {
     if (target === 0) {
@@ -32,5 +33,5 @@ export async function main(ns: NS) {
     ns.tail();
     ns.disableLog("ALL");
 
-    ns.print(sumCombinations(7)?.filter((arr) => arr.length !== 1));
+    algorithmicStockTraderIII(ns, "", "");
 }

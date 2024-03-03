@@ -22,6 +22,7 @@ export async function main(ns: NS) {
                 case "Find Largest Prime Factor":
                     break;
                 case "Subarray with Maximum Sum":
+                    subarraywithMaximumSum(ns, contract, server);
                     break;
                 case "Total Ways to Sum":
                     totalWaysToSum(ns, contract, server);
@@ -41,12 +42,15 @@ export async function main(ns: NS) {
                 case "Algorithmic Stock Trader I":
                     break;
                 case "Algorithmic Stock Trader II":
+                    algorithmicStockTraderII(ns, contract, server);
                     break;
                 case "Algorithmic Stock Trader III":
+                    algorithmicStockTraderIII(ns, contract, server);
                     break;
                 case "Algorithmic Stock Trader IV":
                     break;
                 case "Minimum Path Sum in a Triangle":
+                    minimumPathSumInATriangle(ns, contract, server);
                     break;
                 case "Unique Paths in a Grid I":
                     break;
@@ -61,7 +65,6 @@ export async function main(ns: NS) {
                     findAllValidMathExpressions(ns, contract, server);
                     break;
                 case "HammingCodes: Integer to Encoded Binary":
-                    hammingCodesIntegertoEncodedBinary(ns, contract, server);
                     break;
                 case "HammingCodes: Encoded Binary to Integer":
                     break;
@@ -257,6 +260,169 @@ function findAllValidMathExpressions(ns: NS, contract: string, server: string) {
     ns.print(Colors.GREEN + success);
 }
 
-function hammingCodesIntegertoEncodedBinary(ns: NS, contract: string, server: string) {
-    const data = ns.codingcontract.getData(contract, server);
+function algorithmicStockTraderII(ns: NS, contract: string, server: string) {
+    const stockPrice: number[] = ns.codingcontract.getData(contract, server);
+
+    stockPrice.push(0);
+
+    let profit = 0;
+    for (let i = 0; i < stockPrice.length; i++) {
+        if (stockPrice[i] < stockPrice[i + 1]) {
+            profit += stockPrice[i + 1] - stockPrice[i];
+        }
+    }
+
+    profit = Math.max(profit, 0);
+
+    const success = ns.codingcontract.attempt(profit, contract, server);
+
+    if (success === "") {
+        ns.tprint(Colors.RED + "failed to solve contract " + contract + " on server " + server);
+        return;
+    }
+
+    ns.print(Colors.GREEN + success + " from " + contract);
+}
+
+export function algorithmicStockTraderIII(ns: NS, contract: string, server: string) {
+    const stockPrice: number[] = [
+        11, 76, 116, 182, 56, 33, 13, 149, 69, 150, 88, 15, 45, 117, 142, 80, 78, 150, 50, 5, 104, 79, 23, 21, 107, 38,
+        54, 181,
+    ]; //ns.codingcontract.getData(contract, server);
+
+    stockPrice.push(-1);
+
+    // 11,76,116,182,56,33,13,149,69,150,88,15,45,117,142,80,78,150,50,5,104,79,23,21,107,38,54,181
+    //     171               136    81           127           72       99          86        134
+    const maximums: number[] = [];
+
+    let profit = 0;
+    for (let i = 0; i < stockPrice.length; i++) {
+        if (stockPrice[i] < stockPrice[i + 1]) {
+            profit += stockPrice[i + 1] - stockPrice[i];
+        }
+        if (stockPrice[i] > stockPrice[i + 1]) {
+            maximums.push(profit);
+            profit = 0;
+        }
+    }
+
+    // best top 2 profits
+    maximums.sort((a, b) => b - a);
+    const best = maximums.slice(0, 2);
+    const sum = best.reduce((a, b) => a + b, 0);
+    ns.print(Colors.E_ORANGE + sum + " | " + best + " | " + maximums);
+
+    stockPrice.pop();
+    maximums.length = 0;
+    // second method
+    // find two lowest numbers in stockprice, and add them to maximums
+    const min = Math.min(...stockPrice);
+    const minIdx = stockPrice.indexOf(min);
+
+    const secMin = Math.min(...stockPrice.filter((p) => p !== min));
+    const secMinIdx = stockPrice.indexOf(secMin);
+
+    const max = Math.max(...stockPrice);
+    const maxIdx = stockPrice.indexOf(max);
+
+    const secMax = Math.max(...stockPrice.filter((p) => p !== max));
+    const secMaxIdx = stockPrice.indexOf(secMax);
+
+    ns.print(min + " " + minIdx + "|" + secMin + " " + secMinIdx);
+    ns.print(max + " " + maxIdx + "|" + secMax + " " + secMaxIdx);
+
+    if (minIdx < secMinIdx) {
+        if (maxIdx < secMaxIdx) {
+            // match min with max
+            maximums.push(max - min);
+            maximums.push(secMax - secMin);
+            ns.print("here");
+        } else {
+            // match min with max2
+            maximums.push(secMax - min);
+            maximums.push(max - secMin);
+            ns.print("here2");
+        }
+    } else {
+        if (maxIdx < secMaxIdx) {
+            // match min2 with max
+            maximums.push(secMax - min);
+            maximums.push(max - secMin);
+            ns.print("here3");
+        } else {
+            // match min2 with max2
+            maximums.push(secMax - secMin);
+            maximums.push(max - min);
+            ns.print("here4");
+        }
+    }
+    const sum2 = maximums.reduce((a, b) => a + b, 0);
+
+    ns.print(Colors.E_ORANGE + maximums + " | " + sum2);
+
+    const success = ns.codingcontract.attempt(sum, contract, server);
+
+    if (success === "") {
+        ns.tprint(Colors.RED + "failed to solve contract " + contract + " on server " + server);
+        return;
+    }
+
+    ns.print(Colors.GREEN + success + " from " + contract);
+}
+
+function minimumPathSumInATriangle(ns: NS, contract: string, server: string) {
+    const triangle: number[][] = ns.codingcontract.getData(contract, server);
+
+    if (triangle.length === 0) {
+        ns.tprint(Colors.RED + "invalid data for contract " + contract + " on server " + server);
+        return;
+    }
+
+    let pathSum = 0;
+    pathSum += triangle[0][0];
+    let currentCol = 0;
+    for (let i = 0; i < triangle.length; i++) {
+        if (triangle[i + 1] === undefined) break;
+        const possibleMoves = [triangle[i + 1][currentCol], triangle[i + 1][currentCol + 1]];
+
+        if (possibleMoves[0] > possibleMoves[1]) currentCol = currentCol + 1;
+        const move = Math.min(...possibleMoves);
+        pathSum += move;
+    }
+
+    const success = ns.codingcontract.attempt(pathSum, contract, server);
+
+    if (success === "") {
+        ns.tprint(Colors.RED + "failed to solve contract " + contract + " on server " + server);
+        return;
+    }
+
+    ns.print(Colors.GREEN + success);
+}
+
+function subarraywithMaximumSum(ns: NS, contract: string, server: string) {
+    const data: number[] = ns.codingcontract.getData(contract, server);
+
+    if (data.length === 0) {
+        ns.tprint(Colors.RED + "invalid data for contract " + contract + " on server " + server);
+        return;
+    }
+
+    let maxSum = -Infinity;
+    let currentSum = 0;
+
+    for (let i = 0; i < data.length; i++) {
+        currentSum = Math.max(data[i], currentSum + data[i]);
+        maxSum = Math.max(maxSum, currentSum);
+    }
+
+    const success = ns.codingcontract.attempt(maxSum, contract, server);
+
+    if (success === "") {
+        ns.tprint(Colors.RED + "failed to solve contract " + contract + " on server " + server);
+        return;
+    }
+
+    ns.print(Colors.GREEN + success);
 }
