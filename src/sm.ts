@@ -28,7 +28,9 @@ export async function main(ns: NS) {
 
     let isKill = false;
 
-    if (ns.args.length > 1) {
+    let isOverview = false;
+
+    if (ns.args.length > 0) {
         if (ns.args[0] == "-u" && ns.args.length == 3) {
             isUpgrade = true;
             primaryName = ns.args[1].toString();
@@ -54,13 +56,18 @@ export async function main(ns: NS) {
             isKill = true;
             primaryName = ns.args[1].toString();
         }
+        if (ns.args[0] == "-o" && ns.args.length == 1) {
+            isOverview = true;
+        }
     } else {
         ns.tprint(
             "\nusage: sm.js [options]\n\nOptions:" +
                 "\n\t-u <Name> <Ram><G|T|P>" +
                 "\n\t-b <Name> <Ram><G|T|P>" +
-                "\n\t-r <old name> <new name>" +
-                "\n\t-d <server name>",
+                "\n\t-r (<old name> <new name>" +
+                "\n\t-d (delete) <server name>" +
+                "\n\t-k (kill) <server name>" +
+                "\n\t-o (overview)",
         );
         return;
     }
@@ -107,6 +114,14 @@ export async function main(ns: NS) {
     } else if (isKill) {
         ns.tprint("Killing server " + primaryName);
         ns.killall(primaryName);
+    } else if (isOverview) {
+        ns.tail();
+        ns.disableLog("ALL");
+        const servers = ns.getPurchasedServers();
+        for (let i = 0; i < servers.length; i++) {
+            const ramPercent = ns.formatNumber(ns.getServerUsedRam(servers[i]) / ns.getServerMaxRam(servers[i]));
+            ns.print(servers[i] + "\t" + ns.getServerMaxRam(servers[i]) + "GB\t" + ramPercent + "%");
+        }
     } else {
         const playerMoney = ns.getServerMoneyAvailable("home");
         let ramSize = 16;
