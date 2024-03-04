@@ -36,11 +36,7 @@ export class PlayerManager {
         );
 
         if (lvlAfterHack > this.player.skills.hacking) {
-            ns.print(
-                `Hacking level up! Exp: ${this.player.exp.hacking} -> ${
-                    this.player.exp.hacking + totalExpGain
-                } | Lvl: ${this.player.skills.hacking} -> ${lvlAfterHack}`,
-            );
+            ns.print(`Hacking level up! Lvl: ${this.player.skills.hacking} -> ${lvlAfterHack}`);
         }
 
         // set player exp and lvl after hack for simulated player
