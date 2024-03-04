@@ -41,6 +41,7 @@ export async function main(ns: NS) {
                 case "Merge Overlapping Intervals":
                     break;
                 case "Generate IP Addresses":
+                    result = generateIPAddresses(ns, contract, server);
                     break;
                 case "Algorithmic Stock Trader I":
                     break;
@@ -85,6 +86,7 @@ export async function main(ns: NS) {
                 case "Encryption I: Caesar Cipher":
                     break;
                 case "Encryption II: Vigenère Cipher":
+                    result = encryptionII(ns, contract, server);
                     break;
                 default:
                     throw new Error("unknown contract type: " + contractType);
@@ -409,4 +411,52 @@ function uniquePathsInAGridII(ns: NS, contract: string, server: string) {
     }
 
     return obstacleGrid[obstacleGrid.length - 1][obstacleGrid[0].length - 1];
+}
+
+function generateIPAddresses(ns: NS, contract: string, server: string) {
+    const data = ns.codingcontract.getData(contract, server);
+    const ret: string[] = [];
+    for (let a = 1; a <= 3; ++a) {
+        for (let b = 1; b <= 3; ++b) {
+            for (let c = 1; c <= 3; ++c) {
+                for (let d = 1; d <= 3; ++d) {
+                    if (a + b + c + d === data.length) {
+                        const A = parseInt(data.substring(0, a), 10);
+                        const B = parseInt(data.substring(a, a + b), 10);
+                        const C = parseInt(data.substring(a + b, a + b + c), 10);
+                        const D = parseInt(data.substring(a + b + c, a + b + c + d), 10);
+                        if (A <= 255 && B <= 255 && C <= 255 && D <= 255) {
+                            const ip: string = [
+                                A.toString(),
+                                ".",
+                                B.toString(),
+                                ".",
+                                C.toString(),
+                                ".",
+                                D.toString(),
+                            ].join("");
+                            if (ip.length === data.length + 3) {
+                                ret.push(ip);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return ret;
+}
+
+function encryptionII(ns: NS, contract: string, server: string) {
+    const data = ns.codingcontract.getData(contract, server);
+    // build char array, shifting via map and corresponding keyword letter and join to final results
+    const cipher = [...data[0]]
+        .map((a, i) => {
+            return a === " "
+                ? a
+                : String.fromCharCode(((a.charCodeAt(0) - 2 * 65 + data[1].charCodeAt(i % data[1].length)) % 26) + 65);
+        })
+        .join("");
+    return cipher;
 }
