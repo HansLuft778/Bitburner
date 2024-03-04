@@ -210,14 +210,6 @@ function totalWaysToSumII(ns: NS, contract: string, server: string) {
     const target: number = data[0];
     const nums: number[] = data[1];
 
-    /**
-     *  How many different distinct ways can the number 58 be written as a sum of integers contained in the set:
-
-        [2,7,8,9,11,13,14,15,18,19]?
-
-        You may use each integer in the set zero or more times.
-     */
-
     const dp = Array(target + 1).fill(0);
     dp[0] = 1;
 
@@ -276,7 +268,7 @@ function findAllValidMathExpressions(ns: NS, contract: string, server: string) {
                 answers.push(expr);
             }
         } catch (e) {
-            //
+            ns.tprint("Error while solving findAllValidMathExpressions: " + e);
         }
     }
 
@@ -323,15 +315,6 @@ function algorithmicStockTraderIV(ns: NS, contract: string, server: string) {
     const prices: number[] = data[1];
 
     const len = prices.length;
-
-    // if (k > len / 2) {
-    //     let res = 0;
-    //     for (let i = 1; i < len; ++i) {
-    //         res += Math.max(prices[i] - prices[i - 1], 0);
-    //     }
-
-    //     return res;
-    // }
 
     const hold: number[] = [];
     const rele: number[] = [];
