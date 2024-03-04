@@ -60,6 +60,7 @@ export async function main(ns: NS) {
                     result = uniquePathsInAGridI(ns, contract, server);
                     break;
                 case "Unique Paths in a Grid II":
+                    result = uniquePathsInAGridII(ns, contract, server);
                     break;
                 case "Shortest Path in a Grid":
                     result = findShortestPath(ns, contract, server);
@@ -196,8 +197,6 @@ export function totalWaysToSum(ns: NS, contract: string, server: string) {
         return result;
     }
 
-    ns.print(sumCombinations(data));
-
     const res = sumCombinations(data)?.filter((arr) => arr.length !== 1).length;
     if (res === undefined) {
         ns.tprint(Colors.RED + "failed to solve contract " + contract + " on server " + server);
@@ -229,7 +228,6 @@ function totalWaysToSumII(ns: NS, contract: string, server: string) {
     }
 
     const res = dp[target];
-    ns.print(res);
     if (res === undefined) {
         ns.tprint(Colors.RED + "failed to solve contract " + contract + " on server " + server);
         return;
@@ -405,4 +403,27 @@ function uniquePathsInAGridI(ns: NS, contract: string, server: string) {
     }
 
     return currentRow[n - 1];
+}
+
+function uniquePathsInAGridII(ns: NS, contract: string, server: string) {
+    const data = ns.codingcontract.getData(contract, server);
+    const obstacleGrid: number[][] = [];
+    obstacleGrid.length = data.length;
+    for (let i = 0; i < obstacleGrid.length; ++i) {
+        obstacleGrid[i] = data[i].slice();
+    }
+
+    for (let i = 0; i < obstacleGrid.length; i++) {
+        for (let j = 0; j < obstacleGrid[0].length; j++) {
+            if (obstacleGrid[i][j] == 1) {
+                obstacleGrid[i][j] = 0;
+            } else if (i == 0 && j == 0) {
+                obstacleGrid[0][0] = 1;
+            } else {
+                obstacleGrid[i][j] = (i > 0 ? obstacleGrid[i - 1][j] : 0) + (j > 0 ? obstacleGrid[i][j - 1] : 0);
+            }
+        }
+    }
+
+    return obstacleGrid[obstacleGrid.length - 1][obstacleGrid[0].length - 1];
 }
