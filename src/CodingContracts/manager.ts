@@ -107,7 +107,7 @@ export function findShortestPath(ns: NS, contract: string, server: string) {
 
     if (data.length === 0 || data[0][0] === 1 || data[data.length - 1][data[0].length - 1] === 1) {
         ns.print("no solution found");
-        return "";
+        return;
     }
 
     const visited: boolean[][] = Array.from({ length: data.length }, () => Array(data[0].length).fill(false));
