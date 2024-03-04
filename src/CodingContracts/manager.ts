@@ -57,6 +57,7 @@ export async function main(ns: NS) {
                     result = minimumPathSumInATriangle(ns, contract, server);
                     break;
                 case "Unique Paths in a Grid I":
+                    result = uniquePathsInAGridI(ns, contract, server);
                     break;
                 case "Unique Paths in a Grid II":
                     break;
@@ -385,4 +386,23 @@ function subarraywithMaximumSum(ns: NS, contract: string, server: string) {
     }
 
     return maxSum;
+}
+
+function uniquePathsInAGridI(ns: NS, contract: string, server: string) {
+    const data = ns.codingcontract.getData(contract, server);
+    const n: number = data[0]; // Number of rows
+    const m: number = data[1]; // Number of columns
+    const currentRow: number[] = [];
+    currentRow.length = n;
+
+    for (let i = 0; i < n; i++) {
+        currentRow[i] = 1;
+    }
+    for (let row = 1; row < m; row++) {
+        for (let i = 1; i < n; i++) {
+            currentRow[i] += currentRow[i - 1];
+        }
+    }
+
+    return currentRow[n - 1];
 }
