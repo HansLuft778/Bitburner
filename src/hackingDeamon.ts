@@ -10,6 +10,7 @@ import {
     getHackThreadsFormulas,
     getWeakenThreadsAfterGrow,
     getWeakenThreadsAfterHack,
+    isPreparationNeeded,
     writeToPort,
 } from "./lib";
 import { prepareServer } from "./loop/prepareServer";
@@ -19,6 +20,8 @@ import { parallelCycle } from "./parallel/manager";
 export async function main(ns: NS) {
     ns.tail();
     ns.disableLog("ALL");
+
+    ns.getPortHandle(2).clear();
 
     let hackThreshold = 0.5;
     let lastTarget = "";
@@ -43,7 +46,7 @@ export async function main(ns: NS) {
         writeToPort(ns, 1, target);
         ns.print("lastTarget: " + lastTarget + " target: " + target);
         if (ns.fileExists("Formulas.exe", "home")) {
-            if (lastTarget !== target) {
+            if (lastTarget !== target || isPreparationNeeded(ns, target)) {
                 // ----------------- PREPARE SERVER -----------------
                 hackThreshold = await prepare(ns, target, hackThreshold);
                 lastTarget = target;
@@ -197,10 +200,7 @@ function getHackThreshold(ns: NS, target: string) {
 }
 
 export async function prepare(ns: NS, target: string, hackThreshold: number) {
-    if (
-        ns.getServerMaxMoney(target) != parseFloat(ns.getServerMoneyAvailable(target).toFixed(5)) ||
-        parseFloat(ns.getServerSecurityLevel(target).toFixed(5)) != ns.getServerMinSecurityLevel(target)
-    ) {
+    if (isPreparationNeeded(ns, target)) {
         await prepareServer(ns, target);
     }
     hackThreshold = getHackThreshold(ns, target);

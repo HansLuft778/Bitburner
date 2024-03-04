@@ -191,6 +191,17 @@ export function writeToPort(ns: NS, port: number, data: string) {
     }
 }
 
+export function isPreparationNeeded(ns: NS, target: string) {
+    if (
+        ns.getServerMaxMoney(target) != parseFloat(ns.getServerMoneyAvailable(target).toFixed(5)) ||
+        parseFloat(ns.getServerSecurityLevel(target).toFixed(5)) != ns.getServerMinSecurityLevel(target)
+    ) {
+        return true;
+    } else {
+        return false;
+    }
+}
+
 export async function main(ns: NS) {
     ns.tail();
     ns.disableLog("ALL");

@@ -8,6 +8,7 @@ import { WGHAlgorithms } from "./WGHAlgorithms.js";
 import { growServer } from "./growingAlgo.js";
 import { hackServer } from "./hackingAlgo.js";
 import { weakenServer } from "./weakenAlgo.js";
+import { Time } from "@/Time.js";
 
 const DELAY_MARGIN_MS = Config.DELAY_MARGIN_MS;
 
@@ -25,8 +26,7 @@ export async function main(ns: NS) {
         await parallelCycle(ns, target, 0.8);
     }
 }
-// let cycleCounter = 0;
-// let offset = 1;
+
 export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8, num_batches = 1) {
     // const time = Time.getInstance();
 
@@ -37,7 +37,7 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
     if (num_batches > 1) {
         ns.print(Colors.CYAN + "------------ MULTI BATCH MODE ------------");
 
-        num_batches = Math.floor((weakTime - Config.LOOP_SAFETY_MARGIN_MS) / (4 * DELAY_MARGIN_MS));
+        num_batches = Math.floor((Math.floor(weakTime) - Config.LOOP_SAFETY_MARGIN_MS) / (4 * DELAY_MARGIN_MS));
 
         ns.tprint(Colors.E_ORANGE + "num_batches: " + num_batches);
 
@@ -64,8 +64,11 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
 
             // --------------------------------------
             // weak II
+            let isLastWeaken = false;
+            if (batchId === num_batches - 1) isLastWeaken = true;
+
             const weak2delay = 2 * DELAY_MARGIN_MS;
-            const weak2Pid = WGHAlgorithms.weakenServer(ns, target, 2, true, weak2delay);
+            const weak2Pid = WGHAlgorithms.weakenServer(ns, target, 2, true, weak2delay, isLastWeaken);
             pids.push(weak2Pid);
 
             // --------------------------------------
@@ -83,30 +86,19 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
 
             ns.print(Colors.GREEN + "Cycle done. Beginning new cycle.." + Colors.RESET);
 
+            const before = Date.now();
             await ns.sleep(4 * DELAY_MARGIN_MS);
+            const after = Date.now();
+            ns.print("sleep took: " + (after - before) + "ms");
         }
-        // whats happening here is a little hard to explain but ill try my best:
-        // batchDeployTime should be obvious, it is the time it took to deploy all batches
-        // sleepTime is the time we wait, until the next batches can be deployed
-        // offset:
-        // imagine the scenario: first batch is deployed, then we wait for the next batch to be deployed.
-        // When the first batch finishes, we can RAM freed up, so so this is the time we can savely
-        // deploy the next batch.
-        // problem is, when we just wait DELAY_MARGIN_MS long, we start to deploy the next batch in almost
-        // the exact moment when the first batch finishes. This is bad, due to js and timings.
-        // It can happen, that the second batch is deployed, right after grow from the first batch finishe,
-        // meaning there is no money and a high seclvl on the server, which increased the weaken time of
-        // the second batch, which messes up everything in the long run. Thats why we add the offset
-        // for every second batch, so start the second batch in the middle of first batch completions.
 
-        // if (cycleCounter % 2 == 0) offset = DELAY_MARGIN_MS / 2;
-        // else offset = 0;
-
-        // const batchDeployTime = 4 * DELAY_MARGIN_MS * num_batches;
-        const sleepTime = weakTime; // - batchDeployTime + offset;
-
-        await ns.sleep(sleepTime);
-        // cycleCounter++;
+        // await ns.sleep(weakTime + Config.DELAY_MARGIN_MS);
+        ns.print("Waiting for all processes to finish..");
+        const port = ns.getPortHandle(2);
+        await port.nextWrite();
+        const data = port.read();
+        if (data !== "done") throw new Error("Invalid data from port 2 received: " + data);
+        ns.print("All processes finished, beginning new cycle.. " + data);
     } else {
         ns.print(Colors.CYAN + "------------ SINGLE BATCH MODE ------------");
         const weakTime = ns.getWeakenTime(target);

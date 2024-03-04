@@ -37,6 +37,7 @@ export class WGHAlgorithms {
         order: number,
         batchMode: boolean,
         delay = 0,
+        isLastWeaken = false,
         filterNotAllowedHosts = true,
     ): number {
         ns.print("----------------- WEAKEN " + target + " -----------------");
@@ -93,7 +94,7 @@ export class WGHAlgorithms {
             // if threadsRemaining is less than the threadSpace, then we can only dispatch threadsRemaining threads
             const threadsToDispatch = Math.min(threadsRemaining, threadSpace);
 
-            pid = ns.exec("weaken.js", host.name, threadsToDispatch, target, delay);
+            pid = ns.exec("weaken.js", host.name, threadsToDispatch, target, delay, isLastWeaken);
             threadsRemaining -= threadsToDispatch;
             threadsDispatched += threadsToDispatch;
         }
@@ -122,7 +123,7 @@ export class WGHAlgorithms {
 
         if (server === "") return 0;
 
-        pid = ns.exec("weaken.js", server, threadsRemaining, target, delay);
+        pid = ns.exec("weaken.js", server, threadsRemaining, target, delay, isLastWeaken);
         ns.print("Done deploying " + totalWeakenThreadsNeeded + " weaken" + order + " threads on " + server + "!");
         return pid;
     }

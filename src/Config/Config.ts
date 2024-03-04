@@ -62,7 +62,7 @@ export class Config {
      * The amount of time in milliseconds to wait before executing the next loop cycle.
      * Default: 10000 (10 seconds)
      */
-    public static readonly LOOP_SAFETY_MARGIN_MS: number = 500;
+    public static readonly LOOP_SAFETY_MARGIN_MS: number = 10000;
 
     /**
      * The number of batches to use in parallel mode.
