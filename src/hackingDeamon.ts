@@ -1,7 +1,6 @@
 import { NS } from "@ns";
 
 import { Config } from "./Config/Config";
-import { Time } from "./Time";
 import { getBestHostByRamOptimized, getBestServer } from "./bestServer";
 import {
     Colors,
@@ -195,7 +194,7 @@ function getHackThreshold(ns: NS, target: string) {
 
         ns.print(Colors.GREEN + "All simulations passed, hackThreshold: " + hackThreshold);
 
-        return hackThreshold;
+        return Math.round(hackThreshold * 100) / 100;
     }
 }
 
