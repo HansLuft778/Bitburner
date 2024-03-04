@@ -79,6 +79,9 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
                 for (const pid of pids) {
                     ns.kill(pid);
                 }
+                // save previous pids and tell weak2 to skip via port 3
+                const port = ns.getPortHandle(3);
+                port.tryWrite("skip"); // previous PID, so weaken2 knows it has to skip
                 break;
             }
 
@@ -92,13 +95,13 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
             ns.print("sleep took: " + (after - before) + "ms");
         }
 
-        // await ns.sleep(weakTime + Config.DELAY_MARGIN_MS);
-        ns.print("Waiting for all processes to finish..");
-        const port = ns.getPortHandle(2);
-        await port.nextWrite();
-        const data = port.read();
-        if (data !== "done") throw new Error("Invalid data from port 2 received: " + data);
-        ns.print("All processes finished, beginning new cycle.. " + data);
+        await ns.sleep(weakTime + Config.DELAY_MARGIN_MS);
+        // ns.print("Waiting for all processes to finish..");
+        // const port = ns.getPortHandle(2);
+        // await port.nextWrite();
+        // const data = port.read();
+        // if (data !== "done") throw new Error("Invalid data from port 2 received: " + data);
+        // ns.print("All processes finished, beginning new cycle.. " + data);
     } else {
         ns.print(Colors.CYAN + "------------ SINGLE BATCH MODE ------------");
         const weakTime = ns.getWeakenTime(target);
