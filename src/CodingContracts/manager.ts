@@ -37,6 +37,7 @@ export async function main(ns: NS) {
                 case "Array Jumping Game":
                     break;
                 case "Array Jumping Game II":
+                    result = arrayJumpingGameII(ns, contract, server);
                     break;
                 case "Merge Overlapping Intervals":
                     break;
@@ -44,6 +45,7 @@ export async function main(ns: NS) {
                     result = generateIPAddresses(ns, contract, server);
                     break;
                 case "Algorithmic Stock Trader I":
+                    result = algorithmicStockTraderI(ns, contract, server);
                     break;
                 case "Algorithmic Stock Trader II":
                     result = algorithmicStockTraderII(ns, contract, server);
@@ -67,6 +69,7 @@ export async function main(ns: NS) {
                     result = findShortestPath(ns, contract, server);
                     break;
                 case "Sanitize Parentheses in Expression":
+                    result = sanitizeParenthesesInExpression(ns, contract, server);
                     break;
                 case "Find All Valid Math Expressions":
                     result = findAllValidMathExpressions(ns, contract, server);
@@ -74,12 +77,15 @@ export async function main(ns: NS) {
                 case "HammingCodes: Integer to Encoded Binary":
                     break;
                 case "HammingCodes: Encoded Binary to Integer":
+                    result = hmmingCodesEncodeBinaryToInteger(ns, contract, server);
                     break;
                 case "Proper 2-Coloring of a Graph":
                     break;
                 case "Compression I: RLE Compression":
+                    result = compressionI(ns, contract, server);
                     break;
                 case "Compression II: LZ Decompression":
+                    result = compressionII(ns, contract, server);
                     break;
                 case "Compression III: LZ Compression":
                     break;
@@ -97,7 +103,6 @@ export async function main(ns: NS) {
             const success = ns.codingcontract.attempt(result, contract, server);
             if (success === "") {
                 ns.tprint(Colors.RED + `failed to solve contract ${contract} on server ${server}`);
-                throw new Error("failed to solve contract");
             }
 
             ns.print(Colors.GREEN + success);
@@ -277,6 +282,18 @@ function findAllValidMathExpressions(ns: NS, contract: string, server: string) {
     return answers;
 }
 
+function algorithmicStockTraderI(ns: NS, contract: string, server: string) {
+    const data = ns.codingcontract.getData(contract, server);
+    let maxCur = 0;
+    let maxSoFar = 0;
+    for (let i = 1; i < data.length; ++i) {
+        maxCur = Math.max(0, (maxCur += data[i] - data[i - 1]));
+        maxSoFar = Math.max(maxCur, maxSoFar);
+    }
+
+    return maxSoFar.toString();
+}
+
 function algorithmicStockTraderII(ns: NS, contract: string, server: string) {
     const stockPrice: number[] = ns.codingcontract.getData(contract, server);
 
@@ -341,20 +358,17 @@ function algorithmicStockTraderIV(ns: NS, contract: string, server: string) {
 
 function minimumPathSumInATriangle(ns: NS, contract: string, server: string) {
     const triangle: number[][] = ns.codingcontract.getData(contract, server);
+    ns.print(triangle);
 
-    let pathSum = 0;
-    pathSum += triangle[0][0];
-    let currentCol = 0;
-    for (let i = 0; i < triangle.length; i++) {
-        if (triangle[i + 1] === undefined) break;
-        const possibleMoves = [triangle[i + 1][currentCol], triangle[i + 1][currentCol + 1]];
-
-        if (possibleMoves[0] > possibleMoves[1]) currentCol = currentCol + 1;
-        const move = Math.min(...possibleMoves);
-        pathSum += move;
+    const n: number = triangle.length;
+    const dp: number[] = triangle[n - 1].slice();
+    for (let i = n - 2; i > -1; --i) {
+        for (let j = 0; j < triangle[i].length; ++j) {
+            dp[j] = Math.min(dp[j], dp[j + 1]) + triangle[i][j];
+        }
     }
 
-    return pathSum;
+    return dp[0];
 }
 
 function subarraywithMaximumSum(ns: NS, contract: string, server: string) {
@@ -459,4 +473,205 @@ function encryptionII(ns: NS, contract: string, server: string) {
         })
         .join("");
     return cipher;
+}
+
+function sanitizeParenthesesInExpression(ns: NS, contract: string, server: string) {
+    const data = ns.codingcontract.getData(contract, server);
+    if (typeof data !== "string") throw new Error("solver expected string");
+    let left = 0;
+    let right = 0;
+    const res: string[] = [];
+
+    for (let i = 0; i < data.length; ++i) {
+        if (data[i] === "(") {
+            ++left;
+        } else if (data[i] === ")") {
+            left > 0 ? --left : ++right;
+        }
+    }
+
+    function dfs(
+        pair: number,
+        index: number,
+        left: number,
+        right: number,
+        s: string,
+        solution: string,
+        res: string[],
+    ): void {
+        if (s.length === index) {
+            if (left === 0 && right === 0 && pair === 0) {
+                for (let i = 0; i < res.length; i++) {
+                    if (res[i] === solution) {
+                        return;
+                    }
+                }
+                res.push(solution);
+            }
+            return;
+        }
+
+        if (s[index] === "(") {
+            if (left > 0) {
+                dfs(pair, index + 1, left - 1, right, s, solution, res);
+            }
+            dfs(pair + 1, index + 1, left, right, s, solution + s[index], res);
+        } else if (s[index] === ")") {
+            if (right > 0) dfs(pair, index + 1, left, right - 1, s, solution, res);
+            if (pair > 0) dfs(pair - 1, index + 1, left, right, s, solution + s[index], res);
+        } else {
+            dfs(pair, index + 1, left, right, s, solution + s[index], res);
+        }
+    }
+
+    dfs(0, 0, left, right, data, "", res);
+
+    return res;
+}
+
+function compressionI(ns: NS, contract: string, server: string) {
+    const data = ns.codingcontract.getData(contract, server);
+    if (typeof data !== "string") throw new Error("solver expected string");
+
+    let pos = 0;
+    let i = 1;
+    const length = data.length;
+    let compression = "";
+
+    // go through each letter
+    while (pos < length) {
+        // Check each letter to see if it matches the next
+        if (data.charAt(pos) == data.charAt(pos + 1)) {
+            // add a position increase for that letter
+            i++;
+        } else {
+            // check if there are more than 10 iterations
+            if (i > 9) {
+                // How many 9's
+                const split = Math.floor(i / 9);
+                for (let n = 0; n < split; n++) {
+                    compression += "9" + data.charAt(pos);
+                }
+                //Add the remaining number left
+                compression += i - split * 9 + data.charAt(pos);
+            } else {
+                // if the next letter doesn't match then we need to write out to the compression string
+                compression += i + data.charAt(pos);
+            }
+            i = 1;
+        }
+        pos++;
+    }
+    return compression;
+}
+
+function compressionII(ns: NS, contract: string, server: string) {
+    const compr = ns.codingcontract.getData(contract, server);
+
+    let plain = "";
+
+    for (let i = 0; i < compr.length; ) {
+        const literal_length = compr.charCodeAt(i) - 0x30;
+
+        if (literal_length < 0 || literal_length > 9 || i + 1 + literal_length > compr.length) {
+            return null;
+        }
+
+        plain += compr.substring(i + 1, i + 1 + literal_length);
+        i += 1 + literal_length;
+
+        if (i >= compr.length) {
+            break;
+        }
+        const backref_length = compr.charCodeAt(i) - 0x30;
+
+        if (backref_length < 0 || backref_length > 9) {
+            return null;
+        } else if (backref_length === 0) {
+            ++i;
+        } else {
+            if (i + 1 >= compr.length) {
+                return null;
+            }
+
+            const backref_offset = compr.charCodeAt(i + 1) - 0x30;
+            if ((backref_length > 0 && (backref_offset < 1 || backref_offset > 9)) || backref_offset > plain.length) {
+                return null;
+            }
+
+            for (let j = 0; j < backref_length; ++j) {
+                plain += plain[plain.length - backref_offset];
+            }
+
+            i += 2;
+        }
+    }
+
+    return plain;
+}
+
+function hmmingCodesEncodeBinaryToInteger(ns: NS, contract: string, server: string) {
+    const data = ns.codingcontract.getData(contract, server);
+    if (typeof data !== "string") throw new Error("solver expected string");
+
+    let err = 0;
+    const bits: number[] = [];
+
+    /* TODO why not just work with an array of digits from the start? */
+    for (const i in data.split("")) {
+        const bit = parseInt(data[i]);
+        bits[i] = bit;
+
+        if (bit) {
+            err ^= +i;
+        }
+    }
+
+    /* If err != 0 then it spells out the index of the bit that was flipped */
+    if (err) {
+        /* Flip to correct */
+        bits[err] = bits[err] ? 0 : 1;
+    }
+
+    /* Now we have to read the message, bit 0 is unused (it's the overall parity bit
+     * which we don't care about). Each bit at an index that is a power of 2 is
+     * a parity bit and not part of the actual message. */
+
+    let ans = "";
+
+    for (let i = 1; i < bits.length; i++) {
+        /* i is not a power of two so it's not a parity bit */
+        if ((i & (i - 1)) != 0) {
+            ans += bits[i];
+        }
+    }
+
+    /* TODO to avoid ambiguity about endianness why not let the player return the extracted (and corrected)
+     * data bits, rather than guessing at how to convert it to a decimal string? */
+    return parseInt(ans, 2);
+}
+
+function arrayJumpingGameII(ns: NS, contract: string, server: string) {
+    const data = ns.codingcontract.getData(contract, server);
+
+    const n: number = data.length;
+    let reach = 0;
+    let jumps = 0;
+    let lastJump = -1;
+    while (reach < n - 1) {
+        let jumpedFrom = -1;
+        for (let i = reach; i > lastJump; i--) {
+            if (i + data[i] > reach) {
+                reach = i + data[i];
+                jumpedFrom = i;
+            }
+        }
+        if (jumpedFrom === -1) {
+            jumps = 0;
+            break;
+        }
+        lastJump = jumpedFrom;
+        jumps++;
+    }
+    return jumps;
 }
