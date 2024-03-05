@@ -13,7 +13,7 @@ export async function main(ns: NS) {
 
         if (contracts.length === 0) continue;
 
-        ns.print(`server ${server} has ${contracts.length} contracts`);
+        ns.print(`server ${server} has ${contracts.length} contract(s)`);
 
         for (const contract of contracts) {
             const contractType = cc.getContractType(contract, server);
