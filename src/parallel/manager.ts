@@ -33,6 +33,9 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
     const growTime = ns.getGrowTime(target);
     const hackTime = ns.getHackTime(target);
 
+    // const weakenDonePort = PortManager.getInstance().getPort(ns);
+    ns.getPortHandle(2).clear();
+
     if (num_batches > 1) {
         ns.print(Colors.CYAN + "------------ MULTI BATCH MODE ------------");
 
@@ -40,6 +43,7 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
 
         ns.tprint(Colors.E_ORANGE + "num_batches: " + num_batches);
 
+        const previousPids: number[] = [];
         for (let batchId = 0; batchId < num_batches; batchId++) {
             ns.print(Colors.CYAN + "------------ BATCH " + batchId + " ------------");
 
@@ -78,29 +82,32 @@ export async function parallelCycle(ns: NS, target: string, hackThreshold = 0.8,
                 for (const pid of pids) {
                     ns.kill(pid);
                 }
-                // save previous pids and tell weak2 to skip via port 3
-                const port = ns.getPortHandle(3);
-                port.tryWrite("skip"); // previous PID, so weaken2 knows it has to skip
+
+                const port = ns.getPortHandle(2); //PortManager.getInstance().getPort(ns); //
+                port.clear();
+                port.write(previousPids[pids.length - 1]); // previous PID, so weaken2 knows it has to skip
                 break;
             }
 
+            previousPids.length = 0;
+            previousPids.push(...pids);
             pids.length = 0;
 
             ns.print(Colors.GREEN + "Cycle done. Beginning new cycle.." + Colors.RESET);
 
-            const before = Date.now();
             await ns.sleep(4 * DELAY_MARGIN_MS);
-            const after = Date.now();
-            ns.print("sleep took: " + (after - before) + "ms");
         }
 
-        await ns.sleep(weakTime + Config.DELAY_MARGIN_MS);
-        // ns.print("Waiting for all processes to finish..");
-        // const port = ns.getPortHandle(2);
-        // await port.nextWrite();
-        // const data = port.read();
-        // if (data !== "done") throw new Error("Invalid data from port 2 received: " + data);
-        // ns.print("All processes finished, beginning new cycle.. " + data);
+        ns.print("Waiting for all processes to finish..");
+        const port = ns.getPortHandle(2);
+        await port.nextWrite();
+        const data = port.read();
+        if (data !== previousPids[previousPids.length - 1])
+            throw new Error(
+                "Invalid data from port 2 received: " + data + " vs " + previousPids[previousPids.length - 1],
+            );
+        port.clear();
+        ns.print("All processes finished, beginning new cycle.. " + data);
     } else {
         ns.print(Colors.CYAN + "------------ SINGLE BATCH MODE ------------");
         const weakTime = ns.getWeakenTime(target);

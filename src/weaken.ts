@@ -5,9 +5,14 @@ export async function main(ns: NS) {
 
     await ns.weaken(ns.args[0], { additionalMsec: ns.args[1] });
 
-    if (ns.args[2] === true) {
+    const port = ns.getPortHandle(2);
+    const data = port.peek();
+    // ns.tprint(data + " | " + ns.pid);
+
+    if (ns.args[2] === true || data === ns.pid) {
+        port.clear();
         ns.atExit(() => {
-            ns.writePort(2, "done");
+            port.write(ns.pid);
         });
     }
 }
