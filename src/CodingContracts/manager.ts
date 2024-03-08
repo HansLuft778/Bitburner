@@ -1,4 +1,5 @@
 import { NS } from "@ns";
+
 import { Colors, serverScanner } from "@/lib";
 
 export async function main(ns: NS) {
@@ -22,6 +23,7 @@ export async function main(ns: NS) {
             let result;
             switch (contractType) {
                 case "Find Largest Prime Factor":
+                    result = findLargestPrimeFactor(ns, contract, server);
                     break;
                 case "Subarray with Maximum Sum":
                     result = subarraywithMaximumSum(ns, contract, server);
@@ -35,11 +37,13 @@ export async function main(ns: NS) {
                 case "Spiralize Matrix":
                     break;
                 case "Array Jumping Game":
+                    result = arrayJumpingGame(ns, contract, server);
                     break;
                 case "Array Jumping Game II":
                     result = arrayJumpingGameII(ns, contract, server);
                     break;
                 case "Merge Overlapping Intervals":
+                    result = mergeOverlappingIntervals(ns, contract, server);
                     break;
                 case "Generate IP Addresses":
                     result = generateIPAddresses(ns, contract, server);
@@ -75,11 +79,13 @@ export async function main(ns: NS) {
                     result = findAllValidMathExpressions(ns, contract, server);
                     break;
                 case "HammingCodes: Integer to Encoded Binary":
+                    result = hmmingCodesEncodeIntegerToBinary(ns, contract, server);
                     break;
                 case "HammingCodes: Encoded Binary to Integer":
                     result = hmmingCodesEncodeBinaryToInteger(ns, contract, server);
                     break;
                 case "Proper 2-Coloring of a Graph":
+                    result = proper2ColoringOfAGraph(ns, contract, server);
                     break;
                 case "Compression I: RLE Compression":
                     result = compressionI(ns, contract, server);
@@ -88,8 +94,10 @@ export async function main(ns: NS) {
                     result = compressionII(ns, contract, server);
                     break;
                 case "Compression III: LZ Compression":
+                    result = compressionIII(ns, contract, server);
                     break;
                 case "Encryption I: Caesar Cipher":
+                    result = encryptionI(ns, contract, server);
                     break;
                 case "Encryption II: Vigenère Cipher":
                     result = encryptionII(ns, contract, server);
@@ -462,6 +470,17 @@ function generateIPAddresses(ns: NS, contract: string, server: string) {
     return ret;
 }
 
+function encryptionI(ns: NS, contract: string, server: string) {
+    const data = ns.codingcontract.getData(contract, server);
+
+    // data = [plaintext, shift value]
+    // build char array, shifting via map and join to final results
+    const cipher = [...data[0]]
+        .map((a) => (a === " " ? a : String.fromCharCode(((a.charCodeAt(0) - 65 - data[1] + 26) % 26) + 65)))
+        .join("");
+    return cipher;
+}
+
 function encryptionII(ns: NS, contract: string, server: string) {
     const data = ns.codingcontract.getData(contract, server);
     // build char array, shifting via map and corresponding keyword letter and join to final results
@@ -610,6 +629,188 @@ function compressionII(ns: NS, contract: string, server: string) {
     return plain;
 }
 
+function compressionIII(ns: NS, contract: string, server: string) {
+    const plain = ns.codingcontract.getData(contract, server);
+    if (typeof plain !== "string") throw new Error("solver expected string");
+
+    // for state[i][j]:
+    //      if i is 0, we're adding a literal of length j
+    //      else, we're adding a backreference of offset i and length j
+    let cur_state: (string | null)[][] = Array.from(Array(10), () => Array(10).fill(null));
+    let new_state: (string | null)[][] = Array.from(Array(10), () => Array(10));
+
+    function set(state: (string | null)[][], i: number, j: number, str: string): void {
+        const current = state[i][j];
+        if (current == null || str.length < current.length) {
+            state[i][j] = str;
+        } else if (str.length === current.length && Math.random() < 0.5) {
+            // if two strings are the same length, pick randomly so that
+            // we generate more possible inputs to Compression II
+            state[i][j] = str;
+        }
+    }
+
+    // initial state is a literal of length 1
+    cur_state[0][1] = "";
+
+    for (let i = 1; i < plain.length; ++i) {
+        for (const row of new_state) {
+            row.fill(null);
+        }
+        const c = plain[i];
+
+        // handle literals
+        for (let length = 1; length <= 9; ++length) {
+            const string = cur_state[0][length];
+            if (string == null) {
+                continue;
+            }
+
+            if (length < 9) {
+                // extend current literal
+                set(new_state, 0, length + 1, string);
+            } else {
+                // start new literal
+                set(new_state, 0, 1, string + "9" + plain.substring(i - 9, i) + "0");
+            }
+
+            for (let offset = 1; offset <= Math.min(9, i); ++offset) {
+                if (plain[i - offset] === c) {
+                    // start new backreference
+                    set(new_state, offset, 1, string + String(length) + plain.substring(i - length, i));
+                }
+            }
+        }
+
+        // handle backreferences
+        for (let offset = 1; offset <= 9; ++offset) {
+            for (let length = 1; length <= 9; ++length) {
+                const string = cur_state[offset][length];
+                if (string == null) {
+                    continue;
+                }
+
+                if (plain[i - offset] === c) {
+                    if (length < 9) {
+                        // extend current backreference
+                        set(new_state, offset, length + 1, string);
+                    } else {
+                        // start new backreference
+                        set(new_state, offset, 1, string + "9" + String(offset) + "0");
+                    }
+                }
+
+                // start new literal
+                set(new_state, 0, 1, string + String(length) + String(offset));
+
+                // end current backreference and start new backreference
+                for (let new_offset = 1; new_offset <= Math.min(9, i); ++new_offset) {
+                    if (plain[i - new_offset] === c) {
+                        set(new_state, new_offset, 1, string + String(length) + String(offset) + "0");
+                    }
+                }
+            }
+        }
+
+        const tmp_state = new_state;
+        new_state = cur_state;
+        cur_state = tmp_state;
+    }
+
+    let result = null;
+
+    for (let len = 1; len <= 9; ++len) {
+        let string = cur_state[0][len];
+        if (string == null) {
+            continue;
+        }
+
+        string += String(len) + plain.substring(plain.length - len, plain.length);
+        if (result == null || string.length < result.length) {
+            result = string;
+        } else if (string.length == result.length && Math.random() < 0.5) {
+            result = string;
+        }
+    }
+
+    for (let offset = 1; offset <= 9; ++offset) {
+        for (let len = 1; len <= 9; ++len) {
+            let string = cur_state[offset][len];
+            if (string == null) {
+                continue;
+            }
+
+            string += String(len) + "" + String(offset);
+            if (result == null || string.length < result.length) {
+                result = string;
+            } else if (string.length == result.length && Math.random() < 0.5) {
+                result = string;
+            }
+        }
+    }
+
+    if (result == null) throw new Error("no result found");
+    return result;
+}
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+function hmmingCodesEncodeIntegerToBinary(ns: NS, contract: string, server: string) {
+    const data = ns.codingcontract.getData(contract, server);
+    if (typeof data !== "number") throw new Error("solver expected number");
+
+    const enc: number[] = [0];
+    const data_bits: any[] = data.toString(2).split("").reverse();
+
+    data_bits.forEach((e, i, a) => {
+        a[i] = parseInt(e);
+    });
+
+    let k = data_bits.length;
+
+    /* NOTE: writing the data like this flips the endianness, this is what the
+     * original implementation by Hedrauta did so I'm keeping it like it was. */
+    for (let i = 1; k > 0; i++) {
+        if ((i & (i - 1)) != 0) {
+            enc[i] = data_bits[--k];
+        } else {
+            enc[i] = 0;
+        }
+    }
+
+    let parity: any = 0;
+    /* Figure out the subsection parities */
+    for (let i = 0; i < enc.length; i++) {
+        if (enc[i]) {
+            parity ^= i;
+        }
+    }
+
+    parity = parity.toString(2).split("").reverse();
+    parity.forEach((e: any, i: any, a: any) => {
+        a[i] = parseInt(e);
+    });
+
+    /* Set the parity bits accordingly */
+    for (let i = 0; i < parity.length; i++) {
+        enc[2 ** i] = parity[i] ? 1 : 0;
+    }
+
+    parity = 0;
+    /* Figure out the overall parity for the entire block */
+    for (let i = 0; i < enc.length; i++) {
+        if (enc[i]) {
+            parity++;
+        }
+    }
+
+    /* Finally set the overall parity bit */
+    enc[0] = parity % 2 == 0 ? 0 : 1;
+
+    return enc.join("");
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 function hmmingCodesEncodeBinaryToInteger(ns: NS, contract: string, server: string) {
     const data = ns.codingcontract.getData(contract, server);
     if (typeof data !== "string") throw new Error("solver expected string");
@@ -651,6 +852,17 @@ function hmmingCodesEncodeBinaryToInteger(ns: NS, contract: string, server: stri
     return parseInt(ans, 2);
 }
 
+function arrayJumpingGame(ns: NS, contract: string, server: string) {
+    const data = ns.codingcontract.getData(contract, server);
+    const n: number = data.length;
+    let i = 0;
+    for (let reach = 0; i < n && i <= reach; ++i) {
+        reach = Math.max(i + data[i], reach);
+    }
+    const solution: boolean = i === n;
+    return solution ? "1" : "0";
+}
+
 function arrayJumpingGameII(ns: NS, contract: string, server: string) {
     const data = ns.codingcontract.getData(contract, server);
 
@@ -674,4 +886,106 @@ function arrayJumpingGameII(ns: NS, contract: string, server: string) {
         jumps++;
     }
     return jumps;
+}
+
+function convert2DArrayToString(arr: unknown[][]): string {
+    const components: string[] = [];
+    arr.forEach((e: unknown) => {
+        let s = String(e);
+        s = ["[", s, "]"].join("");
+        components.push(s);
+    });
+
+    return components.join(",").replace(/\s/g, "");
+}
+
+function mergeOverlappingIntervals(ns: NS, contract: string, server: string) {
+    const data = ns.codingcontract.getData(contract, server);
+
+    const intervals: number[][] = data.slice();
+    intervals.sort((a: number[], b: number[]) => {
+        return a[0] - b[0];
+    });
+
+    const result: number[][] = [];
+    let start: number = intervals[0][0];
+    let end: number = intervals[0][1];
+    for (const interval of intervals) {
+        if (interval[0] <= end) {
+            end = Math.max(end, interval[1]);
+        } else {
+            result.push([start, end]);
+            start = interval[0];
+            end = interval[1];
+        }
+    }
+    result.push([start, end]);
+
+    const sanitizedResult: string = convert2DArrayToString(result);
+    return sanitizedResult;
+}
+
+function proper2ColoringOfAGraph(ns: NS, contract: string, server: string) {
+    const data: [number, [number, number][]] = ns.codingcontract.getData(contract, server);
+
+    //Helper function to get neighbourhood of a vertex
+    function neighbourhood(vertex: unknown) {
+        const adjLeft = data[1].filter(([a]) => a === vertex).map(([, b]) => b);
+        const adjRight = data[1].filter(([, b]) => b === vertex).map(([a]) => a);
+        return adjLeft.concat(adjRight);
+    }
+
+    //Verify that there is no solution by attempting to create a proper 2-coloring.
+    const coloring = Array(data[0]).fill(undefined);
+    while (coloring.some((val) => val === undefined)) {
+        //Color a vertex in the graph
+        const initialVertex = coloring.findIndex((val) => val === undefined);
+        coloring[initialVertex] = 0;
+        const frontier = [initialVertex];
+
+        //Propagate the coloring throughout the component containing v greedily
+        while (frontier.length > 0) {
+            const v = frontier.pop() || 0;
+            const neighbors = neighbourhood(v);
+
+            //For each vertex u adjacent to v
+            for (const id in neighbors) {
+                const u = neighbors[id];
+
+                //Set the color of u to the opposite of v's color if it is new,
+                //then add u to the frontier to continue the algorithm.
+                if (coloring[u] === undefined) {
+                    if (coloring[v] === 0) coloring[u] = 1;
+                    else coloring[u] = 0;
+
+                    frontier.push(u);
+                }
+
+                //Assert u,v do not have the same color
+                else if (coloring[u] === coloring[v]) {
+                    //If u,v do have the same color, no proper 2-coloring exists
+                    return "";
+                }
+            }
+        }
+    }
+
+    //If this code is reached, there exists a proper 2-coloring of the input
+    return coloring;
+}
+
+function findLargestPrimeFactor(ns: NS, contract: string, server: string) {
+    const data = ns.codingcontract.getData(contract, server);
+    if (typeof data !== "number") throw new Error("solver expected number");
+
+    let fac = 2;
+    let n: number = data;
+    while (n > (fac - 1) * (fac - 1)) {
+        while (n % fac === 0) {
+            n = Math.round(n / fac);
+        }
+        ++fac;
+    }
+
+    return n === 1 ? fac - 1 : n;
 }
