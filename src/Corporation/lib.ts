@@ -1,4 +1,4 @@
-import { CorpIndustryData } from "@ns";
+import { CorpIndustryData, NS } from "@ns";
 
 export enum CityName {
     Aevum = "Aevum",
@@ -66,4 +66,10 @@ export function getOptimalBoostMaterialQuantities(
         return result;
     };
     return calculateOptimalQuantities(boostMaterialCoefficients, boostMaterialSizes);
+}
+
+export function buyResourceOnce(ns: NS, divisionName: string, cityName: CityName, resource: string, quantity: number) {
+    const corp = ns.corporation;
+    corp.getCorporation().nextState;
+    corp.buyMaterial(divisionName, cityName, resource, quantity / 10);
 }

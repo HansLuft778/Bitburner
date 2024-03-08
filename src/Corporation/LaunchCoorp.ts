@@ -24,11 +24,11 @@ export async function main(ns: NS) {
         ns.print(div);
     } catch (error) {
         ns.print("Division does not exist, creating...");
-        createDivision(ns, divisionName, "Agriculture");
+        initializeDivision(ns, divisionName, "Agriculture");
     }
 }
 
-function createDivision(ns: NS, divisionName: string, industry: CorpIndustryName) {
+function initializeDivision(ns: NS, divisionName: string, industry: CorpIndustryName) {
     const corp = ns.corporation;
 
     corp.expandIndustry(industry, divisionName);

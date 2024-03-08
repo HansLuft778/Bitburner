@@ -10,8 +10,8 @@ export async function main(ns: NS) {
     const divisions: string[] = ["Lettuce begin", "BASF"];
 
     const COST_PER_EMPOLYEE = 200_000;
-    const ENERGY_THRESHOLD = 95;
-    const MORALE_THRESHOLD = 95;
+    const ENERGY_THRESHOLD = 99;
+    const MORALE_THRESHOLD = 99;
 
     while (true) {
         // const coorp = ns.corporation.getCorporation();
