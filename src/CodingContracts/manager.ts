@@ -35,6 +35,7 @@ export async function main(ns: NS) {
                     result = totalWaysToSumII(ns, contract, server);
                     break;
                 case "Spiralize Matrix":
+                    result = spiralizeMatrix(ns, contract, server);
                     break;
                 case "Array Jumping Game":
                     result = arrayJumpingGame(ns, contract, server);
@@ -120,73 +121,69 @@ export async function main(ns: NS) {
 
 export function findShortestPath(ns: NS, contract: string, server: string) {
     const data: number[][] = ns.codingcontract.getData(contract, server);
+    function findWay(position: number[], end: number[], data: number[][]) {
+        const queue: number[][][] = [];
 
-    if (data.length === 0 || data[0][0] === 1 || data[data.length - 1][data[0].length - 1] === 1) {
-        ns.print("no solution found");
-        return;
-    }
+        data[position[0]][position[1]] = 1;
+        queue.push([position]); // store a path, not just a position
 
-    const visited: boolean[][] = Array.from({ length: data.length }, () => Array(data[0].length).fill(false));
-    const moves: string[] = [""];
-    const min = { length: Number.MAX_SAFE_INTEGER };
-    const currentPath: string[] = [];
+        while (queue.length > 0) {
+            const path = queue.shift(); // get the path out of the queue
+            if (path === undefined) break;
+            const pos = path[path.length - 1]; // ... and then the last position from it
+            const direction = [
+                [pos[0] + 1, pos[1]],
+                [pos[0], pos[1] + 1],
+                [pos[0] - 1, pos[1]],
+                [pos[0], pos[1] - 1],
+            ];
 
-    const startX = 0;
-    const startY = 0;
-    const endX = data.length - 1;
-    const endY = data[0].length - 1;
+            for (let i = 0; i < direction.length; i++) {
+                // Perform this check first:
+                if (direction[i][0] == end[0] && direction[i][1] == end[1]) {
+                    // return the path that led to the find
+                    return path.concat([end]);
+                }
 
-    const directions = {
-        R: [0, 1],
-        L: [0, -1],
-        D: [1, 0],
-        U: [-1, 0],
-    };
+                if (
+                    direction[i][0] < 0 ||
+                    direction[i][0] >= data.length ||
+                    direction[i][1] < 0 ||
+                    direction[i][1] >= data[0].length ||
+                    data[direction[i][0]][direction[i][1]] != 0
+                ) {
+                    continue;
+                }
 
-    function findPath(
-        grid: number[][],
-        visited: boolean[][],
-        i: number,
-        j: number,
-        x: number,
-        y: number,
-        moves: string[],
-        min: { length: number },
-        currentPath: string[],
-        directions: Record<string, number[]>,
-    ) {
-        if (i == x && j == y) {
-            if (currentPath.length < min.length) {
-                min.length = currentPath.length;
-                moves[0] = currentPath.join("");
-            }
-            return;
-        }
-
-        visited[i][j] = true;
-
-        for (const dir in directions) {
-            const [row, col] = directions[dir];
-
-            if (isValid(grid, visited, i + row, j + col)) {
-                currentPath.push(dir);
-                findPath(grid, visited, i + row, j + col, x, y, moves, min, currentPath, directions);
-                currentPath.pop();
+                data[direction[i][0]][direction[i][1]] = 1;
+                // extend and push the path on the queue
+                queue.push(path.concat([direction[i]]));
             }
         }
-
-        visited[i][j] = false;
     }
 
-    function isValid(grid: number[][], visited: boolean[][], row: number, col: number): boolean {
-        return (
-            row >= 0 && row < grid.length && col >= 0 && col < grid[0].length && !visited[row][col] && !grid[row][col]
-        );
+    function annotate(path: number[][]) {
+        // Work through each array to see if we can get to Iteration
+        let currentPosition = [0, 0];
+        let iteration = "";
+
+        // start at the 2nd array
+        for (let i = 1; i < path.length; i++) {
+            // check each array element to see which one changed
+            if (currentPosition[0] < path[i][0]) iteration = iteration + "D";
+            if (currentPosition[0] > path[i][0]) iteration = iteration + "U";
+
+            if (currentPosition[1] < path[i][1]) iteration = iteration + "R";
+            if (currentPosition[1] > path[i][1]) iteration = iteration + "L";
+
+            currentPosition = path[i];
+        }
+
+        return iteration;
     }
-
-    findPath(data, visited, startX, startY, endX, endY, moves, min, currentPath, directions);
-
-    return moves[0];
+    const path = findWay([0, 0], [data.length - 1, data[0].length - 1], data);
+    if (path) return annotate(path);
+    return "";
 }
 
 export function totalWaysToSum(ns: NS, contract: string, server: string) {
@@ -988,4 +985,61 @@ function findLargestPrimeFactor(ns: NS, contract: string, server: string) {
     }
 
     return n === 1 ? fac - 1 : n;
+}
+
+function spiralizeMatrix(ns: NS, contract: string, server: string) {
+    const data: number[][] = ns.codingcontract.getData(contract, server);
+
+    const spiral: number[] = [];
+    const m: number = data.length;
+    const n: number = data[0].length;
+    let u = 0;
+    let d: number = m - 1;
+    let l = 0;
+    let r: number = n - 1;
+    let k = 0;
+    let done = false;
+    while (!done) {
+        // Up
+        for (let col: number = l; col <= r; col++) {
+            spiral[k] = data[u][col];
+            ++k;
+        }
+        if (++u > d) {
+            done = true;
+            continue;
+        }
+
+        // Right
+        for (let row: number = u; row <= d; row++) {
+            spiral[k] = data[row][r];
+            ++k;
+        }
+        if (--r < l) {
+            done = true;
+            continue;
+        }
+
+        // Down
+        for (let col: number = r; col >= l; col--) {
+            spiral[k] = data[d][col];
+            ++k;
+        }
+        if (--d < u) {
+            done = true;
+            continue;
+        }
+
+        // Left
+        for (let row: number = d; row >= u; row--) {
+            spiral[k] = data[row][l];
+            ++k;
+        }
+        if (++l > r) {
+            done = true;
+            continue;
+        }
+    }
+
+    return spiral;
 }
