@@ -27,7 +27,7 @@ export function hackServer(ns: NS, target: string, threshold: number, batchId: n
         }
     }
 
-    ns.print(Colors.YELLOW + "No available host to grow " + target + ". Buying server...");
+    ns.print(Colors.YELLOW + "No available host to hack " + target + ". Buying server...");
 
     const neededGrowRam = totalHackThreadsNeeded * hackingScriptRam;
     const server = ServerManager.buyOrUpgradeServer(ns, neededGrowRam, Config.HACK_SERVER_NAME);

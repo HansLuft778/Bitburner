@@ -40,7 +40,7 @@ export class ServerManager {
 
         const cost = ns.getPurchasedServerCost(desiredRam);
         if (cost > ns.getServerMoneyAvailable("home")) {
-            ns.tprint(
+            ns.print(
                 Colors.RED +
                     "[server Manager] attempted to buy a new server: '" +
                     serverName +
@@ -109,7 +109,6 @@ export class ServerManager {
         }
 
         if (!ns.upgradePurchasedServer(serverName, desiredRam)) {
-            ns.print(Colors.RED + "[server Manager] attempted to upgrade Server, but the upgrade failed");
             return false;
         }
         ns.print(

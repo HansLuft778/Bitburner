@@ -87,8 +87,8 @@ export function getBestServer(ns: NS): string {
 export function getBestHostByRamOptimized(ns: NS): Server[] {
     const allHosts: Server[] = [];
     const allServers = serverScanner(ns);
-    let homeIdx = -1;
-    let home: Server | undefined = undefined;
+    // let homeIdx = -1;
+    // let home: Server | undefined = undefined;
 
     for (let i = 0; i < allServers.length; i++) {
         const server = ns.getServer(allServers[i]);
@@ -104,8 +104,8 @@ export function getBestHostByRamOptimized(ns: NS): Server[] {
         };
         if (serverObj.name === "home") {
             serverObj.availableRam -= Config.HOME_FREE_RAM;
-            homeIdx = i;
-            home = serverObj;
+            // homeIdx = i;
+            // home = serverObj;
         }
         allHosts.push(serverObj);
     }
@@ -115,10 +115,10 @@ export function getBestHostByRamOptimized(ns: NS): Server[] {
         return a.availableRam - b.availableRam;
     });
 
-    if (home !== undefined && homeIdx !== -1) {
-        allHosts.splice(homeIdx, 1);
-        allHosts.unshift(home);
-    }
+    // if (home !== undefined && homeIdx !== -1) {
+    //     allHosts.splice(homeIdx, 1);
+    //     allHosts.unshift(home);
+    // }
 
     return allHosts;
 }

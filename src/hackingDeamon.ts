@@ -84,9 +84,12 @@ function getHackThreshold(ns: NS, target: string) {
         let serverHackThreads = 0;
         let serverGrowThreads = 0;
         if (ns.fileExists("Formulas.exe", "home")) {
+            PlayerManager.getInstance(ns).resetPlayer(ns);
             serverHackThreads = getHackThreadsFormulas(ns, target, hackThreshold);
-
+            PlayerManager.getInstance(ns).addHackingExp(ns, target, serverHackThreads);
             serverGrowThreads = getGrowThreadsFormulas(ns, target, serverHackThreads);
+            PlayerManager.getInstance(ns).addHackingExp(ns, target, serverGrowThreads);
+            PlayerManager.getInstance(ns).resetPlayer(ns);
         } else {
             const hackAmount = ns.getServerMaxMoney(target) * hackThreshold;
             serverHackThreads = Math.ceil(ns.hackAnalyzeThreads(target, hackAmount));
@@ -97,24 +100,39 @@ function getHackThreshold(ns: NS, target: string) {
 
         const secondWeakenThreads = getWeakenThreadsAfterGrow(ns, serverGrowThreads);
 
+        ns.print(
+            "serverHackThreads: " +
+                serverHackThreads +
+                " serverGrowThreads: " +
+                serverGrowThreads +
+                " firstWeakenThreads: " +
+                firstWeakenThreads +
+                " secondWeakenThreads: " +
+                secondWeakenThreads,
+        );
+
         const allHosts = getBestHostByRamOptimized(ns);
         // ----------------- Simulate hack -----------------
         let hackDeployed = false;
         for (let i = 0; i < allHosts.length; i++) {
-            const host = allHosts[i];
-            if (host.name.includes(Config.WEAK_SERVER_NAME) || host.name.includes(Config.GROW_SERVER_NAME)) continue;
+            // const host = allHosts[i];
+            if (
+                allHosts[i].name.includes(Config.WEAK_SERVER_NAME) ||
+                allHosts[i].name.includes(Config.GROW_SERVER_NAME)
+            )
+                continue;
 
-            const maxThreadsOnHost = Math.floor(host.availableRam / hackingScriptRam);
+            const maxThreadsOnHost = Math.floor(allHosts[i].availableRam / hackingScriptRam);
 
             if (maxThreadsOnHost >= serverHackThreads) {
-                host.availableRam -= serverHackThreads * hackingScriptRam;
+                allHosts[i].availableRam -= serverHackThreads * hackingScriptRam;
                 hackDeployed = true;
                 break;
             }
         }
 
         if (!hackDeployed) {
-            hackThreshold -= THRESHOLD_STEP;
+            hackThreshold = parseFloat((hackThreshold - THRESHOLD_STEP).toFixed(2));
             ns.print("Threshold too high, decreasing to: " + hackThreshold);
             continue;
         }
@@ -125,23 +143,27 @@ function getHackThreshold(ns: NS, target: string) {
         let threadsRemaining = firstWeakenThreads;
         for (let i = 0; i < allHosts.length; i++) {
             if (threadsDispatched >= firstWeakenThreads) break;
-            const host = allHosts[i];
-            if (host.name.includes(Config.GROW_SERVER_NAME) || host.name.includes(Config.HACK_SERVER_NAME)) continue;
+            // const host = allHosts[i];
+            if (
+                allHosts[i].name.includes(Config.GROW_SERVER_NAME) ||
+                allHosts[i].name.includes(Config.HACK_SERVER_NAME)
+            )
+                continue;
 
-            const freeRam = host.availableRam;
+            const freeRam = allHosts[i].availableRam;
             if (freeRam < weakenScriptRam) continue;
             const threadSpace = Math.floor(freeRam / weakenScriptRam);
 
             const threadsToDispatch = Math.min(threadsRemaining, threadSpace);
 
             // simulate weaken
-            host.availableRam -= threadsToDispatch * weakenScriptRam;
+            allHosts[i].availableRam -= threadsToDispatch * weakenScriptRam;
             threadsRemaining -= threadsToDispatch;
             threadsDispatched += threadsToDispatch;
         }
 
         if (threadsRemaining > 0) {
-            hackThreshold -= THRESHOLD_STEP;
+            hackThreshold = parseFloat((hackThreshold - THRESHOLD_STEP).toFixed(2));
             ns.print("Threshold too high, decreasing to: " + hackThreshold);
             continue;
         }
@@ -149,19 +171,24 @@ function getHackThreshold(ns: NS, target: string) {
         // ----------------- Simulate grow -----------------
         let growDeployed = false;
         for (let i = 0; i < allHosts.length; i++) {
-            const host = allHosts[i];
-            if (host.name.includes(Config.WEAK_SERVER_NAME) || host.name.includes(Config.HACK_SERVER_NAME)) continue;
+            // const host = allHosts[i];
+            if (
+                allHosts[i].name.includes(Config.WEAK_SERVER_NAME) ||
+                allHosts[i].name.includes(Config.HACK_SERVER_NAME)
+            )
+                continue;
 
-            const maxThreadsOnHost = Math.floor(host.availableRam / growingScriptRam);
-
+            const maxThreadsOnHost = Math.floor(allHosts[i].availableRam / growingScriptRam);
+            // ns.print("maxThreadsOnHost: " + maxThreadsOnHost + " serverGrowThreads: " + serverGrowThreads);
             if (maxThreadsOnHost >= serverGrowThreads) {
-                host.availableRam -= serverGrowThreads * growingScriptRam;
+                allHosts[i].availableRam -= serverGrowThreads * growingScriptRam;
                 growDeployed = true;
+                // ns.print("HERE");
             }
         }
 
         if (!growDeployed) {
-            hackThreshold -= THRESHOLD_STEP;
+            hackThreshold = parseFloat((hackThreshold - THRESHOLD_STEP).toFixed(2));
             ns.print("Threshold too high, decreasing to: " + hackThreshold);
             continue;
         }
@@ -171,30 +198,36 @@ function getHackThreshold(ns: NS, target: string) {
         threadsRemaining = secondWeakenThreads;
         for (let i = 0; i < allHosts.length; i++) {
             if (threadsDispatched >= secondWeakenThreads) break;
-            const host = allHosts[i];
-            if (host.name.includes(Config.GROW_SERVER_NAME) || host.name.includes(Config.HACK_SERVER_NAME)) continue;
+            // const host = allHosts[i];
+            if (
+                allHosts[i].name.includes(Config.GROW_SERVER_NAME) ||
+                allHosts[i].name.includes(Config.HACK_SERVER_NAME)
+            )
+                continue;
 
-            const freeRam = host.availableRam;
+            const freeRam = allHosts[i].availableRam;
             if (freeRam < weakenScriptRam) continue;
             const threadSpace = Math.floor(freeRam / weakenScriptRam);
 
             const threadsToDispatch = Math.min(threadsRemaining, threadSpace);
 
             // simulate weaken
-            host.availableRam -= threadsToDispatch * weakenScriptRam;
+            allHosts[i].availableRam -= threadsToDispatch * weakenScriptRam;
             threadsRemaining -= threadsToDispatch;
             threadsDispatched += threadsToDispatch;
         }
 
         if (threadsRemaining > 0) {
-            hackThreshold -= THRESHOLD_STEP;
+            hackThreshold = parseFloat((hackThreshold - THRESHOLD_STEP).toFixed(2));
             ns.print("Threshold too high, decreasing to: " + hackThreshold);
             continue;
         }
 
         ns.print(Colors.GREEN + "All simulations passed, hackThreshold: " + hackThreshold);
 
-        return Math.round(hackThreshold * 100) / 100;
+        ns.print(allHosts.map((host) => host.name + " " + host.availableRam).join("\n"));
+
+        return hackThreshold;
     }
 }
 

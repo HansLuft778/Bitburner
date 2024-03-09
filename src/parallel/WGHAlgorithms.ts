@@ -173,9 +173,7 @@ export class WGHAlgorithms {
 
         for (let i = 0; i < allHosts.length; i++) {
             const host = allHosts[i];
-
             const maxThreadsOnHost = Math.floor(host.availableRam / growingScriptRam);
-
             if (maxThreadsOnHost >= totalGrowThreadsNeeded) {
                 const pid = ns.exec("grow.js", host.name, totalGrowThreadsNeeded, target, delay);
                 ns.print("Done deploying " + totalGrowThreadsNeeded + " grow threads on " + host.name + "!");
@@ -227,9 +225,7 @@ export class WGHAlgorithms {
 
         for (let i = 0; i < allHosts.length; i++) {
             const host = allHosts[i];
-
             const maxThreadsOnHost = Math.floor(host.availableRam / hackingScriptRam);
-
             if (maxThreadsOnHost >= totalHackThreadsNeeded) {
                 const pid = ns.exec("hack.js", host.name, totalHackThreadsNeeded, target, delay);
                 ns.print("Done deploying " + totalHackThreadsNeeded + " hack threads on " + host.name + "!");
