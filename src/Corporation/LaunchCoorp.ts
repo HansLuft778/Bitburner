@@ -5,10 +5,6 @@ export async function main(ns: NS) {
     ns.tail();
     ns.disableLog("ALL");
     const corp = ns.corporation;
-    // ns.corporation.throwParty();
-    // ns.corporation.buyTea("lettuce begin", "Sector-12");
-
-    // ns.corporation.getCorporation();
 
     if (corp.hasCorporation()) throw new Error("You already have a corporation");
 

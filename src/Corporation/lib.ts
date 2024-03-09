@@ -1,4 +1,4 @@
-import { CorpIndustryData, NS } from "@ns";
+import { CorpIndustryData, CorpIndustryName, CorpMaterialName, NS } from "@ns";
 
 export enum CityName {
     Aevum = "Aevum",
@@ -68,8 +68,46 @@ export function getOptimalBoostMaterialQuantities(
     return calculateOptimalQuantities(boostMaterialCoefficients, boostMaterialSizes);
 }
 
-export function buyResourceOnce(ns: NS, divisionName: string, cityName: CityName, resource: string, quantity: number) {
+export async function buyBoostMaterial(ns: NS, divisionName: string) {
     const corp = ns.corporation;
-    corp.getCorporation().nextState;
-    corp.buyMaterial(divisionName, cityName, resource, quantity / 10);
+
+    const division = corp.getDivision(divisionName);
+
+    const data = corp.getIndustryData(division.type);
+
+    const neededMaterial = getOptimalBoostMaterialQuantities(data, 700);
+    ns.print(neededMaterial);
+
+    const materials: CorpMaterialName[] = ["AI Cores", "Hardware", "Real Estate", "Robots"];
+
+    let state = corp.getCorporation().nextState;
+    // wait for PURCHASE state
+    while (state !== "PURCHASE") {
+        await corp.nextUpdate();
+        state = corp.getCorporation().nextState;
+        ns.print("waiting for PURCHASE, next state: " + state);
+    }
+    ns.print("state: " + state);
+    const cities = division.cities;
+    if (state === "PURCHASE") {
+        for (const city of cities) {
+            for (let i = 0; i < materials.length; i++) {
+                const material = materials[i];
+                const warehouseSpace = corp.getWarehouse(divisionName, city).size * 0.8;
+                const neededMaterial = getOptimalBoostMaterialQuantities(data, warehouseSpace);
+                const storedMaterial = corp.getMaterial(divisionName, city, material).stored;
+                const toBuy = Math.max(neededMaterial[i] - storedMaterial, 0) / 10;
+                ns.print(`Buying ${toBuy}/${neededMaterial[i]} ${material} in ${city}`);
+                corp.buyMaterial(divisionName, city, material, toBuy);
+            }
+        }
+    }
+    await corp.nextUpdate();
+
+    // cancel all orders
+    for (const city of cities) {
+        for (let i = 0; i < materials.length; i++) {
+            corp.buyMaterial(divisionName, city, materials[i], 0);
+        }
+    }
 }
