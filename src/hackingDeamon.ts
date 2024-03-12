@@ -10,6 +10,7 @@ import {
     getWeakenThreadsAfterGrow,
     getWeakenThreadsAfterHack,
     isPreparationNeeded,
+    killWGH,
     writeToPort,
 } from "./lib";
 import { prepareServer } from "./loop/prepareServer";
@@ -19,6 +20,10 @@ import { parallelCycle } from "./parallel/manager";
 export async function main(ns: NS) {
     ns.tail();
     ns.disableLog("ALL");
+
+    // kill all active WGH scripts
+    await ns.sleep(1000);
+    killWGH(ns);
 
     ns.getPortHandle(2).clear();
 
@@ -37,6 +42,10 @@ export async function main(ns: NS) {
             !stockManagerRunning
         )
             ns.exec("Stock/manager.js", "home");
+
+        // start tea/party script if player has corp
+        const teaPartyRunning: boolean = ns.ps().find((p) => p.filename === "Corporation/teaParty.js") !== undefined;
+        if (ns.corporation.hasCorporation() && !teaPartyRunning) ns.exec("Corporation/teaParty.js", "home");
 
         PlayerManager.getInstance(ns).resetPlayer(ns);
 
@@ -74,7 +83,7 @@ function getHackThreshold(ns: NS, target: string) {
     const growingScriptRam = Config.GROW_SCRIPT_RAM;
 
     const THRESHOLD_STEP = Config.THRESHOLD_STEP;
-    let hackThreshold = 0.9;
+    let hackThreshold = 0.7;
 
     if (hackThreshold < Config.MIN_HACK_THRESHOLD) throw new Error("Hack threshold is too low");
 

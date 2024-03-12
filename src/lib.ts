@@ -98,6 +98,19 @@ export function getTimeH(timestamp?: number) {
     return formattedTime;
 }
 
+export function killWGH(ns: NS) {
+    const servers = serverScanner(ns);
+
+    for (const server of servers) {
+        const processes = ns.ps(server);
+        processes.forEach((p) => {
+            if (p.filename == "weaken.js" || p.filename == "grow.js" || p.filename == "hack.js") {
+                ns.kill(p.pid);
+            }
+        });
+    }
+}
+
 export function getGrowThreads(ns: NS, server: string) {
     const serverMaxMoney = ns.getServerMaxMoney(server);
     const serverCurrentMoney = ns.getServerMoneyAvailable(server);
