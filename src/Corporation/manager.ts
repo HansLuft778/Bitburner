@@ -1,5 +1,6 @@
 import { NS } from "@ns";
 import { launchCorp } from "./LaunchCoorp";
+import { Division, initializeDivision } from "./lib";
 
 export async function main(ns: NS) {
     const corp = ns.corporation;
@@ -16,8 +17,7 @@ export async function main(ns: NS) {
     }
 
     if (!hasChemical) {
-        corp.expandIndustry("Chemical", "BASF");
-        if (!res) throw new Error("Failed to expand industry");
+        await initializeDivision(ns, Division.Chemical);
     }
 
     if (corp.getDivision("Lettuce begin") === undefined) {

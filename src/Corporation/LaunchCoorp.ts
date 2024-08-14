@@ -1,5 +1,5 @@
-import { CorpIndustryName, NS } from "@ns";
-import { CityName, buyBoostMaterial, initializeDivision, unemployEveryone } from "./lib";
+import { NS } from "@ns";
+import { Division, initializeDivision } from "./lib";
 
 export async function main(ns: NS) {
     ns.tail();
@@ -13,14 +13,13 @@ export async function main(ns: NS) {
 
     // --------------------- PHASE 1 ---------------------
     // 1. create argi division
-    const divisionName = "Lettuce begin";
     // check if division already exists
     try {
-        const div = ns.corporation.getDivision(divisionName);
+        const div = ns.corporation.getDivision(Division.Agriculture.name);
         ns.print(div);
     } catch (error) {
         ns.print("Division does not exist, creating...");
-        await initializeDivision(ns, divisionName, "Agriculture");
+        await initializeDivision(ns, Division.Agriculture);
     }
 }
 
@@ -32,5 +31,5 @@ export async function launchCorp(ns: NS) {
 
     // --------------------- PHASE 1 ---------------------
     // 1. create argi division
-    await initializeDivision(ns, "Lettuce begin", "Agriculture");
+    await initializeDivision(ns, Division.Agriculture);
 }
