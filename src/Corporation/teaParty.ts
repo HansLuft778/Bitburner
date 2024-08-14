@@ -6,8 +6,8 @@ export async function main(ns: NS) {
     const corp = ns.corporation;
 
     const COST_PER_EMPOLYEE = 200_000;
-    const ENERGY_THRESHOLD = 99;
-    const MORALE_THRESHOLD = 99;
+    const ENERGY_THRESHOLD = 109;
+    const MORALE_THRESHOLD = 109;
 
     let lastState = "SALE";
     while (true) {
