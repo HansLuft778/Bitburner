@@ -281,17 +281,17 @@ export async function developNewProduct(ns: NS) {
         if (id > maxId) maxId = id;
     });
 
-    ns.print(minId);
-    ns.print(maxId);
-
     const newProductName = productBaseName + (maxId + 1);
 
-    ns.corporation.discontinueProduct("Tobacco", productBaseName + minId);
-    ns.corporation.makeProduct("Tobacco", "Sector-12", newProductName, 10000000000000, 10000000000000);
+    if (products.length === division.maxProducts) {
+        ns.corporation.discontinueProduct("Tobacco", productBaseName + minId);
+    }
+    const totalFunds = ns.corporation.getCorporation().funds;
+    ns.print(totalFunds);
+    ns.corporation.makeProduct("Tobacco", "Sector-12", newProductName, totalFunds * 0.01, totalFunds * 0.01);
 
     let developmentProgress = 0;
     while (developmentProgress < 100) {
-        ns.print(developmentProgress);
         await ns.corporation.nextUpdate();
         developmentProgress = ns.corporation.getProduct("Tobacco", "Sector-12", newProductName).developmentProgress;
     }
