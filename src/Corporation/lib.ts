@@ -264,3 +264,38 @@ export async function initializeDivision(ns: NS, type: DivisionType) {
     // 8. buy boost materials
     await buyBoostMaterial(ns, divisionName);
 }
+
+export async function developNewProduct(ns: NS) {
+    const productBaseName = "gorg";
+
+    const division = ns.corporation.getDivision("Tobacco");
+
+    // get next product number
+    const products = division.products;
+
+    let minId = Infinity;
+    let maxId = 0;
+    products.forEach((product) => {
+        const id = parseInt(product.replace(productBaseName, ""));
+        if (id < minId) minId = id;
+        if (id > maxId) maxId = id;
+    });
+
+    ns.print(minId);
+    ns.print(maxId);
+
+    const newProductName = productBaseName + (maxId + 1);
+
+    ns.corporation.discontinueProduct("Tobacco", productBaseName + minId);
+    ns.corporation.makeProduct("Tobacco", "Sector-12", newProductName, 10000000000000, 10000000000000);
+
+    let developmentProgress = 0;
+    while (developmentProgress < 100) {
+        ns.print(developmentProgress);
+        await ns.corporation.nextUpdate();
+        developmentProgress = ns.corporation.getProduct("Tobacco", "Sector-12", newProductName).developmentProgress;
+    }
+
+    ns.corporation.sellProduct("Tobacco", "Sector-12", newProductName, "MAX", "MP", true);
+    ns.corporation.setProductMarketTA2("Tobacco", newProductName, true);
+}
