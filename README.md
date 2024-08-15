@@ -8,7 +8,7 @@ Prerequisites: [Node.js](https://nodejs.org/en/download/)
 
 ```bash
 git clone https://github.com/Tanimodori/viteburner-template.git
-cd viteburner-template
+cd Bitburner
 npm i
 npm run dev
 ```
