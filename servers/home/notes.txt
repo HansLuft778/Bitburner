@@ -1,0 +1,37 @@
+grow being 3.2x hacktime and weaken 4x hacktime
+grow can not safely be distributed, cause:
+    multiple instances cant finish at the same time, effect is calculated at the end, 
+    thus if its spread across multiple instances they'll increase security for one another
+
+https://bitburner.readthedocs.io/en/latest/guidesandtips/recommendedbitnodeorder.html
+
+haack skill level up:
+
+check if batch causes level up
+if it causes level up, change WGH threads accordingly
+
+
+
+weakTime: 44333.426612450436
+Config.LOOP_SAFETY_MARGIN_MS: 10000
+4 * DELAY_MARGIN_MS: 1600
+all: 21.458391632781524
+num_batches: 21
+
+weakTime: 44333.426612450436
+Config.LOOP_SAFETY_MARGIN_MS: 10000
+4 * DELAY_MARGIN_MS: 1600
+all: 21.458391632781524
+num_batches: 21
+
+weakTime: 44210.106927853914
+Config.LOOP_SAFETY_MARGIN_MS: 10000
+4 * DELAY_MARGIN_MS: 1600
+all: 21.381316829908698
+num_batches: 21
+
+weakTime: 44148.70400156523
+Config.LOOP_SAFETY_MARGIN_MS: 10000
+4 * DELAY_MARGIN_MS: 1600
+all: 21.34294000097827
+num_batches: 21
