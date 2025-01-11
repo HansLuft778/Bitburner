@@ -1,25 +1,25 @@
 {
-  "name": "viteburner-template",
-  "version": "0.0.0",
+  "name": "bb-external-editor",
+  "version": "1.1.0",
+  "description": "template for external editors for the game bitburner",
+  "main": "index.js",
   "scripts": {
-    "dev": "viteburner",
-    "lint": "eslint --ext .ts,.js --fix src/",
-    "format": "prettier --write src/**/*.ts"
+    "start": "node ./config.mjs"
   },
-  "author": "Tanimodori",
-  "devDependencies": {
-    "@types/node": "^18.15.3",
-    "@types/react": "^18.2.18",
-    "@types/react-dom": "^18.2.7",
-    "@typescript-eslint/eslint-plugin": "^5.55.0",
-    "@typescript-eslint/parser": "^5.55.0",
-    "eslint": "^8.36.0",
-    "eslint-config-prettier": "^8.7.0",
-    "eslint-plugin-prettier": "^4.2.1",
-    "prettier": "^2.8.8",
-    "typescript": "^4.9.5",
-    "vite": "^4.1.4",
-    "viteburner": "^0.5.3"
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shyguy1412/bb-external-editor.git"
   },
-  "license": "MIT"
+  "author": "Shy",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/shyguy1412/bb-external-editor/issues"
+  },
+  "homepage": "https://github.com/shyguy1412/bb-external-editor#readme",
+  "dependencies": {
+    "@types/react": "^18.3.4",
+    "@types/react-dom": "^18.3.0",
+    "esbuild": "^0.23.1",
+    "esbuild-bitburner-plugin": "^1.6.1"
+  }
 }

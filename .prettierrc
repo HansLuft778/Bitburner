@@ -1,9 +1,5 @@
 {
-  "printWidth": 120,
-  "semi": true,
-  "singleQuote": false,
-  "trailingComma": "all",
-  "proseWrap": "never",
-  "endOfLine": "auto",
-  "tabWidth": 4
+    "trailingComma": "none",
+    "tabWidth": 4,
+    "semi": true
 }

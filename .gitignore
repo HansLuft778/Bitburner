@@ -1,22 +1,3 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# IDE
-.idea/
-.vscode/
-
-# Distributable
-/build
-/dist/
-/playground/dist/
-
-# MacOS folder attributes
-.DS_Store
-
-# Netscript definitions is pulled automatically
-NetScriptDefinitions.d.ts
-
-# https://github.com/github/gitignore/blob/main/Node.gitignore
-
 # Logs
 logs
 *.log
@@ -147,3 +128,14 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# Netscript Type Definitions. These are pulled from the game
+NetscriptDefinitions.d.ts
+
+# Location of the files mirrored from the game
+
+mirror/
+build/
+
+.vscode/*
+!.vscode/launch.json
