@@ -1,28 +1,8 @@
-import { Colors } from "../lib";
-import { StockMarketStats } from "./StockmarketStats";
-
-interface Stock {
-    symbol: string;
-    organization: string;
-    observedMinPrice: number;
-    observedMaxPrice: number;
-    longShares: number;
-    longPrice: number;
-    shortShares: number;
-    shortPrice: number;
-    bidPrice: number;
-    askPrice: number;
-    price: number;
-    previousPrice: number;
-    forecast: number;
-    volatility: number;
-    maxShares: number;
-    profit: number;
-    cost: number;
-    profitPotential: number;
-}
-
-const COMMISSION_FEE = 100_000;
+import { Colors } from "../lib.js";
+import { StockConfig } from "./Config.js";
+import { Stock } from "./model.js";
+import { StockmarketHistory } from "./StockmarketHistory.js";
+import { StockMarketStats } from "./StockmarketStats.js";
 
 function getAllStocks(ns: NS): Stock[] {
     const stocks: Stock[] = [];
@@ -53,7 +33,7 @@ function getAllStocks(ns: NS): Stock[] {
 
         stock.profit =
             stock.longShares * (stock.bidPrice - stock.longPrice) -
-            2 * COMMISSION_FEE;
+            2 * StockConfig.COMMISSION_FEE;
         stock.cost =
             stock.longShares * stock.longPrice +
             stock.shortShares * stock.shortPrice;
@@ -148,6 +128,7 @@ export async function main(ns: NS) {
     const s = ns.stock;
 
     const sms = new StockMarketStats(ns);
+    const smh = new StockmarketHistory(ns);
 
     let initialStocks: Stock[] = loadMarket(ns);
     if (initialStocks.length === 0) {
@@ -157,6 +138,8 @@ export async function main(ns: NS) {
         ns.clearLog();
 
         const stocks: Stock[] = updateStocks(ns, initialStocks);
+
+        smh.updateHistory(ns, stocks);
 
         for (const stock of stocks) {
             if (
@@ -205,7 +188,7 @@ export async function main(ns: NS) {
                 const profit =
                     sellPrice * stock.longShares -
                     stock.longPrice * stock.longShares -
-                    2 * COMMISSION_FEE;
+                    2 * StockConfig.COMMISSION_FEE;
                 stock.longShares = 0;
                 stock.longPrice = 0;
                 sms.addProfit(ns, profit);

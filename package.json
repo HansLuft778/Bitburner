@@ -1,4 +1,5 @@
 {
+  "type": "module",
   "name": "bb-external-editor",
   "version": "1.1.0",
   "description": "template for external editors for the game bitburner",
@@ -19,6 +20,8 @@
   "dependencies": {
     "@types/react": "^18.3.4",
     "@types/react-dom": "^18.3.0",
+    "@cubejs-client/core": "^0.31.0",
+    "chart.js": "^4.4.7",
     "esbuild": "^0.23.1",
     "esbuild-bitburner-plugin": "^1.6.1"
   }
