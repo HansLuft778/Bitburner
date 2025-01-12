@@ -1,4 +1,4 @@
-import { NetscriptPort } from "@/NetscriptDefinitions";
+import { NetscriptPort } from "@/NetscriptDefinitions.js";
 
 interface Port {
     portNumber: number;
