@@ -1,4 +1,4 @@
-import { CorpIndustryData, CorpIndustryName, CorpMaterialName } from "@/NetscriptDefinitions";
+import { CorpIndustryData, CorpIndustryName, CorpMaterialName } from "@/NetscriptDefinitions.js";
 
 export enum CityName {
     Aevum = "Aevum",

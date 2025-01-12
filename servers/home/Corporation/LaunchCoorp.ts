@@ -1,4 +1,4 @@
-import { Division, initializeDivision } from "./lib";
+import { Division, initializeDivision } from "./lib.js";
 
 // debug, run manager.ts
 export async function main(ns: NS) {

@@ -1,6 +1,6 @@
-import { getBestHostByRamOptimized } from "../bestServer";
-import { getHackThreads } from "../lib";
-import { Config } from "../Config/Config";
+import { getBestHostByRamOptimized } from "../bestServer.js";
+import { getHackThreads } from "../lib.js";
+import { Config } from "../Config/Config.js";
 
 export async function main(ns: NS) {
     ns.tail();

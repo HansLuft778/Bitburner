@@ -1,4 +1,4 @@
-import { getOptimalBoostMaterialQuantities } from "./lib";
+import { getOptimalBoostMaterialQuantities } from "./lib.js";
 
 export async function main(ns: NS) {
     ns.tail();

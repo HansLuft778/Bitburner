@@ -1,4 +1,4 @@
-import { developNewProduct } from "./lib";
+import { developNewProduct } from "./lib.js";
 
 export async function main(ns: NS) {
     ns.tail();

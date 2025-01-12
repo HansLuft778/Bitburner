@@ -1,8 +1,8 @@
-import { Config } from "../Config/Config";
-import { Colors, getGrowThreads, getWeakenThreads, getWeakenThreadsAfterGrow, nukeAll } from "../lib";
-import { WGHAlgorithms } from "../parallel/WGHAlgorithms";
-import { printServerStats } from "../serverStats";
-import { getBestHostByRamOptimized } from "../bestServer";
+import { Config } from "../Config/Config.js";
+import { Colors, getGrowThreads, getWeakenThreads, getWeakenThreadsAfterGrow, nukeAll } from "../lib.js";
+import { WGHAlgorithms } from "../parallel/WGHAlgorithms.js";
+import { printServerStats } from "../serverStats.js";
+import { getBestHostByRamOptimized } from "../bestServer.js";
 
 export async function main(ns: NS) {
     ns.tail();

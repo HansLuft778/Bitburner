@@ -1,4 +1,4 @@
-import { PlayerManager } from "./parallel/PlayerManager";
+import { PlayerManager } from "./parallel/PlayerManager.js";
 
 export enum Colors {
     RESET = "\x1b[0m",

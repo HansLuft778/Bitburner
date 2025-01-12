@@ -1,4 +1,4 @@
-import { algorithmicStockTraderIII } from "./manager";
+import { algorithmicStockTraderIII } from "./manager.js";
 
 export function generateSwitchCase(ns: NS) {
     let switchCase = "";

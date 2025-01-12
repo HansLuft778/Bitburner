@@ -1,6 +1,6 @@
-import { Colors } from "./lib";
-import { getBestHostByRamOptimized } from "./bestServer";
-import { Config } from "./Config/Config";
+import { Colors } from "./lib.js";
+import { getBestHostByRamOptimized } from "./bestServer.js";
+import { Config } from "./Config/Config.js";
 
 const BORDER_COLOR = Colors.CYAN;
 

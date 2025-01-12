@@ -1,5 +1,5 @@
-import { launchCorp } from "./LaunchCoorp";
-import { Division, initializeDivision } from "./lib";
+import { launchCorp } from "./LaunchCoorp.js";
+import { Division, initializeDivision } from "./lib.js";
 
 export async function main(ns: NS) {
     const corp = ns.corporation;

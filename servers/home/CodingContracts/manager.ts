@@ -1,5 +1,5 @@
 
-import { Colors, serverScanner } from "../lib";
+import { Colors, serverScanner } from "../lib.js";
 
 export async function main(ns: NS) {
     ns.tail();

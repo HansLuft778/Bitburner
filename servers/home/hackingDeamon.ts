@@ -1,6 +1,6 @@
 
-import { Config } from "./Config/Config";
-import { getBestHostByRamOptimized, getBestServer } from "./bestServer";
+import { Config } from "./Config/Config.js";
+import { getBestHostByRamOptimized, getBestServer } from "./bestServer.js";
 import {
     Colors,
     getGrowThreadsFormulas,
@@ -11,10 +11,10 @@ import {
     isPreparationNeeded,
     killWGH,
     writeToPort,
-} from "./lib";
-import { prepareServer } from "./loop/prepareServer";
-import { PlayerManager } from "./parallel/PlayerManager";
-import { parallelCycle } from "./parallel/manager";
+} from "./lib.js";
+import { prepareServer } from "./loop/prepareServer.js";
+import { PlayerManager } from "./parallel/PlayerManager.js";
+import { parallelCycle } from "./parallel/manager.js";
 
 export async function main(ns: NS) {
     ns.tail();
