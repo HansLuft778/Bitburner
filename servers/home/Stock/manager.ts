@@ -1,4 +1,5 @@
 import { Colors } from "../lib.js";
+import { Table } from "../lib/Table.js";
 import { StockConfig } from "./Config.js";
 import { Stock } from "./model.js";
 import { StockmarketHistory } from "./StockmarketHistory.js";
@@ -129,6 +130,7 @@ export async function main(ns: NS) {
 
     const sms = new StockMarketStats(ns);
     const smh = new StockmarketHistory(ns);
+    const t = new Table(["symbol", "current", "min", "max", "forecast", "trend"], [])
 
     let initialStocks: Stock[] = loadMarket(ns);
     if (initialStocks.length === 0) {
