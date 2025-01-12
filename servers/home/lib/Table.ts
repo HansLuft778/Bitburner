@@ -34,8 +34,6 @@ export class Table {
         if (data.length != 0 && header.length != data[0].length) {
             throw new Error("header and data must have same dimension");
         }
-
-        this.updateColWidth();
     }
 
     private updateColWidth() {
@@ -157,6 +155,8 @@ export class Table {
      * 3. The footer row
      */
     public print(ns: NS) {
+        this.updateColWidth();
+
         const tableHeader = this.generateHeader();
         for (const row of tableHeader) {
             ns.print(row);
@@ -250,7 +250,6 @@ export class Table {
             throw new Error("data dimenstion must match header");
         }
         this.data.push(data);
-        this.updateColWidth();
     }
 }
 
