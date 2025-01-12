@@ -1,10 +1,6 @@
 import { Colors } from "../lib.js";
 
-interface RowOptions {
-    color: Colors;
-}
-
-class Table {
+export class Table {
     private header: string[];
 
     /**
@@ -12,9 +8,7 @@ class Table {
      */
     private data: string[][];
 
-    private colWith: number[] = [];
-
-    private table: string[] = [];
+    private colWidth: number[] = [];
 
     /**
      * Array of format [top left, top right, bottom left, bottom right, line char, t_down, t_up, t_left, t_right, cross]
@@ -33,32 +27,33 @@ class Table {
         cross: "╬"
     };
 
-    constructor(header: string[], data: string[][], dataOptions?: any) {
+    constructor(header: string[], data: string[][]) {
         this.header = header;
         this.data = data;
 
-        if (header.length != data[0].length) {
+        if (data.length != 0 && header.length != data[0].length) {
             throw new Error("header and data must have same dimension");
         }
 
+        this.updateColWidth();
+    }
+
+    private updateColWidth() {
         // find minimum width of each column
-        let colWidth: number[] = Array(header.length).fill(0);
-        for (let i = 0; i < header.length; i++) {
-            colWidth[i] = Math.max(colWidth[i], header[i].length);
+        let colWidth: number[] = Array(this.header.length).fill(0);
+        for (let i = 0; i < this.header.length; i++) {
+            colWidth[i] = Math.max(colWidth[i], this.header[i].length);
         }
 
-        for (let i = 0; i < data.length; i++) {
-            const row = data[i];
+        for (let i = 0; i < this.data.length; i++) {
+            const row = this.data[i];
             for (let j = 0; j < row.length; j++) {
                 const col = row[j];
                 colWidth[j] = Math.max(colWidth[j], col.length);
             }
         }
 
-        this.colWith = colWidth;
-
-        this.table = this.generateHeader();
-        this.table.push(...this.generateBody());
+        this.colWidth = colWidth;
     }
 
     private generateDeviderRow(
@@ -70,7 +65,7 @@ class Table {
         let row: string[] = [leftBorderChar];
         for (let i = 0; i < this.header.length; i++) {
             row.push(
-                Array(this.colWith[i] + 2)
+                Array(this.colWidth[i] + 2)
                     .fill(lineChar)
                     .join("")
             );
@@ -83,8 +78,7 @@ class Table {
 
     private generateTextRow(
         columnSeperatorChar: string,
-        rowData: string[],
-        rowOptions?: RowOptions
+        rowData: string[]
     ): string[] {
         let row: string[] = [];
         for (let i = 0; i < rowData.length; i++) {
@@ -92,13 +86,10 @@ class Table {
                 columnSeperatorChar,
                 " ",
                 rowData[i],
-                Array(Math.abs(this.colWith[i] - rowData[i].length) + 1)
+                Array(Math.abs(this.colWidth[i] - rowData[i].length) + 1)
                     .fill(" ")
                     .join("")
             ];
-            if (rowOptions) {
-                if (rowOptions.color) tmp[2] = rowOptions.color + tmp[2] + Colors.RESET;
-            }
             row.push(tmp.join(""));
         }
 
@@ -148,21 +139,34 @@ class Table {
 
     private generateFooter() {
         // footer
-        this.table.push(
-            this.generateDeviderRow(
-                this.borderChars.bottom_left,
-                this.borderChars.line_h,
-                this.borderChars.t_up,
-                this.borderChars.bottom_right
-            ).join("")
-        );
+        return this.generateDeviderRow(
+            this.borderChars.bottom_left,
+            this.borderChars.line_h,
+            this.borderChars.t_up,
+            this.borderChars.bottom_right
+        ).join("");
     }
 
+    /**
+     * Prints the table to the terminal using the Netscript API
+     * @param {NS} ns - The Netscript API object
+     * @remarks
+     * This method outputs the table in three parts:
+     * 1. The header rows
+     * 2. The body rows
+     * 3. The footer row
+     */
     public print(ns: NS) {
-        this.generateFooter();
-        for (const row of this.table) {
+        const tableHeader = this.generateHeader();
+        for (const row of tableHeader) {
             ns.print(row);
         }
+
+        const tableBody = this.generateBody();
+        for (const row of tableBody) {
+            ns.print(row);
+        }
+        ns.print(this.generateFooter());
     }
 
     /**
@@ -216,6 +220,10 @@ class Table {
         }
     }
 
+    /**
+     * Sets the characters used for drawing table borders and intersections
+     * @param chars - An object containing border characters
+     */
     public setBorderChars(chars: {
         top_left: string;
         top_right: string;
@@ -232,14 +240,17 @@ class Table {
         this.borderChars = chars;
     }
 
-    public addRow(data: string[], rowOptions?: RowOptions) {
-        this.table.push(
-            this.generateTextRow(
-                this.borderChars.line_v,
-                data,
-                rowOptions
-            ).join("")
-        );
+    /**
+     * Adds a new row of data to the table.
+     * @param data An array of strings representing the new data row
+     * @throws {Error} If the length of data array doesn't match the header length
+     */
+    public addRow(data: string[]) {
+        if (data.length != this.header.length) {
+            throw new Error("data dimenstion must match header");
+        }
+        this.data.push(data);
+        this.updateColWidth();
     }
 }
 
@@ -255,10 +266,17 @@ export async function main(ns: NS) {
         ["KGI", "62.8425kasdasdasdasd", "11.510k", "64.359k", "0.406", "↗"]
     ];
 
-    const t = new Table(header, data);
+    const t = new Table(header, []);
     t.setBorderSymbol("=");
-    t.addRow(["JGN", "1.422m", "65.270", "1.797m", "0.855", "u"], {
-        color: Colors.RED
-    });
+    t.addRow(["JGN", "1.422m", "65.270", "1.797m", "0.855", "u"]);
+    t.addRow([
+        "JGN",
+        "1.422mkkkkkkkkkkkkkkkkkkkk",
+        "65.270",
+        "1.797m",
+        "0.855",
+        "u"
+    ]);
+    t.addRow(["a", "b", "", "", "", ""]);
     t.print(ns);
 }
