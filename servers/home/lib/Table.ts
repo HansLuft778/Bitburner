@@ -278,4 +278,9 @@ export async function main(ns: NS) {
     ]);
     t.addRow(["a", "b", "", "", "", ""]);
     t.print(ns);
+
+    const test = "test"
+    const test2 = Colors.E_ORANGE + test
+    ns.print(test.length)
+    ns.print(test2.length)
 }

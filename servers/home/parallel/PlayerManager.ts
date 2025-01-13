@@ -1,4 +1,4 @@
-import { Player } from "@/NetscriptDefinitions";
+import { Player } from "@/NetscriptDefinitions.js";
 
 export class PlayerManager {
     private static instance: PlayerManager;
@@ -32,11 +32,13 @@ export class PlayerManager {
 
         const lvlAfterHack = ns.formulas.skills.calculateSkill(
             this.player.exp.hacking + totalExpGain,
-            this.player.mults.hacking,
+            this.player.mults.hacking
         );
 
         if (lvlAfterHack > this.player.skills.hacking) {
-            ns.print(`Hacking level up! Lvl: ${this.player.skills.hacking} -> ${lvlAfterHack}`);
+            ns.print(
+                `Hacking level up! Lvl: ${this.player.skills.hacking} -> ${lvlAfterHack}`
+            );
         }
 
         // set player exp and lvl after hack for simulated player

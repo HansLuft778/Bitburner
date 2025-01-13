@@ -49,7 +49,7 @@ export class Config {
      * The maximum amount of RAM the daemon should leave free on the Home server.
      * Default: 50
      */
-    public static readonly HOME_FREE_RAM: number = 100;
+    public static readonly HOME_FREE_RAM: number = 512;
 
     /**
      * The delay time in milliseconds.

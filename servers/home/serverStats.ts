@@ -151,7 +151,7 @@ export async function main(ns: NS) {
                 continue;
             }
             const width = printServerStats(ns, server.toString(), 0.9);
-            ns.resizeTail((width - 1) * 10, 375);
+            ns.resizeTail((width - 1) * 11, 375);
             await ns.sleep(Config.DELAY_MARGIN_MS);
         }
     }

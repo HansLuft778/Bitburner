@@ -130,7 +130,6 @@ export async function main(ns: NS) {
 
     const sms = new StockMarketStats(ns);
     const smh = new StockmarketHistory(ns);
-    const t = new Table(["symbol", "current", "min", "max", "forecast", "trend"], [])
 
     let initialStocks: Stock[] = loadMarket(ns);
     if (initialStocks.length === 0) {
@@ -138,6 +137,10 @@ export async function main(ns: NS) {
     }
     while (true) {
         ns.clearLog();
+        const t = new Table(
+            ["symbol", "current", "min", "max", "forecast", "trend", "profit"],
+            []
+        );
 
         const stocks: Stock[] = updateStocks(ns, initialStocks);
 
@@ -204,7 +207,8 @@ export async function main(ns: NS) {
                 logPositions(ns, stock, false, profit);
             }
 
-            const color = stock.longShares > 0 ? Colors.E_ORANGE : "";
+            // const color = stock.longShares > 0 ? Colors.E_ORANGE : "";
+            const color = ""
             const arrow =
                 stock.price > stock.previousPrice
                     ? "↗"
@@ -219,22 +223,34 @@ export async function main(ns: NS) {
                   )}%`
                 : "";
 
-            ns.print(
-                color +
-                    `${stock.symbol}:\t${ns.formatNumber(
-                        stock.price
-                    )} (min: ${ns.formatNumber(
-                        stock.observedMinPrice
-                    )}, max: ${ns.formatNumber(
-                        stock.observedMaxPrice
-                    )})\tforecast: ${ns.formatNumber(
-                        stock.forecast
-                    )} ${arrow} ${profit}`
-            );
+            // ns.print(
+            //     color +
+            //         `${stock.symbol}:\t${ns.formatNumber(
+            //             stock.price
+            //         )} (min: ${ns.formatNumber(
+            //             stock.observedMinPrice
+            //         )}, max: ${ns.formatNumber(
+            //             stock.observedMaxPrice
+            //         )})\tforecast: ${ns.formatNumber(
+            //             stock.forecast
+            //         )} ${arrow} ${profit}`
+            // );
+
+            t.addRow([
+                color + stock.symbol,
+                color + ns.formatNumber(stock.price),
+                color + ns.formatNumber(stock.observedMinPrice),
+                color + ns.formatNumber(stock.observedMaxPrice),
+                color + ns.formatNumber(stock.forecast),
+                color + arrow,
+                color + profit
+            ]);
 
             stock.previousPrice = stock.price;
             initialStocks = stocks;
         }
+        t.print(ns);
+
         const color = sms.profit() < 0 ? Colors.RED : Colors.GREEN;
         ns.print(color + "Total profit: " + ns.formatNumber(sms.profit()));
 

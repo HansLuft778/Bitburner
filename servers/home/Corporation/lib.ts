@@ -1,4 +1,13 @@
-import { CorpIndustryData, CorpIndustryName, CorpMaterialName } from "@/NetscriptDefinitions.js";
+import {
+    CorpIndustryData,
+    CorpIndustryName,
+    CorpMaterialName,
+    Material,
+    Product
+} from "@/NetscriptDefinitions.js";
+import { CorporationState } from "./CorpState.js";
+
+type PartialRecord<K extends string, V> = Partial<Record<K, V>>;
 
 export enum CityName {
     Aevum = "Aevum",
@@ -6,22 +15,23 @@ export enum CityName {
     Sector12 = "Sector-12",
     NewTokyo = "New Tokyo",
     Ishima = "Ishima",
-    Volhaven = "Volhaven",
+    Volhaven = "Volhaven"
 }
 
 enum BoostMaterialsSizes {
     AiCores = 0.1,
     Hardware = 0.06,
     RealEstate = 0.005,
-    Robots = 0.5,
+    Robots = 0.5
 }
 
 export function getOptimalBoostMaterialQuantities(
     industryData: CorpIndustryData,
     spaceConstraint: number,
-    round = true,
+    round = true
 ): number[] {
-    const { aiCoreFactor, hardwareFactor, realEstateFactor, robotFactor } = industryData;
+    const { aiCoreFactor, hardwareFactor, realEstateFactor, robotFactor } =
+        industryData;
     if (
         aiCoreFactor === undefined ||
         hardwareFactor === undefined ||
@@ -30,15 +40,23 @@ export function getOptimalBoostMaterialQuantities(
     ) {
         throw new Error("Industry data is missing factors");
     }
-    const boostMaterialCoefficients = [aiCoreFactor, hardwareFactor, realEstateFactor, robotFactor];
+    const boostMaterialCoefficients = [
+        aiCoreFactor,
+        hardwareFactor,
+        realEstateFactor,
+        robotFactor
+    ];
     const boostMaterialSizes = [
         BoostMaterialsSizes.AiCores,
         BoostMaterialsSizes.Hardware,
         BoostMaterialsSizes.RealEstate,
-        BoostMaterialsSizes.Robots,
+        BoostMaterialsSizes.Robots
     ];
 
-    const calculateOptimalQuantities = (matCoefficients: number[], matSizes: number[]): number[] => {
+    const calculateOptimalQuantities = (
+        matCoefficients: number[],
+        matSizes: number[]
+    ): number[] => {
         const sumOfCoefficients = matCoefficients.reduce((a, b) => a + b, 0);
         const sumOfSizes = matSizes.reduce((a, b) => a + b, 0);
         const result = [];
@@ -46,16 +64,16 @@ export function getOptimalBoostMaterialQuantities(
             let matCount =
                 (spaceConstraint -
                     500 *
-                        ((matSizes[i] / matCoefficients[i]) * (sumOfCoefficients - matCoefficients[i]) -
+                        ((matSizes[i] / matCoefficients[i]) *
+                            (sumOfCoefficients - matCoefficients[i]) -
                             (sumOfSizes - matSizes[i]))) /
                 (sumOfCoefficients / matCoefficients[i]) /
                 matSizes[i];
             if (matCoefficients[i] <= 0 || matCount < 0) {
-                return calculateOptimalQuantities(matCoefficients.toSpliced(i, 1), matSizes.toSpliced(i, 1)).toSpliced(
-                    i,
-                    0,
-                    0,
-                );
+                return calculateOptimalQuantities(
+                    matCoefficients.toSpliced(i, 1),
+                    matSizes.toSpliced(i, 1)
+                ).toSpliced(i, 0, 0);
             } else {
                 if (round) {
                     matCount = Math.round(matCount);
@@ -65,7 +83,10 @@ export function getOptimalBoostMaterialQuantities(
         }
         return result;
     };
-    return calculateOptimalQuantities(boostMaterialCoefficients, boostMaterialSizes);
+    return calculateOptimalQuantities(
+        boostMaterialCoefficients,
+        boostMaterialSizes
+    );
 }
 
 export async function buyBoostMaterial(ns: NS, divisionName: string) {
@@ -75,7 +96,12 @@ export async function buyBoostMaterial(ns: NS, divisionName: string) {
 
     const data = corp.getIndustryData(division.type);
 
-    const materials: CorpMaterialName[] = ["AI Cores", "Hardware", "Real Estate", "Robots"];
+    const materials: CorpMaterialName[] = [
+        "AI Cores",
+        "Hardware",
+        "Real Estate",
+        "Robots"
+    ];
 
     let state = corp.getCorporation().nextState;
     // wait for PURCHASE state
@@ -90,11 +116,22 @@ export async function buyBoostMaterial(ns: NS, divisionName: string) {
         for (const city of cities) {
             for (let i = 0; i < materials.length; i++) {
                 const material = materials[i];
-                const warehouseSpace = corp.getWarehouse(divisionName, city).size * 0.8;
-                const neededMaterial = getOptimalBoostMaterialQuantities(data, warehouseSpace);
-                const storedMaterial = corp.getMaterial(divisionName, city, material).stored;
-                const toBuy = Math.max(neededMaterial[i] - storedMaterial, 0) / 10;
-                ns.print(`Buying ${toBuy}/${neededMaterial[i]} ${material} in ${city}`);
+                const warehouseSpace =
+                    corp.getWarehouse(divisionName, city).size * 0.8;
+                const neededMaterial = getOptimalBoostMaterialQuantities(
+                    data,
+                    warehouseSpace
+                );
+                const storedMaterial = corp.getMaterial(
+                    divisionName,
+                    city,
+                    material
+                ).stored;
+                const toBuy =
+                    Math.max(neededMaterial[i] - storedMaterial, 0) / 10;
+                ns.print(
+                    `Buying ${toBuy}/${neededMaterial[i]} ${material} in ${city}`
+                );
                 corp.buyMaterial(divisionName, city, material, toBuy);
             }
         }
@@ -114,21 +151,21 @@ export class Ratio {
         Operations: 0.037,
         Engineer: 0.513,
         Business: 0.011,
-        Management: 0.44,
+        Management: 0.44
     };
 
     static profitRatio = {
         Operations: 0.032,
         Engineer: 0.462,
         Business: 0.067,
-        Management: 0.439,
+        Management: 0.439
     };
 
     static profitRatioEndgame = {
         Operations: 0.064,
         Engineer: 0.317,
         Business: 0.298,
-        Management: 0.321,
+        Management: 0.321
     };
 }
 
@@ -139,6 +176,7 @@ interface DivisionType {
     totalAdVerts: number;
     warehouseLvl: number;
     smartStorageLvl: number;
+    officeSize: number;
 }
 
 export class Division {
@@ -147,17 +185,19 @@ export class Division {
         industry: "Agriculture",
         minResearch: 55,
         totalAdVerts: 2,
-        warehouseLvl: 4,
-        smartStorageLvl: 3,
+        warehouseLvl: 6,
+        smartStorageLvl: 6,
+        officeSize: 4
     };
 
     static Chemical: DivisionType = {
         name: "BASF",
         industry: "Chemical",
         minResearch: 700,
-        totalAdVerts: 2,
-        warehouseLvl: 6,
-        smartStorageLvl: 9,
+        totalAdVerts: 0,
+        warehouseLvl: 2,
+        smartStorageLvl: 0,
+        officeSize: 3
     };
 }
 
@@ -169,7 +209,12 @@ export function unemployEveryone(ns: NS, divisionName: string, city: CityName) {
     });
 }
 
-export function ChangeEmployeeRatio(ns: NS, divisionName: string, city: CityName, ratio: Ratio) {
+export function ChangeEmployeeRatio(
+    ns: NS,
+    divisionName: string,
+    city: CityName,
+    ratio: Ratio
+) {
     const corp = ns.corporation;
 
     unemployEveryone(ns, divisionName, city);
@@ -177,7 +222,12 @@ export function ChangeEmployeeRatio(ns: NS, divisionName: string, city: CityName
     const employees = office.numEmployees;
 
     Object.entries(ratio).map(([job, ratio]) => {
-        return corp.setAutoJobAssignment(divisionName, city, job, Math.round(employees * ratio));
+        return corp.setAutoJobAssignment(
+            divisionName,
+            city,
+            job,
+            Math.round(employees * ratio)
+        );
     });
 }
 
@@ -190,9 +240,22 @@ export async function initializeDivision(ns: NS, type: DivisionType) {
     // 2. expand division to all cities
     const cities: CityName[] = Object.values(CityName);
     for (const city of cities) {
-        corp.expandCity(divisionName, city);
+        if (city != "Sector-12") corp.expandCity(divisionName, city);
 
-        corp.upgradeOfficeSize(divisionName, city, 4);
+        if (corp.getOffice(type.name, city).size < type.officeSize) {
+            corp.upgradeOfficeSize(
+                divisionName,
+                city,
+                type.officeSize - corp.getOffice(type.name, city).size
+            );
+            ns.print(
+                `upgradeded office size of ${divisionName} in ${city} to ${
+                    corp.getOffice(type.name, city).size
+                }`
+            );
+        }
+
+        corp.purchaseWarehouse(type.name, city);
 
         const office = corp.getOffice(divisionName, city);
         // 3. assign every employees in each city to R&D
@@ -200,13 +263,20 @@ export async function initializeDivision(ns: NS, type: DivisionType) {
             corp.hireEmployee(divisionName, city, "Unassigned");
         }
 
+        ns.print("assigning emloyees to RnD");
         unemployEveryone(ns, divisionName, city);
         Object.entries(office.employeeJobs).map(() => {
-            return corp.setAutoJobAssignment(divisionName, city, "Research & Development", office.size);
+            return corp.setAutoJobAssignment(
+                divisionName,
+                city,
+                "Research & Development",
+                office.size
+            );
         });
     }
 
     // maximize morale and energy
+    ns.print("waiting for energy/morale to improve...");
     while (true) {
         const divisionCities = corp.getDivision(divisionName).cities;
 
@@ -216,11 +286,11 @@ export async function initializeDivision(ns: NS, type: DivisionType) {
             const energy = office.avgEnergy;
             const morale = office.avgMorale;
 
-            if (energy < 0.99) {
+            if (energy < 99) {
                 corp.buyTea(divisionName, city);
                 canStop = false;
             }
-            if (morale < 0.99) {
+            if (morale < 99) {
                 corp.throwParty(divisionName, city, 200_000);
                 canStop = false;
             }
@@ -233,38 +303,70 @@ export async function initializeDivision(ns: NS, type: DivisionType) {
         await ns.corporation.nextUpdate();
     }
 
-    // 4. wait for 30 RP
-    while (corp.getDivision(divisionName).researchPoints < type.minResearch) await corp.nextUpdate();
-
     // 5. buy some adVert
-    while (corp.getHireAdVertCount(divisionName) < type.totalAdVerts) corp.hireAdVert(divisionName);
+    ns.print(`buying ${type.totalAdVerts} adverts`);
+    while (corp.getHireAdVertCount(divisionName) < type.totalAdVerts)
+        corp.hireAdVert(divisionName);
 
-    // 6. upgrade all warehouses to lvl 6 and smart storage to lvl 9
+    // 6. upgrade all warehouses and smart storage
     for (const city of corp.getDivision(divisionName).cities) {
         const lvl = corp.getWarehouse(divisionName, city).level;
         const targetLvl = type.warehouseLvl;
         if (lvl < targetLvl) {
-            for (let i = 0; i < targetLvl - lvl; i++) {
-                corp.upgradeWarehouse(divisionName, city);
-            }
+            corp.upgradeWarehouse(divisionName, city, targetLvl - lvl);
         }
 
         const smartStorageLvl = corp.getUpgradeLevel("Smart Storage");
-        if (smartStorageLvl < type.smartStorageLvl)
+        if (smartStorageLvl < type.smartStorageLvl) {
             for (let i = 0; i < type.smartStorageLvl - smartStorageLvl; i++) {
                 corp.levelUpgrade("Smart Storage");
             }
+        }
     }
 
-    // 7. assign one employee each to: operations, engineer, and business
-    for (const city of cities) {
-        unemployEveryone(ns, divisionName, city);
-        corp.setAutoJobAssignment(divisionName, "Aevum", "Operations", 1);
-        corp.setAutoJobAssignment(divisionName, "Aevum", "Engineer", 1);
-        corp.setAutoJobAssignment(divisionName, "Aevum", "Business", 1);
-        corp.setAutoJobAssignment(divisionName, "Aevum", "Management", 1);
-    }
+    if (type.name == Division.Agriculture.name) {
+        // 7. assign one employee each to: operations, engineer, and business
+        for (const city of cities) {
+            unemployEveryone(ns, divisionName, city);
+            corp.setAutoJobAssignment(divisionName, city, "Operations", 1);
+            corp.setAutoJobAssignment(divisionName, city, "Engineer", 1);
+            corp.setAutoJobAssignment(divisionName, city, "Business", 1);
+            corp.setAutoJobAssignment(divisionName, city, "Management", 1);
+        }
 
+        // sell products
+        // ns.print("configureing Smart Supply... (you will have to start it manually now i guess)");
+        ns.exec("Corporation/smartSupply.js", "home");
+        // if (!corp.hasUnlock("Smart Supply"))
+        //     corp.purchaseUnlock("Smart Supply");
+        for (const city of cities) {
+            corp.sellMaterial(divisionName, city, "Plants", "MAX", "MP");
+            corp.sellMaterial(divisionName, city, "Food", "MAX", "MP");
+            // corp.setSmartSupply(divisionName, city, true);
+        }
+    }
+    if (type.name == Division.Chemical.name) {
+        if (!corp.hasUnlock("Export")) corp.purchaseUnlock("Export");
+        ns.print("Setting up export routes");
+        // Chemicals from Chem to Agri
+        corp.exportMaterial(
+            type.name,
+            "Sector-12",
+            Division.Agriculture.name,
+            "Sector-12",
+            "Chemicals",
+            "(IPROD+IINV/10)*(-1)"
+        );
+        // Plants from Agri to Chem
+        corp.exportMaterial(
+            Division.Agriculture.name,
+            "Sector-12",
+            type.name,
+            "Sector-12",
+            "Plants",
+            "(IPROD+IINV/10)*(-1)"
+        );
+    }
     // 8. buy boost materials
     await buyBoostMaterial(ns, divisionName);
 }
@@ -292,14 +394,413 @@ export async function developNewProduct(ns: NS) {
     }
     const totalFunds = ns.corporation.getCorporation().funds;
     ns.print(totalFunds);
-    ns.corporation.makeProduct("Tobacco", "Sector-12", newProductName, totalFunds * 0.01, totalFunds * 0.01);
+    ns.corporation.makeProduct(
+        "Tobacco",
+        "Sector-12",
+        newProductName,
+        totalFunds * 0.01,
+        totalFunds * 0.01
+    );
 
     let developmentProgress = 0;
     while (developmentProgress < 100) {
         await ns.corporation.nextUpdate();
-        developmentProgress = ns.corporation.getProduct("Tobacco", "Sector-12", newProductName).developmentProgress;
+        developmentProgress = ns.corporation.getProduct(
+            "Tobacco",
+            "Sector-12",
+            newProductName
+        ).developmentProgress;
     }
 
-    ns.corporation.sellProduct("Tobacco", "Sector-12", newProductName, "MAX", "MP", true);
+    ns.corporation.sellProduct(
+        "Tobacco",
+        "Sector-12",
+        newProductName,
+        "MAX",
+        "MP",
+        true
+    );
     ns.corporation.setProductMarketTA2("Tobacco", newProductName, true);
+}
+
+export async function customSmartSupply(
+    ns: NS,
+    divisionName,
+    warehouseCongestionData: Map<string, number>
+) {
+    const corp = ns.corporation;
+    if (corp.getCorporation().nextState != "PURCHASE") return;
+
+    ns.print("custom smart supply");
+
+    for (const divisionName of corp.getCorporation().divisions) {
+        const div = corp.getDivision(divisionName);
+        for (const city of div.cities) {
+            const industryData = corp.getIndustryData(div.type);
+
+            const office = corp.getOffice(divisionName, city);
+
+            while (corp.getCorporation().nextState != "PURCHASE")
+                await corp.nextUpdate();
+
+            // check for warehouse congestion
+            let isCongested = false;
+            if (
+                office.employeeJobs["Research & Development"] !==
+                office.numEmployees
+            )
+                isCongested = detectWarehouseCongestion(
+                    ns,
+                    divisionName,
+                    industryData,
+                    city,
+                    warehouseCongestionData
+                );
+            if (isCongested) return;
+
+            const warehouse = ns.corporation.getWarehouse(divisionName, city);
+            const inputMaterials: PartialRecord<
+                CorpMaterialName,
+                {
+                    requiredQuantity: number;
+                    coefficient: number;
+                }
+            > = {};
+
+            for (const materialName of Object.keys(
+                industryData.requiredMaterials
+            )) {
+                inputMaterials[materialName] = {
+                    requiredQuantity: 0,
+                    coefficient: industryData.requiredMaterials[materialName]
+                };
+            }
+
+            let smartSupplyData =
+                CorporationState.getInstance().getSmartSupplyData();
+            // Find required quantity of input materials to produce material/product
+            for (const inputMaterialData of Object.values(inputMaterials)) {
+                const requiredQuantity =
+                    (smartSupplyData.get(`${divisionName}|${city}`) ?? 0) *
+                    inputMaterialData.coefficient;
+                inputMaterialData.requiredQuantity += requiredQuantity;
+            }
+
+            // Limit the input material units to max number of units that we can store in warehouse's free space
+            for (const materialName of Object.keys(inputMaterials)) {
+                const inputMaterialData = inputMaterials[materialName];
+                const materialData = ns.corporation.getMaterialData(
+                    materialName as CorpMaterialName
+                );
+                const maxAcceptableQuantity = Math.floor(
+                    (warehouse.size - warehouse.sizeUsed) / materialData.size
+                );
+                const limitedRequiredQuantity = Math.min(
+                    inputMaterialData.requiredQuantity,
+                    maxAcceptableQuantity
+                );
+                if (limitedRequiredQuantity > 0) {
+                    inputMaterialData.requiredQuantity =
+                        limitedRequiredQuantity;
+                }
+            }
+
+            // Find which input material creates the least number of output units
+            let leastAmountOfOutputUnits = Number.MAX_VALUE;
+            for (const { requiredQuantity, coefficient } of Object.values(
+                inputMaterials
+            )) {
+                const amountOfOutputUnits = requiredQuantity / coefficient;
+                if (amountOfOutputUnits < leastAmountOfOutputUnits) {
+                    leastAmountOfOutputUnits = amountOfOutputUnits;
+                }
+            }
+
+            // Align all the input materials to the smallest amount
+            for (const inputMaterialData of Object.values(inputMaterials)) {
+                inputMaterialData.requiredQuantity =
+                    leastAmountOfOutputUnits * inputMaterialData.coefficient;
+            }
+
+            // Calculate the total size of all input materials we are trying to buy
+            let requiredSpace = 0;
+            for (const materialName of Object.keys(inputMaterials)) {
+                requiredSpace +=
+                    inputMaterials[materialName].requiredQuantity *
+                    ns.corporation.getMaterialData(
+                        materialName as CorpMaterialName
+                    ).size;
+            }
+
+            // If there is not enough free space, we apply a multiplier to required quantity to not overfill warehouse
+            const freeSpace = warehouse.size - warehouse.sizeUsed;
+            if (requiredSpace > freeSpace) {
+                const constrainedStorageSpaceMultiplier =
+                    freeSpace / requiredSpace;
+                for (const inputMaterialData of Object.values(inputMaterials)) {
+                    inputMaterialData.requiredQuantity = Math.floor(
+                        inputMaterialData.requiredQuantity *
+                            constrainedStorageSpaceMultiplier
+                    );
+                }
+            }
+
+            // Deduct the number of stored input material units from the required quantity
+            for (const materialName of Object.keys(inputMaterials)) {
+                const inputMaterialData = inputMaterials[materialName];
+                const material = ns.corporation.getMaterial(
+                    divisionName,
+                    city,
+                    materialName
+                );
+                inputMaterialData.requiredQuantity = Math.max(
+                    0,
+                    inputMaterialData.requiredQuantity - material.stored
+                );
+            }
+
+            // Buy input materials
+            for (const materialName of Object.keys(inputMaterials)) {
+                ns.corporation.buyMaterial(
+                    divisionName,
+                    city,
+                    materialName,
+                    inputMaterials[materialName].requiredQuantity / 10
+                );
+            }
+        }
+    }
+}
+
+export function setSmartSupplyData(ns: NS): void {
+    // Only set smart supply data after "PURCHASE" state
+    if (ns.corporation.getCorporation().prevState !== "PURCHASE") {
+        return;
+    }
+
+    const corp = ns.corporation;
+    for (const divisionName of corp.getCorporation().divisions) {
+        const div = corp.getDivision(divisionName);
+        for (const city of div.cities) {
+            const division = ns.corporation.getDivision(divisionName);
+            const industrialData = ns.corporation.getIndustryData(
+                division.type
+            );
+            const warehouse = ns.corporation.getWarehouse(division.name, city);
+            let totalRawProduction = 0;
+
+            if (industrialData.makesMaterials) {
+                totalRawProduction += getLimitedRawProduction(
+                    ns,
+                    division.name,
+                    city,
+                    false,
+                    -1
+                );
+            }
+
+            if (industrialData.makesProducts) {
+                for (const productName of division.products) {
+                    const product = ns.corporation.getProduct(
+                        divisionName,
+                        city,
+                        productName
+                    );
+                    if (product.developmentProgress < 100) {
+                        continue;
+                    }
+                    totalRawProduction += getLimitedRawProduction(
+                        ns,
+                        division.name,
+                        city,
+                        true,
+                        product.size
+                    );
+                }
+            }
+            CorporationState.getInstance().setSmartSupplyData(
+                `${divisionName}|${city}`,
+                totalRawProduction
+            );
+        }
+    }
+}
+
+function getRawProduction(
+    ns: NS,
+    divisionName: string,
+    city: CityName,
+    isProduct: boolean
+) {
+    const corp = ns.corporation;
+    const office = corp.getOffice(divisionName, city);
+
+    const OpProduction = office.employeeProductionByJob.Operations;
+    const EngProduction = office.employeeProductionByJob.Engineer;
+    const MngmtProduction = office.employeeProductionByJob.Management;
+
+    const mngmtFactor =
+        1 +
+        MngmtProduction /
+            (1.2 * (OpProduction + EngProduction + MngmtProduction));
+
+    const emplProdMult =
+        (OpProduction ** 0.4 + office.employeeProductionByJob.Engineer ** 0.3) *
+        mngmtFactor;
+
+    let officeMultiplier = 0.05 * emplProdMult;
+    if (isProduct) officeMultiplier *= 0.5;
+
+    let divisionProductionMult = corp.getDivision(divisionName).productionMult;
+
+    let upgradeMult = 1 + corp.getUpgradeLevel("Smart Factories") * 0.03;
+
+    let researchMult = 1;
+    if (corp.hasResearched(divisionName, "Self-Correcting Assemblers"))
+        researchMult *= 1.1;
+    if (corp.hasResearched(divisionName, "Drones - Assembly"))
+        researchMult *= 1.2;
+    if (isProduct && corp.hasResearched(divisionName, "uPgrade: Fulcrum"))
+        researchMult *= 1.05;
+
+    return (
+        officeMultiplier * divisionProductionMult * upgradeMult * researchMult
+    );
+}
+
+function getLimitedRawProduction(
+    ns: NS,
+    divisionName: string,
+    city: CityName,
+    isProduct: boolean,
+    productSize: number
+) {
+    const corp = ns.corporation;
+    const division = corp.getDivision(divisionName);
+
+    let rawProd = getRawProduction(ns, divisionName, city, isProduct) * 10;
+
+    let netStorageSpaceOfOutputUnit: number = 0;
+
+    if (isProduct) netStorageSpaceOfOutputUnit += productSize;
+    else {
+        // add produced material size
+        for (const material of corp.getIndustryData(division.type)
+            .producedMaterials) {
+            netStorageSpaceOfOutputUnit += corp.getMaterialData(material).size;
+        }
+        // subtract input material sizes
+        const required = corp.getIndustryData(division.type).requiredMaterials;
+        Object.keys(required).forEach((material) => {
+            const materialFactor = required[material];
+            netStorageSpaceOfOutputUnit -=
+                materialFactor *
+                corp.getMaterialData(material as CorpMaterialName).size;
+        });
+    }
+
+    const warehouse = corp.getWarehouse(divisionName, city);
+    if (netStorageSpaceOfOutputUnit > 0) {
+        netStorageSpaceOfOutputUnit = Math.floor(
+            (warehouse.size - warehouse.sizeUsed) / netStorageSpaceOfOutputUnit
+        );
+        rawProd = Math.min(netStorageSpaceOfOutputUnit, rawProd);
+    }
+
+    rawProd = Math.max(rawProd, 0);
+    return rawProd;
+}
+
+function detectWarehouseCongestion(
+    ns: NS,
+    divisionName: string,
+    industrialData: CorpIndustryData,
+    city: CityName,
+    warehouseCongestionData: Map<string, number>
+): boolean {
+    const requiredMaterials = industrialData.requiredMaterials;
+    const division = ns.corporation.getDivision(divisionName);
+
+    let isWarehouseCongested = false;
+    const warehouseCongestionDataKey = `${division.name}|${city}`;
+    const items: (Material | Product)[] = [];
+    if (industrialData.producedMaterials) {
+        for (const materialName of industrialData.producedMaterials) {
+            items.push(
+                ns.corporation.getMaterial(division.name, city, materialName)
+            );
+        }
+    }
+    if (industrialData.makesProducts) {
+        for (const productName of division.products) {
+            const product = ns.corporation.getProduct(
+                division.name,
+                city,
+                productName
+            );
+            if (product.developmentProgress < 100) {
+                continue;
+            }
+            items.push(product);
+        }
+    }
+    for (const item of items) {
+        if (item.productionAmount !== 0) {
+            warehouseCongestionData.set(warehouseCongestionDataKey, 0);
+            continue;
+        }
+
+        let numberOfCongestionTimes =
+            warehouseCongestionData.get(warehouseCongestionDataKey)! + 1;
+        if (Number.isNaN(numberOfCongestionTimes)) {
+            numberOfCongestionTimes = 0;
+        }
+        warehouseCongestionData.set(
+            warehouseCongestionDataKey,
+            numberOfCongestionTimes
+        );
+        break;
+    }
+    // If that happens more than 5 times, the warehouse is very likely congested.
+    if (warehouseCongestionData.get(warehouseCongestionDataKey)! > 5) {
+        isWarehouseCongested = true;
+    }
+    // We need to mitigate this situation. Discarding stored input material is the simplest solution.
+    if (isWarehouseCongested) {
+        ns.tprint(
+            `Warehouse may be congested. Division: ${division.name}, city: ${city}.`
+        );
+        for (const materialName of Object.keys(requiredMaterials)) {
+            // Clear purchase
+            ns.corporation.buyMaterial(division.name, city, materialName, 0);
+            // Discard stored input material
+            ns.corporation.sellMaterial(
+                division.name,
+                city,
+                materialName,
+                "MAX",
+                "0"
+            );
+        }
+        warehouseCongestionData.set(warehouseCongestionDataKey, 0);
+    } else {
+        for (const materialName of Object.keys(requiredMaterials)) {
+            const material = ns.corporation.getMaterial(
+                division.name,
+                city,
+                materialName
+            );
+            if (material.desiredSellAmount !== 0) {
+                // Stop discarding input material
+                ns.corporation.sellMaterial(
+                    division.name,
+                    city,
+                    materialName,
+                    "0",
+                    "0"
+                );
+            }
+        }
+    }
+    return isWarehouseCongested;
 }

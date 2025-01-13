@@ -33,5 +33,12 @@ export async function launchCorp(ns: NS) {
 
     // --------------------- PHASE 1 ---------------------
     // 1. create argi division
-    await initializeDivision(ns, Division.Agriculture);
+    try {
+        corp.getDivision(Division.Agriculture.name);
+        ns.print("Agri division exists, assuming its correct lol")
+    } catch (error) {
+        ns.print("no agri division found, creating...");
+        await initializeDivision(ns, Division.Agriculture);
+        ns.print("agri division created!");
+    }
 }

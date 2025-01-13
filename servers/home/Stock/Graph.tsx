@@ -62,7 +62,6 @@ export function LinePlot() {
         // Set up interval for periodic updates
         const intervalId = setInterval(() => {
             const updatedHistory = new StockmarketHistory(ns).getStockHistory();
-            console.log("Updated history:", updatedHistory);
             setStockHistory(updatedHistory);
         }, 1000);
 

@@ -1,12 +1,14 @@
-
 export async function main(ns: NS) {
     ns.tail();
     ns.disableLog("ALL");
+
+    
+
     const corp = ns.corporation;
 
     const COST_PER_EMPOLYEE = 200_000;
-    const ENERGY_THRESHOLD = 109;
-    const MORALE_THRESHOLD = 109;
+    const ENERGY_THRESHOLD = 99;
+    const MORALE_THRESHOLD = 99;
 
     let lastState = "SALE";
     while (true) {
@@ -23,11 +25,16 @@ export async function main(ns: NS) {
                 const office = corp.getOffice(division, city);
                 const energy = office.avgEnergy;
                 const morale = office.avgMorale;
-
-                ns.print(`City: ${city}, Energy: ${ns.formatNumber(energy)}, Morale: ${ns.formatNumber(morale)}`);
+                
+                ns.print(
+                    `City: ${city}, Energy: ${ns.formatNumber(
+                        energy
+                    )}, Morale: ${ns.formatNumber(morale)}`
+                );
 
                 if (energy < ENERGY_THRESHOLD) corp.buyTea(division, city);
-                if (morale < MORALE_THRESHOLD) corp.throwParty(division, city, COST_PER_EMPOLYEE);
+                if (morale < MORALE_THRESHOLD)
+                    corp.throwParty(division, city, COST_PER_EMPOLYEE);
             }
         }
 
