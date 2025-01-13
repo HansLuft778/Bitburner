@@ -1,9 +1,12 @@
+import { CorporationState } from "./CorpState.js";
 import { customSmartSupply, setSmartSupplyData } from "./lib.js";
 
 export async function main(ns: NS) {
     ns.tail();
     ns.clearLog();
     const corp = ns.corporation;
+
+    // CorporationState.getInstance().resetState();
 
     let smartSupplyHasBeenEnabledEverywhere = false;
     const warehouseCongestionData = new Map<string, number>();
@@ -17,7 +20,6 @@ export async function main(ns: NS) {
                     setSmartSupplyData(ns);
                     customSmartSupply(
                         ns,
-                        divisionName,
                         warehouseCongestionData
                     );
                 }
