@@ -26,11 +26,6 @@ export async function main(ns: NS) {
 export async function launchCorp(ns: NS) {
     const corp = ns.corporation;
 
-    // if (!corp.hasCorporation()) {
-    //     const res = corp.createCorporation("Apple", false);
-    //     if (!res) throw new Error("Failed to create corporation");
-    // }
-
     // --------------------- PHASE 1 ---------------------
     // 1. create argi division
     try {

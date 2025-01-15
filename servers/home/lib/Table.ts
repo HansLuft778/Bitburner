@@ -1,3 +1,4 @@
+import { color } from "chart.js/helpers";
 import { Colors } from "../lib.js";
 
 export class Table {
@@ -40,14 +41,17 @@ export class Table {
         // find minimum width of each column
         let colWidth: number[] = Array(this.header.length).fill(0);
         for (let i = 0; i < this.header.length; i++) {
-            colWidth[i] = Math.max(colWidth[i], this.header[i].length);
+            colWidth[i] = Math.max(
+                colWidth[i],
+                cleanStringLength(this.header[i])
+            );
         }
 
         for (let i = 0; i < this.data.length; i++) {
             const row = this.data[i];
             for (let j = 0; j < row.length; j++) {
                 const col = row[j];
-                colWidth[j] = Math.max(colWidth[j], col.length);
+                colWidth[j] = Math.max(colWidth[j], cleanStringLength(col));
             }
         }
 
@@ -84,7 +88,7 @@ export class Table {
                 columnSeperatorChar,
                 " ",
                 rowData[i],
-                Array(Math.abs(this.colWidth[i] - rowData[i].length) + 1)
+                Array(Math.abs(this.colWidth[i] - cleanStringLength(rowData[i])) + 1)
                     .fill(" ")
                     .join("")
             ];
@@ -253,6 +257,12 @@ export class Table {
     }
 }
 
+function cleanStringLength(str: string): number {
+    const ansiRegex = /\x1B\[[0-9;]*m/g;
+    const cleaned = str.replace(ansiRegex, "").replace(/\r?\n/g, "");
+    return cleaned.length;
+}
+
 export async function main(ns: NS) {
     ns.tail();
     ns.clearLog();
@@ -262,15 +272,15 @@ export async function main(ns: NS) {
         ["AERO", "14k", "12k", "23k", "0.555", "u"],
         ["APHE", "14k", "12k", "23k", "0.455", "d"],
         ["JGN", "1.422m", "65.270", "1.797m", "0.855", "u"],
-        ["KGI", "62.8425kasdasdasdasd", "11.510k", "64.359k", "0.406", "↗"]
+        ["KGI", Colors.RED + "62.8425kasdasdasdasd", "11.510k", "64.359k", "0.406", "↗"]
     ];
 
-    const t = new Table(header, []);
+    const t = new Table(header, data);
     t.setBorderSymbol("=");
     t.addRow(["JGN", "1.422m", "65.270", "1.797m", "0.855", "u"]);
     t.addRow([
         "JGN",
-        "1.422mkkkkkkkkkkkkkkkkkkkk",
+        Colors.E_ORANGE + "1.422mkkkkkkkkkkkkkkkkkkkk" + Colors.RESET,
         "65.270",
         "1.797m",
         "0.855",
@@ -279,8 +289,9 @@ export async function main(ns: NS) {
     t.addRow(["a", "b", "", "", "", ""]);
     t.print(ns);
 
-    const test = "test"
-    const test2 = Colors.E_ORANGE + test
-    ns.print(test.length)
-    ns.print(test2.length)
+    const test = "test";
+    const test2 = Colors.E_ORANGE + test;
+    ns.print(test.length);
+    ns.print(test2.length);
+    ns.print(cleanStringLength(test2))
 }

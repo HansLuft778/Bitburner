@@ -207,8 +207,8 @@ export async function main(ns: NS) {
                 logPositions(ns, stock, false, profit);
             }
 
-            // const color = stock.longShares > 0 ? Colors.E_ORANGE : "";
-            const color = ""
+            const stockOwnedColor = stock.longShares > 0 ? Colors.E_ORANGE : "";
+            // const color = ""
             const arrow =
                 stock.price > stock.previousPrice
                     ? "↗"
@@ -216,11 +216,14 @@ export async function main(ns: NS) {
                     ? "↘"
                     : "→";
 
-            const profit = stock.longPrice
+            const profitText = stock.longPrice
                 ? `${ns.formatNumber(
+                      stock.bidPrice * stock.longShares -
+                          stock.longPrice * stock.longShares
+                  )} (${ns.formatNumber(
                       (stock.bidPrice / stock.longPrice - 1) * 100,
                       2
-                  )}%`
+                  )}%)`
                 : "";
 
             // ns.print(
@@ -237,13 +240,13 @@ export async function main(ns: NS) {
             // );
 
             t.addRow([
-                color + stock.symbol,
-                color + ns.formatNumber(stock.price),
-                color + ns.formatNumber(stock.observedMinPrice),
-                color + ns.formatNumber(stock.observedMaxPrice),
-                color + ns.formatNumber(stock.forecast),
-                color + arrow,
-                color + profit
+                stockOwnedColor + stock.symbol + Colors.RESET,
+                ns.formatNumber(stock.price),
+                ns.formatNumber(stock.observedMinPrice),
+                ns.formatNumber(stock.observedMaxPrice),
+                ns.formatNumber(stock.forecast),
+                arrow,
+                profitText
             ]);
 
             stock.previousPrice = stock.price;

@@ -1,8 +1,7 @@
 import {
-    buyBoostMaterial,
-    customSmartSupply,
-    developNewProduct,
-    Divisions
+    convertDivisionToSupportOffices,
+    Divisions,
+    OfficeRatios
 } from "./lib.js";
 
 export async function main(ns: NS) {
@@ -15,12 +14,11 @@ export async function main(ns: NS) {
 
     // customSmartSupply(ns);
 
-    while (true) {
-        ns.print(
-            corp.getCorporation().prevState +
-                " " +
-                ns.formatNumber(corp.getInvestmentOffer().funds)
-        );
-        await corp.nextUpdate();
-    }
+    // await buyBoostMaterial(ns, "GOrg");
+
+    convertDivisionToSupportOffices(
+        ns,
+        corp.getDivision(Divisions.Agriculture.name),
+        OfficeRatios.progressRatio
+    );
 }
