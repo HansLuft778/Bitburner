@@ -226,19 +226,6 @@ export async function main(ns: NS) {
                   )}%)`
                 : "";
 
-            // ns.print(
-            //     color +
-            //         `${stock.symbol}:\t${ns.formatNumber(
-            //             stock.price
-            //         )} (min: ${ns.formatNumber(
-            //             stock.observedMinPrice
-            //         )}, max: ${ns.formatNumber(
-            //             stock.observedMaxPrice
-            //         )})\tforecast: ${ns.formatNumber(
-            //             stock.forecast
-            //         )} ${arrow} ${profit}`
-            // );
-
             t.addRow([
                 stockOwnedColor + stock.symbol + Colors.RESET,
                 ns.formatNumber(stock.price),
