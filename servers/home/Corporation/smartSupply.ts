@@ -399,17 +399,13 @@ export async function main(ns: NS) {
 
     // CorporationState.getInstance().resetState();
 
-    let smartSupplyHasBeenEnabledEverywhere = false;
     const warehouseCongestionData = new Map<string, number>();
     while (true) {
         for (const divisionName of corp.getCorporation().divisions) {
             const div = corp.getDivision(divisionName);
-            for (const city of div.cities) {
-                if (!smartSupplyHasBeenEnabledEverywhere) {
-                    // Enable Smart Supply everywhere if we have unlocked this feature
-                    setSmartSupplyData(ns);
-                    customSmartSupply(ns, warehouseCongestionData);
-                }
+            for (const _ of div.cities) {
+                setSmartSupplyData(ns);
+                customSmartSupply(ns, warehouseCongestionData);
             }
         }
 

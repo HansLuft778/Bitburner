@@ -1,8 +1,4 @@
-import {
-    convertDivisionToSupportOffices,
-    Divisions,
-    OfficeRatios
-} from "./lib.js";
+import { Divisions, wilsonAdvertisingOptimizer } from "./lib.js";
 
 export async function main(ns: NS) {
     ns.tail();
@@ -12,13 +8,22 @@ export async function main(ns: NS) {
 
     const corp = ns.corporation;
 
-    // customSmartSupply(ns);
-
-    // await buyBoostMaterial(ns, "GOrg");
-
-    convertDivisionToSupportOffices(
+    const data = wilsonAdvertisingOptimizer(
         ns,
-        corp.getDivision(Divisions.Agriculture.name),
-        OfficeRatios.progressRatio
+        // corp.getCorporation().funds,
+        1e30,
+        corp.getDivision(Divisions.Agriculture.name)
     );
+
+    for (const entry of data.slice(0, 10)) {
+        ns.print(
+            `wilson: ${entry[0]} advert: ${ns.formatNumber(entry[1])} cost: ${ns.formatNumber(
+                entry[2]
+            )} advertFactor: ${ns.formatNumber(entry[3])} ratio: ${ns.formatNumber(
+                entry[4]
+            )} cost per factor: ${ns.formatNumber(entry[5])}`
+        );
+    }
+
+    ns.print("done");
 }

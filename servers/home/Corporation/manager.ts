@@ -1,4 +1,3 @@
-import { CorporationState } from "./CorpState.js";
 import { launchCorp } from "./LaunchCoorp.js";
 import {
     acceptBestInvestmentOffer,
@@ -7,11 +6,12 @@ import {
     convertDivisionToSupportOffices,
     Divisions,
     emptyAllWarehouses,
-    forEveryDivisionAndCity,
     initializeDivision,
     OfficeRatios,
+    officeUpgradeCostFromAtoB,
     ProductDivisionFunds,
-    unemployEveryone
+    unemployEveryone,
+    wilsonAdvertisingOptimizer
 } from "./lib.js";
 
 export async function main(ns: NS) {
@@ -66,16 +66,9 @@ export async function main(ns: NS) {
         );
 
         // upgrade warehouse
-        const currentWarehouse = corp.getWarehouse(
-            divisionNameAgri,
-            city
-        ).level;
+        const currentWarehouse = corp.getWarehouse(divisionNameAgri, city).level;
         if (currentWarehouse < 16)
-            corp.upgradeWarehouse(
-                divisionNameAgri,
-                city,
-                16 - currentWarehouse
-            );
+            corp.upgradeWarehouse(divisionNameAgri, city, 16 - currentWarehouse);
     }
 
     for (let i = 0; i < 8 - corp.getHireAdVertCount(divisionNameAgri); i++) {
@@ -152,36 +145,105 @@ export async function main(ns: NS) {
     );
 
     // create Tobacco division
-    const funds = corp.getCorporation().funds;
+    const fundsa = corp.getCorporation().funds;
+    const TobaccoBudget = fundsa - 600e9;
+
     const divisionNameTobacco = "Tobacco";
     corp.expandIndustry("Tobacco", divisionNameTobacco);
+    const officeBudget =
+        (TobaccoBudget * ProductDivisionFunds.beforeFocusOnAdvert.office) / cities.length;
     for (const city of cities) {
         if (city != "Sector-12") corp.expandCity(divisionNameTobacco, city);
 
         corp.purchaseWarehouse(divisionNameTobacco, city);
-        const officeBudget =
-            (funds * ProductDivisionFunds.beforeFocusOnAdvert.office) /
-            cities.length;
 
-        
-            
+        // number of office levels that fit budget
+        let cost = 0;
+        let targetSize = corp.getOffice(divisionNameTobacco, city).size + 1;
+        while (cost < officeBudget) {
+            cost = officeUpgradeCostFromAtoB(
+                corp.getOffice(divisionNameTobacco, city).size,
+                targetSize
+            );
+            targetSize++;
+        }
+
+        ns.print(`upgrading Tobacco office at ${city} to ${targetSize}`);
         corp.upgradeOfficeSize(
             divisionNameTobacco,
             city,
-            20 - corp.getOffice(divisionNameTobacco, city).size
+            targetSize - corp.getOffice(divisionNameTobacco, city).size
         );
     }
     // upgrade upgrades
     const rawProductionBudget =
-        funds * ProductDivisionFunds.beforeFocusOnAdvert.rawProduction;
+        TobaccoBudget * ProductDivisionFunds.beforeFocusOnAdvert.rawProduction;
+
+    // level smart factorier/storage
+    let moneySpent = 0;
+    while (moneySpent < rawProductionBudget) {
+        const upgradeCost =
+            corp.getUpgradeLevelCost("Smart Factories") + corp.getUpgradeLevelCost("Smart Storage");
+
+        corp.levelUpgrade("Smart Factories");
+        corp.levelUpgrade("Smart Storage");
+        moneySpent += upgradeCost;
+    }
+
+    // buy wilson advert
     const wilsonAdvertBudget =
-        funds * ProductDivisionFunds.beforeFocusOnAdvert.wilsonAdvert;
+        TobaccoBudget * ProductDivisionFunds.beforeFocusOnAdvert.wilsonAdvert;
+
+    const data = wilsonAdvertisingOptimizer(
+        ns,
+        wilsonAdvertBudget,
+        corp.getDivision(divisionNameTobacco)
+    );
+
+    ns.print("buying wilson/advert...");
+    for (let i = 0; i < data[0]; i++) {
+        corp.levelUpgrade("Wilson Analytics");
+        await ns.sleep(0);
+    }
+    for (let i = 0; i < data[0]; i++) {
+        corp.hireAdVert(divisionNameTobacco);
+        await ns.sleep(0);
+    }
+
     const employeeStatUpgradeBudget =
-        funds * ProductDivisionFunds.beforeFocusOnAdvert.employeStatUpgrades;
-    const salesBotBudget =
-        funds * ProductDivisionFunds.beforeFocusOnAdvert.salesBot;
+        TobaccoBudget * ProductDivisionFunds.beforeFocusOnAdvert.employeStatUpgrades;
+
+    const employeeStatUpgrades = [
+        "Neural Accelerators",
+        "Nuoptimal Nootropic Injector Implants",
+        "Speech Processor Implants"
+    ];
+    moneySpent = 0;
+    while (moneySpent < employeeStatUpgradeBudget) {
+        const upgradeCost = employeeStatUpgrades.reduce(
+            (sum, upgrade) => sum + corp.getUpgradeLevelCost(upgrade),
+            0
+        );
+        employeeStatUpgrades.map((upgrade) => corp.levelUpgrade(upgrade));
+        moneySpent += upgradeCost;
+    }
+
+    const salesBotBudget = TobaccoBudget * ProductDivisionFunds.beforeFocusOnAdvert.salesBot;
+    moneySpent = 0;
+    while (moneySpent < salesBotBudget) {
+        const upgradeCost = corp.getUpgradeLevelCost("ABC SalesBots");
+        corp.levelUpgrade("ABC SalesBots");
+        moneySpent += upgradeCost;
+    }
+
     const projectInsightBudget =
-        funds * ProductDivisionFunds.beforeFocusOnAdvert.projectInsight;
+        TobaccoBudget * ProductDivisionFunds.beforeFocusOnAdvert.projectInsight;
+    moneySpent = 0;
+    while (moneySpent < projectInsightBudget) {
+        const upgradeCost = corp.getUpgradeLevelCost("Project Insight");
+        corp.levelUpgrade("Project Insight");
+        moneySpent += upgradeCost;
+    }
 
     convertDivisionToSupportOffices(
         ns,

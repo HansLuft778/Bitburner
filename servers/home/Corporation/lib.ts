@@ -5,6 +5,7 @@ import {
     Division
 } from "@/NetscriptDefinitions.js";
 import { Colors } from "../lib.js";
+import { log10 } from "chart.js/helpers";
 
 export enum CityName {
     Aevum = "Aevum",
@@ -22,10 +23,7 @@ enum BoostMaterialsSizes {
     Robots = 0.5
 }
 
-export function forEveryDivisionAndCity(
-    ns: NS,
-    func: (division: Division, city: string) => void
-) {
+export function forEveryDivisionAndCity(ns: NS, func: (division: Division, city: string) => void) {
     for (const divisionName of ns.corporation.getCorporation().divisions) {
         const division = ns.corporation.getDivision(divisionName);
         for (const city of division.cities) {
@@ -39,8 +37,7 @@ export function getOptimalBoostMaterialQuantities(
     spaceConstraint: number,
     round = true
 ): number[] {
-    const { aiCoreFactor, hardwareFactor, realEstateFactor, robotFactor } =
-        industryData;
+    const { aiCoreFactor, hardwareFactor, realEstateFactor, robotFactor } = industryData;
     if (
         aiCoreFactor === undefined ||
         hardwareFactor === undefined ||
@@ -49,12 +46,7 @@ export function getOptimalBoostMaterialQuantities(
     ) {
         throw new Error("Industry data is missing factors");
     }
-    const boostMaterialCoefficients = [
-        aiCoreFactor,
-        hardwareFactor,
-        realEstateFactor,
-        robotFactor
-    ];
+    const boostMaterialCoefficients = [aiCoreFactor, hardwareFactor, realEstateFactor, robotFactor];
     const boostMaterialSizes = [
         BoostMaterialsSizes.AiCores,
         BoostMaterialsSizes.Hardware,
@@ -92,10 +84,7 @@ export function getOptimalBoostMaterialQuantities(
         }
         return result;
     };
-    return calculateOptimalQuantities(
-        boostMaterialCoefficients,
-        boostMaterialSizes
-    );
+    return calculateOptimalQuantities(boostMaterialCoefficients, boostMaterialSizes);
 }
 
 export async function buyBoostMaterial(ns: NS, divisionName: string) {
@@ -105,12 +94,7 @@ export async function buyBoostMaterial(ns: NS, divisionName: string) {
 
     const data = corp.getIndustryData(division.type);
 
-    const materials: CorpMaterialName[] = [
-        "AI Cores",
-        "Hardware",
-        "Real Estate",
-        "Robots"
-    ];
+    const materials: CorpMaterialName[] = ["AI Cores", "Hardware", "Real Estate", "Robots"];
 
     let state = corp.getCorporation().nextState;
     // wait for PURCHASE state
@@ -125,22 +109,11 @@ export async function buyBoostMaterial(ns: NS, divisionName: string) {
         for (const city of cities) {
             for (let i = 0; i < materials.length; i++) {
                 const material = materials[i];
-                const warehouseSpace =
-                    corp.getWarehouse(divisionName, city).size * 0.8;
-                const neededMaterial = getOptimalBoostMaterialQuantities(
-                    data,
-                    warehouseSpace
-                );
-                const storedMaterial = corp.getMaterial(
-                    divisionName,
-                    city,
-                    material
-                ).stored;
-                const toBuy =
-                    Math.max(neededMaterial[i] - storedMaterial, 0) / 10;
-                ns.print(
-                    `Buying ${toBuy}/${neededMaterial[i]} ${material} in ${city}`
-                );
+                const warehouseSpace = corp.getWarehouse(divisionName, city).size * 0.8;
+                const neededMaterial = getOptimalBoostMaterialQuantities(data, warehouseSpace);
+                const storedMaterial = corp.getMaterial(divisionName, city, material).stored;
+                const toBuy = Math.max(neededMaterial[i] - storedMaterial, 0) / 10;
+                ns.print(`Buying ${toBuy}/${neededMaterial[i]} ${material} in ${city}`);
                 corp.buyMaterial(divisionName, city, material, toBuy);
             }
         }
@@ -278,12 +251,7 @@ export function ChangeEmployeeRatio(
     const employees = office.numEmployees;
 
     Object.entries(ratio).map(([job, ratio]) => {
-        return corp.setAutoJobAssignment(
-            divisionName,
-            city,
-            job,
-            Math.round(employees * ratio)
-        );
+        return corp.setAutoJobAssignment(divisionName, city, job, Math.round(employees * ratio));
     });
 }
 
@@ -365,8 +333,7 @@ export async function initializeDivision(ns: NS, type: DivisionType) {
 
     // 5. buy some adVert
     ns.print(`buying ${type.totalAdVerts} adverts`);
-    while (corp.getHireAdVertCount(divisionName) < type.totalAdVerts)
-        corp.hireAdVert(divisionName);
+    while (corp.getHireAdVertCount(divisionName) < type.totalAdVerts) corp.hireAdVert(divisionName);
 
     // 6. upgrade all warehouses and smart storage
     for (const city of corp.getDivision(divisionName).cities) {
@@ -479,21 +446,11 @@ export async function developNewProduct(ns: NS) {
         ).developmentProgress;
     }
 
-    ns.corporation.sellProduct(
-        "Tobacco",
-        "Sector-12",
-        productName,
-        "MAX",
-        "MP",
-        true
-    );
+    ns.corporation.sellProduct("Tobacco", "Sector-12", productName, "MAX", "MP", true);
     ns.corporation.setProductMarketTA2("Tobacco", productName, true);
 }
 
-export async function acceptBestInvestmentOffer(
-    ns: NS,
-    minOffer: number
-): Promise<number> {
+export async function acceptBestInvestmentOffer(ns: NS, minOffer: number): Promise<number> {
     let previousOffer = 0;
 
     while (true) {
@@ -505,8 +462,7 @@ export async function acceptBestInvestmentOffer(
         if (offer < previousOffer && offer > minOffer) {
             if (!ns.corporation.acceptInvestmentOffer()) {
                 ns.tprint(
-                    Colors.RED +
-                        "[ERROR] Investment offer could not be accepted for some reason"
+                    Colors.RED + "[ERROR] Investment offer could not be accepted for some reason"
                 );
                 ns.exit();
             }
@@ -526,27 +482,14 @@ export async function emptyAllWarehouses(ns: NS) {
     for (const divisionName of corp.getCorporation().divisions) {
         const division = corp.getDivision(divisionName);
         for (const city of division.cities) {
-            const requiredMaterials = corp.getIndustryData(
-                division.type
-            ).requiredMaterials;
+            const requiredMaterials = corp.getIndustryData(division.type).requiredMaterials;
 
             for (const materialName of Object.keys(requiredMaterials)) {
                 ns.tprint(`selling ${materialName}`);
                 // Clear purchase
-                ns.corporation.buyMaterial(
-                    division.name,
-                    city,
-                    materialName,
-                    0
-                );
+                ns.corporation.buyMaterial(division.name, city, materialName, 0);
                 // Discard stored input material
-                ns.corporation.sellMaterial(
-                    division.name,
-                    city,
-                    materialName,
-                    "MAX",
-                    "0"
-                );
+                ns.corporation.sellMaterial(division.name, city, materialName, "MAX", "0");
             }
         }
     }
@@ -556,36 +499,20 @@ export async function emptyAllWarehouses(ns: NS) {
     for (const divisionName of corp.getCorporation().divisions) {
         const division = corp.getDivision(divisionName);
         for (const city of division.cities) {
-            const requiredMaterials = corp.getIndustryData(
-                division.type
-            ).requiredMaterials;
+            const requiredMaterials = corp.getIndustryData(division.type).requiredMaterials;
             for (const materialName of Object.keys(requiredMaterials)) {
                 ns.tprint(`stop selling ${materialName}`);
-                const material = ns.corporation.getMaterial(
-                    division.name,
-                    city,
-                    materialName
-                );
+                const material = ns.corporation.getMaterial(division.name, city, materialName);
                 if (material.desiredSellAmount !== 0) {
                     // Stop discarding input material
-                    ns.corporation.sellMaterial(
-                        division.name,
-                        city,
-                        materialName,
-                        "0",
-                        "0"
-                    );
+                    ns.corporation.sellMaterial(division.name, city, materialName, "0", "0");
                 }
             }
         }
     }
 }
 
-export function convertDivisionToSupportOffices(
-    ns: NS,
-    division: Division,
-    ratio: OfficeRatio
-) {
+export function convertDivisionToSupportOffices(ns: NS, division: Division, ratio: OfficeRatio) {
     const corp = ns.corporation;
 
     for (const city of division.cities) {
@@ -631,4 +558,117 @@ export function convertDivisionToSupportOffices(
 
 export function officeUpgradeCostFromAtoB(a: number, b: number) {
     return 4e9 * ((1.09 ** (b / 3) - 1.09 ** (a / 3)) / 0.09);
+}
+
+export function upgradeCostFromAtoB(base: number, priceMult: number, a: number, b: number) {
+    return base * ((priceMult ** b - priceMult ** a) / (priceMult - 1));
+}
+
+export function warehouseLevelWithBudget(ns: NS, budget: number, currentLvl: number) {
+    Math.log((budget * 0.07) / 1e9 + 1.07 ** (currentLvl + 1)) / Math.log(1.07) - 1;
+}
+
+export function officeLevelWithBudget(ns: NS, budget: number, currentSize: number) {
+    (Math.log((budget * 0.09) / 4e9 + 1.09 ** (currentSize / 3)) / Math.log(1.09)) * 3;
+}
+
+export function upgradeTargetLevelWithBudget(
+    base: number,
+    priceMult: number,
+    a: number,
+    budget: number
+) {
+    return Math.log((budget * (priceMult - 1)) / base + priceMult ** a) / Math.log(priceMult);
+}
+
+function getAdvertFactor(ns: NS, division: Division, awareness: number, popularity: number) {
+    const awarenessFactor =
+        (awareness + 1) ** ns.corporation.getIndustryData(division.type).advertisingFactor;
+    const popularityFactor =
+        (popularity + 1) ** ns.corporation.getIndustryData(division.type).advertisingFactor;
+
+    const ratioFactor = awareness === 0 ? 0.01 : Math.max(0.01, (popularity + 0.001) / awareness);
+
+    return (awarenessFactor * popularityFactor * ratioFactor) ** 0.85;
+}
+
+export function wilsonAdvertisingOptimizer(ns: NS, budget: number, division: Division) {
+    const funds = ns.corporation.getCorporation().funds;
+
+    const currentWilsonLvl = ns.corporation.getUpgradeLevel("Wilson Analytics");
+    const currentAdvertLvl = ns.corporation.getHireAdVertCount(division.name);
+
+    // generate all possible wilson/advert combinations that fit the budget
+    const maxWilson = upgradeTargetLevelWithBudget(
+        4e9,
+        2,
+        ns.corporation.getUpgradeLevel("Wilson Analytics"),
+        budget
+    );
+    // base: 10**9 mult 1.06
+    const maxAdvert = upgradeTargetLevelWithBudget(
+        1e9,
+        1.06,
+        ns.corporation.getHireAdVertCount(division.name),
+        budget
+    );
+
+    const currentAwareness = ns.corporation.getDivision(division.name).awareness;
+    const currentpopularity = ns.corporation.getDivision(division.name).popularity;
+
+    let awarenessTable: number[][] = Array(Math.ceil(maxWilson))
+        .fill(null)
+        .map(() => []);
+    let popularityTable: number[][] = Array(Math.ceil(maxWilson))
+        .fill(null)
+        .map(() => []);
+
+    let data = [];
+    for (let numWilson = 0; numWilson < maxWilson; numWilson++) {
+        for (let numAdvert = 0; numAdvert < maxAdvert; numAdvert++) {
+            const wilsonPrice = upgradeCostFromAtoB(
+                4e9,
+                2,
+                currentWilsonLvl,
+                currentWilsonLvl + numWilson
+            );
+            const advertPrice = upgradeCostFromAtoB(
+                1e9,
+                1.06,
+                currentAdvertLvl,
+                currentAdvertLvl + numAdvert
+            );
+
+            const cost = wilsonPrice + advertPrice;
+
+            if (cost > budget) continue;
+
+            const wilsonUpgradeBenefit = 0.005;
+
+            const advertMultiplier = 1 + wilsonUpgradeBenefit * numWilson;
+
+            const prevAwareness = awarenessTable[numWilson][numAdvert - 1] ?? currentAwareness;
+            const prevPopularity = popularityTable[numWilson][numAdvert - 1] ?? currentpopularity;
+
+            const awareness = (prevAwareness + 3 * advertMultiplier) * (1.005 * advertMultiplier);
+            const popularity =
+                (prevPopularity + advertMultiplier) * ((1 + 2 / 200) * advertMultiplier);
+
+            awarenessTable[numWilson][numAdvert] = awareness;
+            popularityTable[numWilson][numAdvert] = popularity;
+
+            const advertFactor = getAdvertFactor(ns, division, awareness, popularity);
+
+            data.push([
+                numWilson,
+                numAdvert,
+                cost,
+                advertFactor,
+                popularity / awareness,
+                cost / advertFactor
+            ]);
+        }
+    }
+
+    return data.sort((a, b) => b[3] - a[3]);
 }
