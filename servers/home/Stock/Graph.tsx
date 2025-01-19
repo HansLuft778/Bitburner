@@ -39,7 +39,7 @@ export function LinePlot() {
                     }
                 },
                 animation: {
-                    duration: 0.1
+                    duration: 0
                 }
             }
         });
@@ -63,7 +63,7 @@ export function LinePlot() {
         const intervalId = setInterval(() => {
             const updatedHistory = new StockmarketHistory(ns).getStockHistory();
             setStockHistory(updatedHistory);
-        }, 1000);
+        }, 5000);
 
         return () => clearInterval(intervalId);
     }, [ns]);

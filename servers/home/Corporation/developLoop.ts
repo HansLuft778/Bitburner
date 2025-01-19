@@ -7,23 +7,32 @@ export async function main(ns: NS) {
 
     const corp = ns.corporation;
 
-    const productName = "gorg";
-    let productId = 30;
+    const productName = "gorg-";
+
+    // find latest product id
+    let ids: number[] = [];
+    for (const product of corp.getDivision("Tobacco").products) {
+        const parts = product.split("-");
+        ids.push(parseInt(parts[1]));
+    }
+    let productId = Math.max(...ids) + 1;
 
     while (true) {
-        const playerMoney = corp.getCorporation().funds;
+        const corpFunds = corp.getCorporation().funds;
         const currentProducts = corp.getDivision("Tobacco").products;
-
-        for (const product of currentProducts) {
-            corp.getProduct("Tobacco", "Sector-12", product).desiredSellPrice;
-        }
 
         if (currentProducts.length === 3) {
             corp.discontinueProduct("Tobacco", currentProducts[0]);
             break;
         }
 
-        corp.makeProduct("Tobacco", "Sector-12", productName + productId, playerMoney * 0.01, playerMoney * 0.01);
+        corp.makeProduct(
+            "Tobacco",
+            "Sector-12",
+            productName + productId,
+            corpFunds * 0.01,
+            corpFunds * 0.01
+        );
 
         productId++;
         await corp.nextUpdate();
