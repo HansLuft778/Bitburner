@@ -57,6 +57,9 @@ export async function waitForIncomingRequests(ns: NS) {
     const socket = new WebSocket("ws://localhost:8765");
     await waitForOpen(socket, ns);
 
+    let num_wins = 0;
+    let num_games = 0;
+
     while (true) {
         let requestData: RequestData = await new Promise((resolve) => {
             function onMessage(event: MessageEvent) {
@@ -96,10 +99,18 @@ export async function waitForIncomingRequests(ns: NS) {
                     const state = ns.go.getGameState();
                     done = true;
                     reward = state.blackScore > state.whiteScore ? 1 : -1;
+                    if (reward === 1) num_wins++;
                 }
 
                 socket.send(
                     JSON.stringify({ board: ns.go.getBoardState(), reward: reward, done: done })
+                );
+            } else {
+                throw new Error(
+                    "there was a move supposed to be made, but the provided x and y coords are invalid: " +
+                        requestData.x +
+                        " " +
+                        requestData.y
                 );
             }
         } else if (requestData.command === "pass_turn") {
@@ -111,12 +122,16 @@ export async function waitForIncomingRequests(ns: NS) {
                 const state = ns.go.getGameState();
                 done = true;
                 reward = state.blackScore > state.whiteScore ? 1 : -1;
+                if (reward === 1) num_wins++;
             }
 
             socket.send(
                 JSON.stringify({ board: ns.go.getBoardState(), reward: reward, done: done })
             );
         } else if (requestData.command == "reset_game") {
+            if (num_games > 0) ns.print(`winrate = ${num_wins / num_games}`);
+            num_games++;
+
             const randNum = Math.random();
             let opponent: GoOpponent;
             if (randNum < 1 / 3) opponent = "Netburners";
