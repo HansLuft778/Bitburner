@@ -13,7 +13,12 @@ from plotter import Plotter
 
 class GoCNN(nn.Module):
     def __init__(
-        self, board_width: int, board_height: int, num_channels=32, hidden_size=128
+        self,
+        board_width: int,
+        board_height: int,
+        num_channels=32,
+        hidden_size=128,
+        num_past_steps=2,
     ):
         super(GoCNN, self).__init__()
 
@@ -21,7 +26,12 @@ class GoCNN(nn.Module):
         self.board_height = board_height
 
         self.conv1 = nn.Conv2d(
-            in_channels=1, out_channels=num_channels, kernel_size=3, padding=1
+            in_channels=1
+            + 2
+            + num_past_steps * 2,  # disabled, current black/while, past moves
+            out_channels=num_channels,
+            kernel_size=3,
+            padding=1,
         )
         self.conv2 = nn.Conv2d(
             in_channels=num_channels,
@@ -84,18 +94,22 @@ class DQNAgentCNN:
         lr=1e-4,
         gamma=0.95,
         batch_size=64,
+        num_past_steps=2,
     ):
         self.board_width = board_width
         self.board_height = board_height
         self.plotter = plotter
         self.gamma = gamma
         self.batch_size = batch_size
+        self.num_past_steps = num_past_steps
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # check if there is a model to laod
 
-        self.policy_net = GoCNN(board_width, board_height).to(self.device)
+        self.policy_net = GoCNN(
+            board_width, board_height, num_past_steps=num_past_steps
+        ).to(self.device)
 
         if os.path.isfile("models/model_cnn.pt"):
             self.policy_net.load_state_dict(torch.load("models/model_cnn.pt"))
@@ -110,48 +124,70 @@ class DQNAgentCNN:
         self.replay_buffer = ReplayBuffer()
 
         # Exploration parameter
-        self.epsilon = 0.2
+        self.epsilon = 1
         self.epsilon_decay = 0.995
         self.epsilon_min = 0.20
 
-    def preprocess_state(self, board_state: list[str]):
+    def preprocess_state(self, board_state: list[str], history: list[list[str]]):
         """
-        Convert the board (list of strings, e.g. ["XX.O.", ...]) into a float tensor of shape [1,1,w,h].
-        'X' -> 1.0  (Black)
-        'O' -> -1.0 (White)
+        Convert the board (list of strings, e.g. ["XX.O#", ...]) into a float tensor of shape [1,7,w,h].
+        '#' -> 1.0  Channel 0
+        'X' -> 1.0  Black, Channel 1, 3, 5
+        'O' -> 1.0  White, Channel 2, 4, 6
         '.' -> 0.0  (Empty)
-        '#' -> 0.0  (Dead node, treat as non-playable, will be masked out later anyways)
         """
-
         w, h = self.board_width, self.board_height
-        board_2d = []
+
+        channels = []
+
+        # disabled channel
+        disabled_channel = torch.zeros(w, h, device=self.device)
+        current_black = torch.zeros(w, h, device=self.device)
+        current_white = torch.zeros(w, h, device=self.device)
+
         for x in range(w):
-            row = []
             for y in range(h):
                 ch = board_state[x][y]
                 if ch == "X":
-                    row.append(1.0)
+                    current_black[x][y] = 1.0
                 elif ch == "O":
-                    row.append(-1.0)
-                else:
-                    row.append(0.0)
-            board_2d.append(row)
+                    current_white[x][y] = 1.0
+                elif ch == "#":
+                    disabled_channel[x][y] = 1.0
 
-        # Convert to Tensor shape [5, 5]
-        board_tensor = torch.tensor(board_2d, dtype=torch.float, device=self.device)
-        # Add batch and channel dims => shape [1, 1, 5, 5]
-        board_tensor = board_tensor.unsqueeze(0).unsqueeze(0)
+        channels.extend([disabled_channel, current_black, current_white])
+
+        # parse history and append to channels
+        for past_idx in range(self.num_past_steps):
+
+            history_black = torch.zeros(w, h, device=self.device)
+            history_white = torch.zeros(w, h, device=self.device)
+            if len(history) > past_idx:
+                past_step = history[past_idx]
+                for x in range(w):
+                    for y in range(h):
+                        ch = past_step[x][y]
+                        if ch == "X":
+                            history_black[x][y] = 1.0
+                        elif ch == "O":
+                            history_white[x][y] = 1.0
+
+            channels.extend([history_black, history_white])
+
+        board_tensor = torch.stack(channels).unsqueeze(0)
 
         return board_tensor
 
-    def select_action(self, board_state: list[str], legal_moves: list[bool]) -> int:
+    def select_action(
+        self, board_state: list[str], legal_moves: list[bool], history: list[list[str]]
+    ) -> int:
         """
         Epsilon-greedy action selection:
          - with probability epsilon, pick a random valid move
          - otherwise pick move with max Q-value
         We also include one extra action index for "pass".
         """
-        state_tensor = self.preprocess_state(board_state)
+        state_tensor = self.preprocess_state(board_state, history)
 
         # board_size = self.board_width * self.board_height
         if random.random() < self.epsilon:

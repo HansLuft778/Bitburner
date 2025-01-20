@@ -91,6 +91,8 @@ export async function waitForIncomingRequests(ns: NS) {
 
                 const result = await ns.go.makeMove(requestData.x, requestData.y);
 
+                ns.go.getBoardState;
+
                 let reward = 0;
                 let done = false;
                 const state = ns.go.getGameState();
@@ -143,12 +145,12 @@ export async function waitForIncomingRequests(ns: NS) {
 
             const board = ns.go.resetBoardState(opponent, 5);
             socket.send(JSON.stringify({ board: board }));
+        } else if (requestData.command == "get_history") {
+            const history = ns.go.getMoveHistory();
+            socket.send(JSON.stringify({ history: history }));
         } else {
             socket.send(JSON.stringify({ status: "unknown_command" }));
         }
-
-        // Remove this duplicate send
-        // socket.send(JSON.stringify({ status: "processed" }));
     }
 }
 
@@ -156,6 +158,5 @@ export async function main(ns: NS) {
     ns.clearLog();
     ns.tail();
 
-    // await getNextMove(ns);
     await waitForIncomingRequests(ns);
 }

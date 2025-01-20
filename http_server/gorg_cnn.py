@@ -50,7 +50,6 @@ class GameServer:
 
     async def reset_game(self) -> list[str]:
         res = await self.send_request({"command": "reset_game"})
-        print(res)
         return res["board"]
 
     async def request_valid_moves(self):
@@ -74,8 +73,9 @@ class GameServer:
         done = res["done"]
         return next_state, reward, done
 
-    def get_next_move(self, game_state):
-        return [0, 0]  # Placeholder return
+    async def get_game_history(self) -> list[list[str]]:
+        histroy = await self.send_request({"command": "get_history"})
+        return histroy["history"]
 
     async def train_loop(self) -> None:
         """
@@ -95,13 +95,14 @@ class GameServer:
                 # 1. Agent selects action
                 valid_moves: list[bool] = await self.request_valid_moves()
                 print(f"invalid moves: {valid_moves}")
-                action_idx = self.agent.select_action(board, valid_moves)
+                game_history = await self.get_game_history()
+                action_idx = self.agent.select_action(board, valid_moves, game_history)
 
                 action_decoded = self.agent.decode_action(action_idx)
                 print(f"chose {action_idx} which corresponds to {action_decoded}")
 
                 # 2. Current state tensor
-                state_tensor = self.agent.preprocess_state(board)
+                state_tensor = self.agent.preprocess_state(board, game_history)
 
                 # 3. Execute in environment
                 next_board, reward, done = await self.make_move(action_decoded)
@@ -112,7 +113,10 @@ class GameServer:
                 print(f"next valid moves: {next_valid_moves}")
 
                 # 4. Next state
-                next_state_tensor = self.agent.preprocess_state(next_board)
+                next_game_history = await self.get_game_history()
+                next_state_tensor = self.agent.preprocess_state(
+                    next_board, next_game_history
+                )
 
                 # 5. Store transition in replay
                 self.agent.replay_buffer.push(
@@ -151,7 +155,7 @@ class GameServer:
             await self.client_connected.wait()
             print("Client connected. Starting training loop.")
             await self.train_loop()
-            # print(await self.request_valid_moves())
+            # print(await self.get_game_history())
 
 
 def main():
