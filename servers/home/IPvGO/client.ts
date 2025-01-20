@@ -80,9 +80,7 @@ export async function waitForIncomingRequests(ns: NS) {
             };
             socket.send(JSON.stringify({ state: gameState }));
         } else if (requestData.command === "get_valid_moves") {
-            const validMoves = {
-                valid_moves: ns.go.analysis.getValidMoves()
-            };
+            const validMoves = ns.go.analysis.getValidMoves();
             const canPass = ns.go.getGameState().currentPlayer == "None" ? false : true;
             socket.send(JSON.stringify({ validMoves, canPass }));
         } else if (requestData.command === "make_move") {
@@ -95,11 +93,15 @@ export async function waitForIncomingRequests(ns: NS) {
 
                 let reward = 0;
                 let done = false;
+                const state = ns.go.getGameState();
                 if (result.type == "gameOver") {
-                    const state = ns.go.getGameState();
                     done = true;
                     reward = state.blackScore > state.whiteScore ? 1 : -1;
                     if (reward === 1) num_wins++;
+                } else {
+                    // reward shaping
+                    // if agent made move with better score, reward it
+                    reward = state.blackScore > state.whiteScore ? 0.01 : 0;
                 }
 
                 socket.send(
@@ -129,7 +131,8 @@ export async function waitForIncomingRequests(ns: NS) {
                 JSON.stringify({ board: ns.go.getBoardState(), reward: reward, done: done })
             );
         } else if (requestData.command == "reset_game") {
-            if (num_games > 0) ns.print(`winrate = ${num_wins / num_games}`);
+            if (num_games > 0)
+                ns.print(`winrate: ${num_wins}/${num_games} = ${num_wins / num_games}`);
             num_games++;
 
             const randNum = Math.random();

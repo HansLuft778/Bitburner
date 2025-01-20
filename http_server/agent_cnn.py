@@ -11,24 +11,36 @@ import torch.optim as optim
 from plotter import Plotter
 
 
-class GoNet(nn.Module):
-    def __init__(self, board_width: int, board_height: int, hidden_size=128):
-        super(GoNet, self).__init__()
-        # For demonstration, flatten the board and pass it through a few linear layers.
-        # For real Go, you'd want a CNN or an advanced architecture.
-        self.board_size = board_width * board_height
+class GoCNN(nn.Module):
+    def __init__(
+        self, board_width: int, board_height: int, num_channels=32, hidden_size=128
+    ):
+        super(GoCNN, self).__init__()
 
-        self.fc1 = nn.Linear(self.board_size, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        self.board_width = board_width
+        self.board_height = board_height
 
-        # Output: Q-values for each possible action + 1 for "pass"
-        # The total possible moves = board_width * board_height + 1
-        self.fc_out = nn.Linear(hidden_size, self.board_size + 1)
+        self.conv1 = nn.Conv2d(
+            in_channels=1, out_channels=num_channels, kernel_size=3, padding=1
+        )
+        self.conv2 = nn.Conv2d(
+            in_channels=num_channels,
+            out_channels=num_channels,
+            kernel_size=3,
+            padding=1,
+        )
+
+        self.fc_input_size = num_channels * board_width * board_height
+        self.fc1 = nn.Linear(self.fc_input_size, hidden_size)
+        self.fc_out = nn.Linear(hidden_size, board_width * board_height + 1)
 
     def forward(self, x):
-        # x shape: (batch_size, board_size)
+        x = F.relu(self.conv1(x))
+        x = F.relu(self.conv2(x))
+
+        x = x.view(-1, self.fc_input_size)
+
         x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
         q_values = self.fc_out(x)
         return q_values
 
@@ -40,14 +52,14 @@ class ReplayBuffer:
     def push(
         self,
         state,
-        action,
+        action: int,
         reward: float,
         next_state,
         done: bool,
         legal_mask: list[bool],
     ):
         """
-        state: The current state (the board, in your case) before we take an action. Often a PyTorch tensor.
+        state: The current state (the board, in your case) before we take an action.
         action: The action the agent chose at that state (e.g. “place router at (x,y)” or “pass”).
         reward (float): The immediate reward we got from taking that action (+1/-1 at game end, 0 for moves in between)
         next_state: The state of the board after the action has been applied.
@@ -63,13 +75,13 @@ class ReplayBuffer:
         return len(self.buffer)
 
 
-class DQNAgent:
+class DQNAgentCNN:
     def __init__(
         self,
         board_width: int,
         board_height: int,
         plotter: Plotter,
-        lr=1e-6,
+        lr=1e-4,
         gamma=0.95,
         batch_size=64,
     ):
@@ -83,12 +95,13 @@ class DQNAgent:
 
         # check if there is a model to laod
 
-        self.policy_net = GoNet(board_width, board_height).to(self.device)
+        self.policy_net = GoCNN(board_width, board_height).to(self.device)
 
-        if os.path.isfile("models/model.pr"):
-            self.policy_net.load_state_dict(torch.load("models/model.pt"))
+        if os.path.isfile("models/model_cnn.pt"):
+            self.policy_net.load_state_dict(torch.load("models/model_cnn.pt"))
+            self.policy_net.train()
 
-        self.target_net = GoNet(board_width, board_height).to(self.device)
+        self.target_net = GoCNN(board_width, board_height).to(self.device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
 
@@ -97,42 +110,41 @@ class DQNAgent:
         self.replay_buffer = ReplayBuffer()
 
         # Exploration parameter
-        self.epsilon = 1.0
+        self.epsilon = 0.2
         self.epsilon_decay = 0.995
-        self.epsilon_min = 0.05
+        self.epsilon_min = 0.20
 
-    def preprocess_state(self, board: list[str]):
+    def preprocess_state(self, board_state: list[str]):
         """
-        Convert the board (list of strings, e.g. ["XX.O.", ...]) into a float tensor.
-        For example:
+        Convert the board (list of strings, e.g. ["XX.O.", ...]) into a float tensor of shape [1,1,w,h].
         'X' -> 1.0  (Black)
         'O' -> -1.0 (White)
         '.' -> 0.0  (Empty)
-        '#' -> 0.0  (Dead node, treat as non-playable)
-        etc.
+        '#' -> 0.0  (Dead node, treat as non-playable, will be masked out later anyways)
         """
-        w = self.board_width
-        h = self.board_height
-        flattened = []
-        # board[x][y] or board[column_index][row_index]
-        # This might depend on your input format, so adjust accordingly.
-        # We'll assume "board" is board_width strings, each string is board_height in length.
-        for x in range(w):
-            for y in range(h):
-                ch = board[x][y]
-                if ch == "X":
-                    flattened.append(1.0)
-                elif ch == "O":
-                    flattened.append(-1.0)
-                else:
-                    # '.' or '#'
-                    flattened.append(0.0)
-        state_tensor = torch.tensor(
-            flattened, dtype=torch.float, device=self.device
-        ).unsqueeze(0)
-        return state_tensor  # shape [1, board_size]
 
-    def select_action(self, board_state: list[str], legal_moves: list[bool]):
+        w, h = self.board_width, self.board_height
+        board_2d = []
+        for x in range(w):
+            row = []
+            for y in range(h):
+                ch = board_state[x][y]
+                if ch == "X":
+                    row.append(1.0)
+                elif ch == "O":
+                    row.append(-1.0)
+                else:
+                    row.append(0.0)
+            board_2d.append(row)
+
+        # Convert to Tensor shape [5, 5]
+        board_tensor = torch.tensor(board_2d, dtype=torch.float, device=self.device)
+        # Add batch and channel dims => shape [1, 1, 5, 5]
+        board_tensor = board_tensor.unsqueeze(0).unsqueeze(0)
+
+        return board_tensor
+
+    def select_action(self, board_state: list[str], legal_moves: list[bool]) -> int:
         """
         Epsilon-greedy action selection:
          - with probability epsilon, pick a random valid move
@@ -146,7 +158,7 @@ class DQNAgent:
             # Random move
             # For simplicity, choose from [0..board_size] uniformly
             # You might want to only choose from valid moves
-            print("epsilon")
+            print(f"epsilon {self.epsilon}")
             legal_idx = [i for i, bit in enumerate(legal_moves) if bit]
             action_idx = random.choice(legal_idx)
             # action_idx = random.randint(0, board_size)  # last index for "pass"
@@ -159,7 +171,7 @@ class DQNAgent:
                 # create mask with illegal moves not being picked
                 masked_q_values = q_values.clone()
                 masked_q_values[0, ~legal_mask_tensor] = (
-                    -1e9  # Set illegal moves to negative infinity
+                    -1e9  # Set illegal moves to negative
                 )
 
                 print(f"Original q_values: {q_values}")
@@ -252,7 +264,7 @@ class DQNAgent:
         # 7. Optimize the policy_net
         self.optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), max_norm=10.0)
+        # torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), max_norm=10.0)
         self.optimizer.step()
 
     def update_target_network(self):
