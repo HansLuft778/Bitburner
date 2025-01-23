@@ -1,14 +1,16 @@
 import asyncio
-import websockets
+import datetime
 import json
+import os
 
+import numpy as np
 import torch
 import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
+import torch.optim as optim
+import websockets
 
 from agent_cnn import DQNAgentCNN
-import numpy as np
 from plotter import Plotter
 
 
@@ -24,7 +26,7 @@ class GameServer:
 
         self.episodes = 2000
         self.steps_per_episode = 50
-        self.target_update_freq = 10  # update target net every X episodes
+        self.target_update_freq = 20   # update target net every X episodes
 
     async def handle_client(self, websocket):
         self.websocket = websocket
@@ -44,9 +46,6 @@ class GameServer:
         except Exception as e:
             print(f"Error waiting for response: {e}")
             return None
-
-    async def request_game_state(self):
-        return await self.send_request({"command": "get_state"})
 
     async def reset_game(self) -> list[str]:
         res = await self.send_request({"command": "reset_game"})
@@ -106,8 +105,12 @@ class GameServer:
 
                 # 3. Execute in environment
                 next_board, reward, done = await self.make_move(action_decoded)
+                if done and reward > 0:
+                    self.plotter.update_winrate(1)
+                elif done and reward < 0:
+                    self.plotter.update_winrate(0)
 
-                self.plotter.update_reward(reward)
+                self.plotter.update_reward_black(reward)
 
                 next_valid_moves = await self.request_valid_moves()
                 print(f"next valid moves: {next_valid_moves}")
@@ -144,7 +147,19 @@ class GameServer:
             if ep % self.target_update_freq == 0:
                 self.agent.update_target_network()
 
-            torch.save(self.agent.policy_net.state_dict(), "models/model_cnn.pt")
+            # torch.save(self.agent.policy_net.state_dict(), "models/model_cnn.pt")
+            torch.save(
+                {
+                    "model_state_dict": self.agent.policy_net.state_dict(),
+                    "optimizer_state_dict": self.agent.optimizer.state_dict(),
+                    "epsilon": self.agent.epsilon,
+                },
+                f"models/checkpoints/checkpoint_{datetime.datetime.now().isoformat().replace(":", "-").split(".")[0]}.pt",
+            )
+            files = os.listdir("models/checkpoints/")
+            if len(files) > 10:
+                for file in range(len(files) - 10):
+                    os.remove(f"models/checkpoints/{files[file]}")
 
             print(f"[Episode {ep}] done, epsilon={self.agent.epsilon:.2f}")
 

@@ -1,6 +1,7 @@
 import os
 import random
 from collections import deque
+import datetime
 
 import numpy as np
 import torch
@@ -11,13 +12,56 @@ import torch.optim as optim
 from plotter import Plotter
 
 
+# class GoCNN(nn.Module):
+#     def __init__(
+#         self,
+#         board_width: int,
+#         board_height: int,
+#         num_channels=32,
+#         hidden_size=128,
+#         num_past_steps=2,
+#     ):
+#         super(GoCNN, self).__init__()
+
+#         self.board_width = board_width
+#         self.board_height = board_height
+
+#         self.conv1 = nn.Conv2d(
+#             in_channels=1
+#             + 2
+#             + num_past_steps * 2,  # disabled, current black/while, past moves
+#             out_channels=num_channels,
+#             kernel_size=3,
+#             padding=1,
+#         )
+#         self.conv2 = nn.Conv2d(
+#             in_channels=num_channels,
+#             out_channels=num_channels,
+#             kernel_size=3,
+#             padding=1,
+#         )
+
+#         self.fc_input_size = num_channels * board_width * board_height
+#         self.fc1 = nn.Linear(self.fc_input_size, hidden_size)
+#         self.fc_out = nn.Linear(hidden_size, board_width * board_height + 1)
+
+#     def forward(self, x):
+#         x = F.relu(self.conv1(x))
+#         x = F.relu(self.conv2(x))
+
+#         x = x.view(-1, self.fc_input_size)
+
+
+#         x = F.relu(self.fc1(x))
+#         q_values = self.fc_out(x)
+#         return q_values
 class GoCNN(nn.Module):
     def __init__(
         self,
         board_width: int,
         board_height: int,
-        num_channels=32,
-        hidden_size=128,
+        num_channels=128,
+        hidden_size=512,
         num_past_steps=2,
     ):
         super(GoCNN, self).__init__()
@@ -25,19 +69,37 @@ class GoCNN(nn.Module):
         self.board_width = board_width
         self.board_height = board_height
 
+        # https://pytorch.org/docs/stable/generated/torch.nn.MaxPool2d.html
         self.conv1 = nn.Conv2d(
-            in_channels=1
-            + 2
-            + num_past_steps * 2,  # disabled, current black/while, past moves
-            out_channels=num_channels,
+            in_channels=1  # disabled nodes
+            + 1  # side (1...black, 0...white)
+            + 2  # current black/white
+            + num_past_steps * 2,  # past moves
+            out_channels=num_channels,  # 32
             kernel_size=3,
             padding=1,
+            # padding_mode="same",
         )
         self.conv2 = nn.Conv2d(
             in_channels=num_channels,
-            out_channels=num_channels,
+            out_channels=num_channels,  # 64
             kernel_size=3,
             padding=1,
+            # padding_mode="same",
+        )
+        self.conv3 = nn.Conv2d(
+            in_channels=num_channels,
+            out_channels=num_channels,  # 128
+            kernel_size=3,
+            padding=1,
+            # padding_mode="same",
+        )
+        self.conv4 = nn.Conv2d(
+            in_channels=num_channels,
+            out_channels=num_channels,  # 256
+            kernel_size=3,
+            padding=1,
+            # padding_mode="same",
         )
 
         self.fc_input_size = num_channels * board_width * board_height
@@ -47,6 +109,8 @@ class GoCNN(nn.Module):
     def forward(self, x):
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
+        x = F.relu(self.conv3(x))
+        x = F.relu(self.conv4(x))
 
         x = x.view(-1, self.fc_input_size)
 
@@ -85,6 +149,24 @@ class ReplayBuffer:
         return len(self.buffer)
 
 
+def getCheckpointFile():
+    files = os.listdir("models/checkpoints/")
+    newest_file = None
+    newest_time = None
+    for file in files:
+        if file.startswith("checkpoint_") and file.endswith(".pt"):
+            dt_str = file.replace("checkpoint_", "").replace(".pt", "")
+            # Convert '2025-01-21T17-08-19' -> '2025-01-21T17:08:19'
+            date_part, time_part = dt_str.split("T")
+            time_part = time_part.replace("-", ":")
+            final_dt_str = date_part + "T" + time_part
+            dt = datetime.datetime.fromisoformat(final_dt_str)
+            if newest_time is None or dt > newest_time:
+                newest_time = dt
+                newest_file = file
+    return newest_file
+
+
 class DQNAgentCNN:
     def __init__(
         self,
@@ -111,24 +193,35 @@ class DQNAgentCNN:
             board_width, board_height, num_past_steps=num_past_steps
         ).to(self.device)
 
-        if os.path.isfile("models/model_cnn.pt"):
-            self.policy_net.load_state_dict(torch.load("models/model_cnn.pt"))
+        self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
+
+        # Exploration parameter
+        self.epsilon = 1
+        self.epsilon_decay = 0.995
+        self.epsilon_min = 0.10
+
+        checkpoint_file = getCheckpointFile()
+        if checkpoint_file != "" and checkpoint_file is not None:
+            # if os.path.isfile("models/model_cnn.pt"):
+            print(f"loading checkpoint {checkpoint_file}")
+            checkpoint = torch.load(f"models/checkpoints/{checkpoint_file}")
+            self.policy_net.load_state_dict(checkpoint["model_state_dict"])
             self.policy_net.train()
+            self.epsilon = checkpoint["epsilon"]
+            self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
+        # if os.path.isfile("models/model_cnn.pt"):
+        #     self.policy_net.load_state_dict(torch.load("models/model_cnn.pt"))
 
         self.target_net = GoCNN(board_width, board_height).to(self.device)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
 
-        self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
-
         self.replay_buffer = ReplayBuffer()
 
-        # Exploration parameter
-        self.epsilon = 1
-        self.epsilon_decay = 0.995
-        self.epsilon_min = 0.20
-
-    def preprocess_state(self, board_state: list[str], history: list[list[str]]):
+    def preprocess_state(
+        self, board_state: list[str], history: list[list[str]], is_white=False
+    ):
         """
         Convert the board (list of strings, e.g. ["XX.O#", ...]) into a float tensor of shape [1,7,w,h].
         '#' -> 1.0  Channel 0
@@ -142,6 +235,11 @@ class DQNAgentCNN:
 
         # disabled channel
         disabled_channel = torch.zeros(w, h, device=self.device)
+        side_channel = (
+            torch.ones(w, h, device=self.device)
+            if is_white
+            else torch.zeros(w, h, device=self.device)
+        )
         current_black = torch.zeros(w, h, device=self.device)
         current_white = torch.zeros(w, h, device=self.device)
 
@@ -155,7 +253,7 @@ class DQNAgentCNN:
                 elif ch == "#":
                     disabled_channel[x][y] = 1.0
 
-        channels.extend([disabled_channel, current_black, current_white])
+        channels.extend([disabled_channel, side_channel, current_black, current_white])
 
         # parse history and append to channels
         for past_idx in range(self.num_past_steps):
@@ -210,13 +308,13 @@ class DQNAgentCNN:
                     -1e9  # Set illegal moves to negative
                 )
 
-                print(f"Original q_values: {q_values}")
-                print(f"Masked q_values: {masked_q_values}")
+                # print(f"Original q_values: {q_values}")
+                # print(f"Masked q_values: {masked_q_values}")
 
                 action_idx = masked_q_values.argmax(dim=1).item()
-                print(f"action index: {action_idx}")
-                print(f"board: {board_state}")
-                print(f"board tensor: {state_tensor}")
+                # print(f"action index: {action_idx}")
+                # print(f"board: {board_state}")
+                # print(f"board tensor: {state_tensor}")
         return action_idx
 
     def decode_action(self, action_idx: int):
@@ -267,11 +365,11 @@ class DQNAgentCNN:
         # 4. Calculate current Q-values for each (state, action)
         # q_values will be shape [batch_size, num_actions]
         q_values = self.policy_net(state_batch)
-        print(f"q-values: {q_values}")
+        # print(f"q-values: {q_values}")
         # gather(1, action_batch) picks the Q-value for the specific action each transition took
         # after gather, q_values has shape [batch_size, 1]
         q_values = q_values.gather(1, action_batch.view(-1, 1))  # shape [batch_size, 1]
-        print(f"gathered q-values: {q_values}")
+        # print(f"gathered q-values: {q_values}")
 
         # 5. Calculate target Q-values using the target net
         with torch.no_grad():
@@ -286,10 +384,10 @@ class DQNAgentCNN:
 
             # max_next_q_values = self.target_net(next_state_batch).max(dim=1)[0]
             max_next_q_values = next_q_values.max(dim=1)[0]
-            print(f"max next q: {max_next_q_values}")
+            # print(f"max next q: {max_next_q_values}")
             # DQN target
             target_q = reward_batch + (1 - done_batch) * self.gamma * max_next_q_values
-            print(f"target_q: {target_q}")
+            # print(f"target_q: {target_q}")
 
         # 6. Compute loss between current Q-values and target Q-values
         # q_values is [batch_size, 1], target_q is [batch_size], so we squeeze q_values
@@ -316,3 +414,7 @@ class DQNAgentCNN:
         self.plotter.update_epsilon(self.epsilon)
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
+
+    def get_propabilities_from_state(self, state: list[str], history: list[list[str]]):
+        tensor = self.preprocess_state(state, history)
+        return self.policy_net(tensor)

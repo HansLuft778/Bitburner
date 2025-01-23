@@ -1,4 +1,10 @@
 import { GoOpponent } from "@/NetscriptDefinitions.js";
+import {
+    getNumKillsOf_current_prev,
+    getNumKillsOf_prev_prevprev,
+    getRewardForKillEnemy as getNumForKillEnemy,
+    getRewardForKillPlayer as getNumForKillPlayer
+} from "./captureDetection.js";
 
 interface RequestData {
     command: string;
@@ -26,6 +32,8 @@ export async function sendDataAndWaitForResponse(
 
 function waitForOpen(socket: WebSocket, ns: NS) {
     return new Promise<void>((resolve) => {
+        console.log("open2");
+
         socket.onopen = function (event) {
             ns.print("Connected to Python RL server.");
             resolve();
@@ -56,6 +64,7 @@ async function getNextMove(ns: NS) {
 export async function waitForIncomingRequests(ns: NS) {
     const socket = new WebSocket("ws://localhost:8765");
     await waitForOpen(socket, ns);
+    console.log("open");
 
     let num_wins = 0;
     let num_games = 0;
@@ -87,23 +96,22 @@ export async function waitForIncomingRequests(ns: NS) {
             console.log("make move");
 
             if (requestData.x != null && requestData.y != null) {
-                console.log("all set");
-
                 const result = await ns.go.makeMove(requestData.x, requestData.y);
+                // ns.go.opponentNextTurn()
 
-                ns.go.getBoardState;
+                let reward = getNumForKillPlayer(ns, result) / 25;
+                reward -= getNumForKillEnemy(ns) / 25;
 
-                let reward = 0;
                 let done = false;
                 const state = ns.go.getGameState();
                 if (result.type == "gameOver") {
                     done = true;
-                    reward = state.blackScore > state.whiteScore ? 1 : -1;
+                    reward += state.blackScore > state.whiteScore ? 1 : -1;
                     if (reward === 1) num_wins++;
                 } else {
                     // reward shaping
                     // if agent made move with better score, reward it
-                    reward = state.blackScore > state.whiteScore ? 0.01 : 0;
+                    reward += state.blackScore > state.whiteScore ? 0.1 : 0;
                 }
 
                 socket.send(

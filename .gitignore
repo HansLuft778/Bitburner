@@ -139,3 +139,6 @@ build/
 
 .vscode/*
 !.vscode/launch.json
+
+checkpoints/
+__pycache__/
