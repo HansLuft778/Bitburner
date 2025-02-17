@@ -219,8 +219,8 @@ class SelfPlayServer:
 
     def finalize_transitions(self, white_reward, black_reward):
         """Finalize the last transitions for both players."""
-        self.plotter.update_reward_black(black_reward)
-        self.plotter.update_reward_white(white_reward)
+        self.plotter.update_wins_black(black_reward)
+        self.plotter.update_wins_white(white_reward)
 
         # Process both transitions before training
         transitions_to_add = []

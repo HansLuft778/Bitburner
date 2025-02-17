@@ -106,7 +106,7 @@ class GameServer:
                 # 3. Execute in environment
                 next_board, reward, done = await self.make_move(action_decoded)
 
-                self.plotter.update_reward_black(reward)
+                self.plotter.update_wins_black(reward)
 
                 next_valid_moves = await self.request_valid_moves()
                 print(f"next valid moves: {next_valid_moves}")

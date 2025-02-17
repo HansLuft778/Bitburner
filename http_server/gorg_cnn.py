@@ -5,9 +5,6 @@ import os
 
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.optim as optim
 import websockets
 
 from agent_cnn import DQNAgentCNN
@@ -26,7 +23,7 @@ class GameServer:
 
         self.episodes = 2000
         self.steps_per_episode = 50
-        self.target_update_freq = 20   # update target net every X episodes
+        self.target_update_freq = 20  # update target net every X episodes
 
     async def handle_client(self, websocket):
         self.websocket = websocket
@@ -53,6 +50,7 @@ class GameServer:
 
     async def request_valid_moves(self):
         valid_moves = await self.send_request({"command": "get_valid_moves"})
+        print(valid_moves)
         return np.append(
             np.array(valid_moves["validMoves"]).flatten(),
             valid_moves["canPass"],
@@ -110,7 +108,7 @@ class GameServer:
                 elif done and reward < 0:
                     self.plotter.update_winrate(0)
 
-                self.plotter.update_reward_black(reward)
+                self.plotter.update_wins_black(reward)
 
                 next_valid_moves = await self.request_valid_moves()
                 print(f"next valid moves: {next_valid_moves}")

@@ -55,7 +55,7 @@ class Plotter:
             data_list = data_list[::2]
         return data_list
 
-    def update_reward_black(self, new_reward: float):
+    def update_wins_black(self, new_reward: float):
         if self.cumulative_reward_black:
             self.cumulative_reward_black.append(
                 new_reward + self.cumulative_reward_black[-1]
@@ -73,7 +73,7 @@ class Plotter:
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
 
-    def update_reward_white(self, new_reward: float):
+    def update_wins_white(self, new_reward: float):
         if self.cumulative_reward_white:
             self.cumulative_reward_white.append(
                 new_reward + self.cumulative_reward_white[-1]

@@ -5,11 +5,14 @@ import {
     getRewardForKillEnemy as getNumForKillEnemy,
     getRewardForKillPlayer as getNumForKillPlayer
 } from "./captureDetection.js";
+import { getScores } from "./lib.js";
 
 interface RequestData {
     command: string;
     x?: number;
     y?: number;
+    is_white?: boolean;
+    state?: string[];
 }
 
 export async function sendDataAndWaitForResponse(
@@ -156,6 +159,9 @@ export async function waitForIncomingRequests(ns: NS) {
         } else if (requestData.command == "get_history") {
             const history = ns.go.getMoveHistory();
             socket.send(JSON.stringify({ history: history }));
+        } else if (requestData.command == "get_score") {
+            const scores = getScores(ns, requestData.state);
+            socket.send(JSON.stringify(scores));
         } else {
             socket.send(JSON.stringify({ status: "unknown_command" }));
         }

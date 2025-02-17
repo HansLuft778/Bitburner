@@ -12,56 +12,13 @@ import torch.optim as optim
 from plotter import Plotter
 
 
-# class GoCNN(nn.Module):
-#     def __init__(
-#         self,
-#         board_width: int,
-#         board_height: int,
-#         num_channels=32,
-#         hidden_size=128,
-#         num_past_steps=2,
-#     ):
-#         super(GoCNN, self).__init__()
-
-#         self.board_width = board_width
-#         self.board_height = board_height
-
-#         self.conv1 = nn.Conv2d(
-#             in_channels=1
-#             + 2
-#             + num_past_steps * 2,  # disabled, current black/while, past moves
-#             out_channels=num_channels,
-#             kernel_size=3,
-#             padding=1,
-#         )
-#         self.conv2 = nn.Conv2d(
-#             in_channels=num_channels,
-#             out_channels=num_channels,
-#             kernel_size=3,
-#             padding=1,
-#         )
-
-#         self.fc_input_size = num_channels * board_width * board_height
-#         self.fc1 = nn.Linear(self.fc_input_size, hidden_size)
-#         self.fc_out = nn.Linear(hidden_size, board_width * board_height + 1)
-
-#     def forward(self, x):
-#         x = F.relu(self.conv1(x))
-#         x = F.relu(self.conv2(x))
-
-#         x = x.view(-1, self.fc_input_size)
-
-
-#         x = F.relu(self.fc1(x))
-#         q_values = self.fc_out(x)
-#         return q_values
 class GoCNN(nn.Module):
     def __init__(
         self,
         board_width: int,
         board_height: int,
-        num_channels=128,
-        hidden_size=512,
+        num_channels=32,
+        hidden_size=128,
         num_past_steps=2,
     ):
         super(GoCNN, self).__init__()
@@ -69,37 +26,20 @@ class GoCNN(nn.Module):
         self.board_width = board_width
         self.board_height = board_height
 
-        # https://pytorch.org/docs/stable/generated/torch.nn.MaxPool2d.html
         self.conv1 = nn.Conv2d(
-            in_channels=1  # disabled nodes
-            + 1  # side (1...black, 0...white)
-            + 2  # current black/white
-            + num_past_steps * 2,  # past moves
-            out_channels=num_channels,  # 32
+            in_channels=1
+            + 1
+            + 2
+            + num_past_steps * 2,  # disabled, current black/while, past moves
+            out_channels=num_channels,
             kernel_size=3,
             padding=1,
-            # padding_mode="same",
         )
         self.conv2 = nn.Conv2d(
             in_channels=num_channels,
-            out_channels=num_channels,  # 64
+            out_channels=num_channels,
             kernel_size=3,
             padding=1,
-            # padding_mode="same",
-        )
-        self.conv3 = nn.Conv2d(
-            in_channels=num_channels,
-            out_channels=num_channels,  # 128
-            kernel_size=3,
-            padding=1,
-            # padding_mode="same",
-        )
-        self.conv4 = nn.Conv2d(
-            in_channels=num_channels,
-            out_channels=num_channels,  # 256
-            kernel_size=3,
-            padding=1,
-            # padding_mode="same",
         )
 
         self.fc_input_size = num_channels * board_width * board_height
@@ -109,14 +49,76 @@ class GoCNN(nn.Module):
     def forward(self, x):
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
-        x = F.relu(self.conv3(x))
-        x = F.relu(self.conv4(x))
 
         x = x.view(-1, self.fc_input_size)
 
         x = F.relu(self.fc1(x))
         q_values = self.fc_out(x)
         return q_values
+
+
+# class GoCNN(nn.Module):
+#     def __init__(
+#         self,
+#         board_width: int,
+#         board_height: int,
+#         num_channels=128,
+#         hidden_size=512,
+#         num_past_steps=2,
+#     ):
+#         super(GoCNN, self).__init__()
+
+#         self.board_width = board_width
+#         self.board_height = board_height
+
+#         # https://pytorch.org/docs/stable/generated/torch.nn.MaxPool2d.html
+#         self.conv1 = nn.Conv2d(
+#             in_channels=1  # disabled nodes
+#             + 1  # side (1...black, 0...white)
+#             + 2  # current black/white
+#             + num_past_steps * 2,  # past moves
+#             out_channels=num_channels,  # 32
+#             kernel_size=3,
+#             padding=1,
+#             # padding_mode="same",
+#         )
+#         self.conv2 = nn.Conv2d(
+#             in_channels=num_channels,
+#             out_channels=num_channels,  # 64
+#             kernel_size=3,
+#             padding=1,
+#             # padding_mode="same",
+#         )
+#         self.conv3 = nn.Conv2d(
+#             in_channels=num_channels,
+#             out_channels=num_channels,  # 128
+#             kernel_size=3,
+#             padding=1,
+#             # padding_mode="same",
+#         )
+#         self.conv4 = nn.Conv2d(
+#             in_channels=num_channels,
+#             out_channels=num_channels,  # 256
+#             kernel_size=3,
+#             padding=1,
+#             # padding_mode="same",
+#         )
+
+#         self.fc_input_size = num_channels * board_width * board_height
+#         self.fc1 = nn.Linear(self.fc_input_size, hidden_size)
+#         self.fc_out = nn.Linear(hidden_size, board_width * board_height + 1)
+
+#     def forward(self, x):
+#         x = F.relu(self.conv1(x))
+#         x = F.relu(self.conv2(x))
+#         x = F.relu(self.conv3(x))
+#         x = F.relu(self.conv4(x))
+
+#         x = x.view(-1, self.fc_input_size)
+
+#         x = F.relu(self.fc1(x))
+#         q_values = self.fc_out(x)
+#         return q_values
 
 
 class ReplayBuffer:
@@ -172,7 +174,7 @@ class DQNAgentCNN:
         self,
         board_width: int,
         board_height: int,
-        plotter: Plotter,
+        plotter: Plotter | None,
         lr=1e-4,
         gamma=0.95,
         batch_size=64,
@@ -198,7 +200,7 @@ class DQNAgentCNN:
         # Exploration parameter
         self.epsilon = 1
         self.epsilon_decay = 0.995
-        self.epsilon_min = 0.10
+        self.epsilon_min = 0.01
 
         checkpoint_file = getCheckpointFile()
         if checkpoint_file != "" and checkpoint_file is not None:
@@ -316,6 +318,28 @@ class DQNAgentCNN:
                 # print(f"board: {board_state}")
                 # print(f"board tensor: {state_tensor}")
         return action_idx
+
+    def select_action_eval(
+        self,
+        board: list[str],
+        valid_moves: list[bool],
+        game_history: list[list[str]],
+        color_is_white: bool,
+    ):
+        """
+        Select action deterministically for evaluation (no exploration).
+        """
+        state = self.preprocess_state(board, game_history, color_is_white)
+
+        # Get Q-values
+        q_values = self.policy_net(state)
+
+        # Mask invalid moves with large negative number
+        mask = torch.tensor(valid_moves, dtype=torch.float32, device=self.device)
+        q_values = q_values + (mask - 1) * 1e9
+
+        # Select the action with highest Q-value
+        return torch.argmax(q_values).item()
 
     def decode_action(self, action_idx: int):
         """
