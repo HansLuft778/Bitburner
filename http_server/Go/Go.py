@@ -37,8 +37,8 @@ class Go:
         self.board_height = board_height
         self.board_size = self.board_width * self.board_height
         self.history: list[np.ndarray] = []
+        self.previous_action = -1
 
-        self.str_board: list[str] = board
         self.state: np.ndarray = self.encode_board(board)
         self.current_player = 1  # black starts
 
@@ -90,11 +90,11 @@ class Go:
                     transformed[i][j] = 3
         return transformed
 
-    def decode_board(self, board_array: np.ndarray):
+    def decode_board(self, board_array: np.ndarray) -> list[str]:
         """
         Converts a numpy board array (with 0/1/2/3) back into the string-based representation.
         """
-        decoded_board = []
+        decoded_board: list[str] = []
         for i in range(board_array.shape[0]):
             tmp = ""
             for j in range(board_array.shape[1]):
@@ -263,6 +263,9 @@ class Go:
     def simulate_move(
         self, state: np.ndarray, x: int, y: int, color: int
     ) -> np.ndarray | None:
+        if state[x][y] != ".":
+            return None
+
         sim_state = deepcopy(state)
         sim_state[x][y] = color
 
@@ -327,8 +330,6 @@ class Go:
                     elif len(libs) > 1 and state[nx][ny] == self.current_player:
                         has_safe_friendly = True
 
-                # suicide if: all adjacent friendly have 1 lib, or all adjacent are enemy
-
         if has_empty_neighbor or has_capturable_enemy or has_safe_friendly:
             tmp_state = state.copy()
             tmp_state[x][y] = self.current_player
@@ -342,23 +343,47 @@ class Go:
 
             return not is_repeat
 
-        # print("no rule applies, must be valid move")
-        # return True
-
-    def make_move(self, action: int, is_white: bool) -> np.ndarray:
+    def make_move(self, action: int, is_white: bool) -> tuple[list[str], int, bool]:
         state_after_move = self.state_after_action(action, is_white)
         self.state = state_after_move
         self.current_player = 3 - self.current_player
-        # return next_state, reward, done
-        return self.state
 
-    def get_legal_moves(self, player: int):
+        game_ended = self.has_game_ended(action)
+        decoded_state = self.decode_board(self.state)
+        # return next_state, reward, done
+        return decoded_state, 0, game_ended
+
+    def get_valid_moves(self) -> np.ndarray:
         legal_moves: np.ndarray = np.zeros([self.board_width, self.board_height])
         for x in range(self.board_width):
             for y in range(self.board_height):
                 is_legal = self.check_move_is_valid(self.state, x, y)
                 legal_moves[x][y] = is_legal
         return legal_moves
+
+    def has_game_ended(self, action: int) -> bool:
+        # double pass
+        if self.previous_action == action == self.board_width * self.board_height:
+            return True
+
+        # previous pass, current has no valid moves
+        valid = self.get_valid_moves()
+        if (
+            self.previous_action == self.board_width * self.board_height
+            and np.sum(valid) == 0
+        ):
+            return True
+
+        # board is full
+        has_empty_node = False
+        for x in range(self.board_width):
+            for y in range(self.board_height):
+                if self.state[x][y] == ".":
+                    has_empty_node = True
+        if has_empty_node:
+            return False
+
+        return False
 
 
 if __name__ == "__main__":
