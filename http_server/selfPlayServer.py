@@ -65,12 +65,6 @@ class SelfPlayServer:
         return resp["board"]
 
     async def make_move(self, action, self_play: bool, play_as_white=False):
-        """
-        Non-blocking "makeMove" for a color. We do NOT await if we don't want to
-        wait for the environment's 'opponent' move.
-        We'll just instruct the environment that color X played a move, but
-        the environment won't fill in any AI moves for the other color.
-        """
         if self_play:
             if action == "pass":
                 res = await self.send_request(
@@ -108,24 +102,6 @@ class SelfPlayServer:
             done = res["done"]
             return next_state, reward, done
 
-    async def opponent_next_turn(self, play_as_white: bool):
-        """
-        Then we do 'await go.opponentNextTurn(false, play_as_white)' in the environment
-        to finalize that move or check if it triggered game end, etc.
-        """
-        resp = await self.send_request(
-            {"command": "opponent_next_turn", "playAsWhite": play_as_white}
-        )
-        return resp
-
-    async def get_state(self):
-        """
-        Possibly get the entire board, reward, done info, etc.
-        """
-        resp = await self.send_request({"command": "get_state"})
-        # e.g. { board: [...], reward: X, done: bool }
-        return resp
-
     async def request_valid_moves(self, play_as_white: bool):
         valid_moves = await self.send_request(
             {"command": "get_valid_moves", "playAsWhite": play_as_white}
@@ -147,7 +123,7 @@ class SelfPlayServer:
         'opponent_next_turn' to finalize.
         """
 
-        # 3) Agent picks a move
+        # Agent picks a move
         valid_moves = await self.request_valid_moves(color_is_white)
         print(f"invalid moves: {valid_moves}")
         game_history = await self.get_game_history()
@@ -157,12 +133,12 @@ class SelfPlayServer:
         action_decoded = self.agent_shared.decode_action(action_idx)
         print(f"chose {action_idx} which corresponds to {action_decoded}")
 
-        # 4) Non-blocking make_move
+        # make the move
         next_board, reward, done = await self.make_move(
             action_decoded, True, play_as_white=color_is_white
         )
 
-        # 5) Update replay buffer
+        # Update replay buffer
         # state before move was made
         state_tensor = self.agent_shared.preprocess_state(
             board, game_history, color_is_white
