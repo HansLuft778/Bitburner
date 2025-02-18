@@ -42,7 +42,18 @@ class Go:
         self.state: np.ndarray = self.encode_board(board)
         self.current_player = 1  # black starts
 
+    def __str__(self):
+        board = self.decode_board(self.state)
+        return rotate_and_beatify(board, "\n")
+
     def decode_action(self, action_idx: int):
+        """
+        Converts an action index into board coordinates. The last index is pass action
+        Returns:
+            tuple: A pair of coordinates (x,y):
+                - If action_idx is width*height, returns (-1,-1) representing a pass move
+                - Otherwise returns (x,y) coordinates on the board
+        """
         board_size = self.board_width * self.board_height
         if action_idx == board_size:
             return (-1, -1)
@@ -52,6 +63,9 @@ class Go:
             return (x, y)
 
     def encode_action(self, x: int, y: int) -> int:
+        """
+        Converts a board coordinate to an action index
+        """
         return x * self.board_height + y
 
     def encode_board(self, board: list[str]):
@@ -61,7 +75,7 @@ class Go:
           '.' -> 0 (empty)
           'X' -> 1 (black)
           'O' -> 2 (white)
-          '#' -> 3 (blocked or invalid)
+          '#' -> 3 (disabled)
         """
         transformed = np.zeros([5, 5], dtype=int)
         for i, row_str in enumerate(board):
@@ -78,8 +92,7 @@ class Go:
 
     def decode_board(self, board_array: np.ndarray):
         """
-        Converts a numpy board array (with 0/1/2/3) back into the
-        string-based representation for printing or logging.
+        Converts a numpy board array (with 0/1/2/3) back into the string-based representation.
         """
         decoded_board = []
         for i in range(board_array.shape[0]):
@@ -96,10 +109,6 @@ class Go:
                     tmp += "#"
             decoded_board.append(tmp)
         return decoded_board
-
-    def __str__(self):
-        board = self.decode_board(self.state)
-        return rotate_and_beatify(board, "\n")
 
     def state_after_action(self, action: int, is_white: bool) -> np.ndarray:
         """Returns (new_board_state_as_strings, captures)."""
@@ -278,14 +287,14 @@ class Go:
             return None
 
         # check for repeat
-        is_repeat = self.checkStateIsRepeat(sim_state)
+        is_repeat = self.check_state_is_repeat(sim_state)
         if is_repeat:
             return None
 
         # return some useful data
         return sim_state
 
-    def checkStateIsRepeat(self, state: np.ndarray) -> bool:
+    def check_state_is_repeat(self, state: np.ndarray) -> bool:
         prev_len = len(self.history)
         history_set = set([str(h_state) for h_state in self.history])
         history_set.add(str(state))
@@ -293,7 +302,7 @@ class Go:
             return True
         return False
 
-    def evaluateMoveIsVaid(self, state: np.ndarray, x: int, y: int) -> bool:
+    def check_move_is_valid(self, state: np.ndarray, x: int, y: int) -> bool:
         # move is not empty
         if state[x][y] != 0:
             return False
@@ -323,13 +332,13 @@ class Go:
         if has_empty_neighbor or has_capturable_enemy or has_safe_friendly:
             tmp_state = state.copy()
             tmp_state[x][y] = self.current_player
-            is_repeat = self.checkStateIsRepeat(tmp_state)
+            is_repeat = self.check_state_is_repeat(tmp_state)
             return not is_repeat
         else:
             simulated_board = self.simulate_move(state, x, y, self.current_player)
             if not simulated_board or simulated_board[x][y] != self.current_player:
                 return False
-            is_repeat = self.checkStateIsRepeat(simulated_board)
+            is_repeat = self.check_state_is_repeat(simulated_board)
 
             return not is_repeat
 
@@ -347,7 +356,7 @@ class Go:
         legal_moves: np.ndarray = np.zeros([self.board_width, self.board_height])
         for x in range(self.board_width):
             for y in range(self.board_height):
-                is_legal = self.evaluateMoveIsVaid(self.state, x, y)
+                is_legal = self.check_move_is_valid(self.state, x, y)
                 legal_moves[x][y] = is_legal
         return legal_moves
 
@@ -379,7 +388,7 @@ if __name__ == "__main__":
     # vis = set()
     # print(go.get_liberties(go.state, 3, 2, vis))
     print(go)
-    print(go.evaluateMoveIsVaid(go.state, 4, 4))
+    print(go.check_move_is_valid(go.state, 4, 4))
 
 
 # done: score
