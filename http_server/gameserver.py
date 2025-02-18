@@ -54,12 +54,6 @@ class GameServer:
             valid_moves["canPass"],
         )
 
-    async def has_valid_move(self, state: list[str], is_white: bool) -> bool:
-        moves_left = await self.send_request(
-            {"command": "has_valid_moves_left", "playAsWhite": is_white, "state": state}
-        )
-        return moves_left
-
     async def make_move(self, action, is_white: bool) -> tuple[list[str], float, bool]:
         if action == "pass":
             res = await self.send_request(
