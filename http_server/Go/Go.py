@@ -1,5 +1,6 @@
 import numpy as np
 from collections import deque
+from copy import deepcopy
 
 
 def rotate_state(state: list[str]) -> list[str]:
@@ -35,10 +36,11 @@ class Go:
         self.board_width = board_width
         self.board_height = board_height
         self.board_size = self.board_width * self.board_height
-        self.history: list[str] = []
+        self.history: list[np.ndarray] = []
 
         self.str_board: list[str] = board
-        self.board: np.ndarray = self.transform_board(board)
+        self.state: np.ndarray = self.encode_board(board)
+        self.current_player = 1  # black starts
 
     def decode_action(self, action_idx: int):
         board_size = self.board_width * self.board_height
@@ -52,7 +54,7 @@ class Go:
     def encode_action(self, x: int, y: int) -> int:
         return x * self.board_height + y
 
-    def transform_board(self, board: list[str]):
+    def encode_board(self, board: list[str]):
         """
         Converts a list of strings (like [".....", "..X..", ...]) into a numpy array
         with the following encoding:
@@ -96,82 +98,28 @@ class Go:
         return decoded_board
 
     def __str__(self):
-        board = self.decode_board(self.board)
-        return rotate_and_beatify(
-            board, "\n"
-        )  # Assuming you have a rotate_and_beatify function
+        board = self.decode_board(self.state)
+        return rotate_and_beatify(board, "\n")
 
-    def state_after_action(self, action: int, is_white: bool) -> tuple[np.ndarray, int]:
+    def state_after_action(self, action: int, is_white: bool) -> np.ndarray:
         """Returns (new_board_state_as_strings, captures)."""
         if action == self.board_size:  # Pass move
-            return self.board.copy(), 0
+            return self.state.copy()
 
         x, y = self.decode_action(action)
-        new_board = self.board.copy()
         color = 2 if is_white else 1
-        captures = 0
 
-        # Place the stone
-        new_board[x][y] = color
+        new_state = self.simulate_move(self.state, x, y, color)
+        if new_state:
+            return new_state
+        else:
+            return np.array([])
 
-        # Check for captures (opponent stones)
-        visited: set[tuple[int, int]] = set()
-        opponent_color = 1 if is_white else 2
-
-        for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-            nx, ny = x + dx, y + dy
-            if (
-                0 <= nx < self.board_width
-                and 0 <= ny < self.board_height
-                and new_board[nx][ny] == opponent_color
-            ):
-                if (nx, ny) not in visited:
-                    group = self.find_group(nx, ny, opponent_color, visited, new_board)
-                    if not self.has_liberties(group, new_board):
-                        # Remove captured group
-                        for gx, gy in group:
-                            new_board[gx][gy] = 0
-                            captures += 1
-
-        return self.decode_board(new_board), captures
-
-    def find_group(
-        self, x: int, y: int, color: int, visited: set, board: np.ndarray
-    ) -> set[tuple[int, int]]:
-        """Find all connected stones of the given color using DFS."""
-        if (x, y) in visited:
-            return set()
-        if not (0 <= x < self.board_width and 0 <= y < self.board_height):
-            return set()
-        if board[x][y] != color:
-            return set()
-
-        visited.add((x, y))
-        group = {(x, y)}
-
-        for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-            group.update(self.find_group(x + dx, y + dy, color, visited, board))
-
-        return group
-
-    def has_liberties(self, group: set[tuple[int, int]], board: np.ndarray) -> bool:
-        """Check if any position in the group has an empty adjacent point (a liberty)."""
-        for x, y in group:
-            for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                nx, ny = x + dx, y + dy
-                if (
-                    0 <= nx < self.board_width
-                    and 0 <= ny < self.board_height
-                    and board[nx][ny] == 0
-                ):
-                    return True
-        return False
-
-    def flood_fill(
+    def flood_fill_territory(
         self, x: int, y: int, visited: set
     ) -> tuple[int | None, set[tuple[int, int]]]:
         """
-        A helper for territory detection:
+        A helper for territory detection, territory is how many empty nodes a color surrounds:
           - BFS/DFS from (x, y) to gather all connected empty cells.
           - Track the colors of any stones adjacent to those empty cells.
           - If we find exactly one color, that color "owns" the territory.
@@ -193,23 +141,19 @@ class Go:
                 continue
             visited.add((cx, cy))
 
-            # If blocked (3), we skip but do not claim it as territory
-            # if self.board[cx][cy] == 3:
-            #     continue
-
             # If its empty -> part of the territory
-            if self.board[cx][cy] == 0:
+            if self.state[cx][cy] == 0:
                 territory.add((cx, cy))
                 # Check neighbors
                 for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
                     nx, ny = cx + dx, cy + dy
                     if 0 <= nx < self.board_width and 0 <= ny < self.board_height:
-                        if self.board[nx][ny] == 0:
+                        if self.state[nx][ny] == 0:
                             if (nx, ny) not in visited:
                                 queue.append((nx, ny))
                         # If it its a stone save its color
-                        elif self.board[nx][ny] in [1, 2]:
-                            adjacent_colors.add(self.board[nx][ny])
+                        elif self.state[nx][ny] in [1, 2]:
+                            adjacent_colors.add(self.state[nx][ny])
 
         # If territory touches exactly one color, it belongs to that color
         if len(adjacent_colors) == 1:
@@ -229,8 +173,8 @@ class Go:
         for x in range(self.board_width):
             for y in range(self.board_height):
                 # 0 means node is empty
-                if (x, y) not in visited and self.board[x][y] == 0:
-                    color_owner, territory = self.flood_fill(x, y, visited)
+                if (x, y) not in visited and self.state[x][y] == 0:
+                    color_owner, territory = self.flood_fill_territory(x, y, visited)
                     if color_owner == 1:  # black
                         black_territory += len(territory)
                     elif color_owner == 2:  # white
@@ -245,8 +189,8 @@ class Go:
         - Each empty node fully surrounded by one color also counts as territory
         """
         # Count stones directly
-        black_pieces = np.count_nonzero(self.board == 1)
-        white_pieces = np.count_nonzero(self.board == 2)
+        black_pieces = np.count_nonzero(self.state == 1)
+        white_pieces = np.count_nonzero(self.state == 2)
 
         # Get territory counts
         white_territory, black_territory = self.get_territory_scores()
@@ -269,13 +213,174 @@ class Go:
             },
         }
 
+    def get_liberties(
+        self, state: np.ndarray, x: int, y: int, visited: set[tuple[int, int]]
+    ):
+        """
+        Returns a set of all liberties the color at (x, y) has and the territory
+        """
+        color: int = state[x][y]
+        if color in [0, 3]:
+            raise ValueError("Empty Cell or Disabled Cell cannot have liberties")
+
+        queue: deque[tuple[int, int]] = deque()
+        queue.append((x, y))
+
+        territory: set[tuple[int, int]] = set()
+        liberties: set[tuple[int, int]] = set()
+
+        while queue:
+            cx, cy = queue.popleft()
+            if (cx, cy) in visited:
+                continue
+            visited.add((cx, cy))
+
+            # If its empty -> part of the territory
+            if state[cx][cy] == color:
+                territory.add((cx, cy))
+                # Check neighbors
+                for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                    nx, ny = cx + dx, cy + dy
+                    if 0 <= nx < self.board_width and 0 <= ny < self.board_height:
+                        if state[nx][ny] == color:
+                            if (nx, ny) not in visited:
+                                queue.append((nx, ny))
+                        # If its empty (a libery) save it
+                        elif state[nx][ny] == 0:
+                            liberties.add((nx, ny))
+
+        return liberties, territory
+
+    def simulate_move(
+        self, state: np.ndarray, x: int, y: int, color: int
+    ) -> np.ndarray | None:
+        sim_state = deepcopy(state)
+        sim_state[x][y] = color
+
+        # color = 1 => enemy = 2; color = 2 => ememy = 1
+        enemy = 3 - color
+
+        # check for capture
+        for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < self.board_width and 0 <= ny < self.board_height:
+                if sim_state[nx][ny] == enemy:
+                    liberties, territory = self.get_liberties(sim_state, nx, ny, set())
+                    # capture enemy stones if they have no liberties
+                    if len(liberties) == 0:
+                        for tx, ty in territory:
+                            sim_state[tx][ty] = "."
+
+        # check if placed router has liberties
+        libs, _ = self.get_liberties(sim_state, x, y, set())
+        if len(libs) == 0:
+            # move was actually a suicide
+            return None
+
+        # check for repeat
+        is_repeat = self.checkStateIsRepeat(sim_state)
+        if is_repeat:
+            return None
+
+        # return some useful data
+        return sim_state
+
+    def checkStateIsRepeat(self, state: np.ndarray) -> bool:
+        prev_len = len(self.history)
+        history_set = set([str(h_state) for h_state in self.history])
+        history_set.add(str(state))
+        if prev_len == len(history_set):
+            return True
+        return False
+
+    def evaluateMoveIsVaid(self, state: np.ndarray, x: int, y: int) -> bool:
+        # move is not empty
+        if state[x][y] != 0:
+            return False
+
+        has_empty_neighbor = False
+        has_capturable_enemy = False
+        has_safe_friendly = False
+
+        visited: set[tuple[int, int]] = set()
+        for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < self.board_width and 0 <= ny < self.board_height:
+                # case 1: valid, if cell has empty eighbors
+                if state[nx][ny] == 0:
+                    has_empty_neighbor = True
+                # case 2: any adjacent enemy cell has only one liberty (enemy group will be captured)
+                if state[nx][ny] in [1, 2]:
+                    libs, _ = self.get_liberties(state, nx, ny, visited)
+                    if len(libs) == 1 and state[nx][ny] != self.current_player:
+                        has_capturable_enemy = True
+                    # or a friendly cell has more than one
+                    elif len(libs) > 1 and state[nx][ny] == self.current_player:
+                        has_safe_friendly = True
+
+                # suicide if: all adjacent friendly have 1 lib, or all adjacent are enemy
+
+        if has_empty_neighbor or has_capturable_enemy or has_safe_friendly:
+            tmp_state = state.copy()
+            tmp_state[x][y] = self.current_player
+            is_repeat = self.checkStateIsRepeat(tmp_state)
+            return not is_repeat
+        else:
+            simulated_board = self.simulate_move(state, x, y, self.current_player)
+            if not simulated_board or simulated_board[x][y] != self.current_player:
+                return False
+            is_repeat = self.checkStateIsRepeat(simulated_board)
+
+            return not is_repeat
+
+        # print("no rule applies, must be valid move")
+        # return True
+
+    def make_move(self, action: int, is_white: bool) -> np.ndarray:
+        state_after_move = self.state_after_action(action, is_white)
+        self.state = state_after_move
+        self.current_player = 3 - self.current_player
+        # return next_state, reward, done
+        return self.state
+
+    def get_legal_moves(self, player: int):
+        legal_moves: np.ndarray = np.zeros([self.board_width, self.board_height])
+        for x in range(self.board_width):
+            for y in range(self.board_height):
+                is_legal = self.evaluateMoveIsVaid(self.state, x, y)
+                legal_moves[x][y] = is_legal
+        return legal_moves
+
 
 if __name__ == "__main__":
-    decoded_board = [".X.OO", "O..XX", ".OX.#", ".OOX.", "O.OX."]  # 9 16.5
-    decoded_board = ["..X..", ".....", "#OO.X", ".XO..", "X...."]  # 5, 8.5
-    decoded_board = ["..##O", "#XXX.", ".XO.O", ".XXX.", "O..OO"]  # 9 11.5
-    decoded_board = ["..#O.", ".XOOO", "XOO.X", ".X..X", "...X."]  # 10, 12.5
-    decoded_board = [".XX..", "O.OXX", ".O.O#", ".OOX.", "O.OX."]  # 10 17.5
+    decoded_board = [".X...", ".X.XO", "#XO..", ".XOOO", ".XO.#"]
+    decoded_board = [".XO..", "XXOO.", "OOO.#", "..OXX", ".X.XX"]
+    decoded_board = [".OXO.", ".O.O#", "#.O..", "....X", ".XXX#"]
+    decoded_board = [".OX..", ".O.O.", "..O..", ".....", ".XXX."]
+    decoded_board = [".OX.O", ".OXO.", "..O..", ".....", ".XXX."]
+    decoded_board = [
+        ".OX.O",
+        ".OXOX",
+        "..O..",
+        ".....",
+        ".XXXO",
+    ]  # place at 0, 3; legal for both
+    decoded_board = [
+        "#XO.X",
+        "#XOXX",
+        "#.XOO",
+        "#OO.O",
+        "#...X",
+    ]  # 0,3 -> both legal, 2,1 -> only for white
+    decoded_board = ["#....", "#...#", "#....", "#.O.X", "#.#X."]
     go = Go(5, 5, decoded_board)
+    go.current_player = 2
 
-    print(go.get_score())
+    # vis = set()
+    # print(go.get_liberties(go.state, 3, 2, vis))
+    print(go)
+    print(go.evaluateMoveIsVaid(go.state, 4, 4))
+
+
+# done: score
+# check move is valid
