@@ -69,7 +69,7 @@ class DQNAgent:
         board_width: int,
         board_height: int,
         plotter: Plotter,
-        lr=3e-4,
+        lr=1e-6,
         gamma=0.95,
         batch_size=64,
     ):

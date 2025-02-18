@@ -1,9 +1,18 @@
 import { GoOpponent } from "@/NetscriptDefinitions.js";
+import {
+    getNumKillsOf_current_prev,
+    getNumKillsOf_prev_prevprev,
+    getRewardForKillEnemy as getNumForKillEnemy,
+    getRewardForKillPlayer as getNumForKillPlayer
+} from "./captureDetection.js";
+import { getScores } from "./lib.js";
 
 interface RequestData {
     command: string;
     x?: number;
     y?: number;
+    is_white?: boolean;
+    state?: string[];
 }
 
 export async function sendDataAndWaitForResponse(
@@ -26,6 +35,8 @@ export async function sendDataAndWaitForResponse(
 
 function waitForOpen(socket: WebSocket, ns: NS) {
     return new Promise<void>((resolve) => {
+        console.log("open2");
+
         socket.onopen = function (event) {
             ns.print("Connected to Python RL server.");
             resolve();
@@ -56,6 +67,7 @@ async function getNextMove(ns: NS) {
 export async function waitForIncomingRequests(ns: NS) {
     const socket = new WebSocket("ws://localhost:8765");
     await waitForOpen(socket, ns);
+    console.log("open");
 
     let num_wins = 0;
     let num_games = 0;
@@ -80,26 +92,29 @@ export async function waitForIncomingRequests(ns: NS) {
             };
             socket.send(JSON.stringify({ state: gameState }));
         } else if (requestData.command === "get_valid_moves") {
-            const validMoves = {
-                valid_moves: ns.go.analysis.getValidMoves()
-            };
+            const validMoves = ns.go.analysis.getValidMoves();
             const canPass = ns.go.getGameState().currentPlayer == "None" ? false : true;
             socket.send(JSON.stringify({ validMoves, canPass }));
         } else if (requestData.command === "make_move") {
             console.log("make move");
 
             if (requestData.x != null && requestData.y != null) {
-                console.log("all set");
-
                 const result = await ns.go.makeMove(requestData.x, requestData.y);
+                // ns.go.opponentNextTurn()
 
-                let reward = 0;
+                let reward = getNumForKillPlayer(ns, result) / 25;
+                reward -= getNumForKillEnemy(ns) / 25;
+
                 let done = false;
+                const state = ns.go.getGameState();
                 if (result.type == "gameOver") {
-                    const state = ns.go.getGameState();
                     done = true;
-                    reward = state.blackScore > state.whiteScore ? 1 : -1;
+                    reward += state.blackScore > state.whiteScore ? 1 : -1;
                     if (reward === 1) num_wins++;
+                } else {
+                    // reward shaping
+                    // if agent made move with better score, reward it
+                    reward += state.blackScore > state.whiteScore ? 0.1 : 0;
                 }
 
                 socket.send(
@@ -129,7 +144,8 @@ export async function waitForIncomingRequests(ns: NS) {
                 JSON.stringify({ board: ns.go.getBoardState(), reward: reward, done: done })
             );
         } else if (requestData.command == "reset_game") {
-            if (num_games > 0) ns.print(`winrate = ${num_wins / num_games}`);
+            if (num_games > 0)
+                ns.print(`winrate: ${num_wins}/${num_games} = ${num_wins / num_games}`);
             num_games++;
 
             const randNum = Math.random();
@@ -140,12 +156,15 @@ export async function waitForIncomingRequests(ns: NS) {
 
             const board = ns.go.resetBoardState(opponent, 5);
             socket.send(JSON.stringify({ board: board }));
+        } else if (requestData.command == "get_history") {
+            const history = ns.go.getMoveHistory();
+            socket.send(JSON.stringify({ history: history }));
+        } else if (requestData.command == "get_score") {
+            const scores = getScores(ns, requestData.state);
+            socket.send(JSON.stringify(scores));
         } else {
             socket.send(JSON.stringify({ status: "unknown_command" }));
         }
-
-        // Remove this duplicate send
-        // socket.send(JSON.stringify({ status: "processed" }));
     }
 }
 
@@ -153,6 +172,5 @@ export async function main(ns: NS) {
     ns.clearLog();
     ns.tail();
 
-    // await getNextMove(ns);
     await waitForIncomingRequests(ns);
 }
