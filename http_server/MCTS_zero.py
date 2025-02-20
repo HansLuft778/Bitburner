@@ -6,19 +6,20 @@ import torch
 import torch.nn.functional as F
 
 from agent_cnn_zero import AlphaZeroAgent
-from gameserver import GameServer
+from gameserver_local import GameServerGo
 from plotter import Plotter
 from TreePlotter import TreePlot
+import time
 
 
 # returns score based on current node
 # maybe should be based on root node (current player/who initiated the search)
 # or based on who started (black)?
-async def get_score(server: GameServer, node: "Node"):
-    score = await server.get_score(node.state)
+def get_score(server: GameServerGo, node: "Node"):
+    score = server.get_score(node.state)
     # 1 means "current node is winning," -1 means "current node is losing"
-    score_white = score["white"]
-    score_black = score["black"]
+    score_white = score["white"]["sum"]
+    score_black = score["black"]["sum"]
     diff = score_white - score_black
 
     # normalize score, so
@@ -31,14 +32,17 @@ async def get_score(server: GameServer, node: "Node"):
         return -normalized if node.is_white else normalized
 
 
-def get_history(node: "Node", history: list[list[str]]) -> list[list[str]]:
-    history.append(node.state)
-    if node.parent:
-        return get_history(node.parent, history)
-    return history
+def get_history(node: "Node") -> list[list[str]]:
+    def _get_history_helper(node: "Node", history: list[list[str]]) -> list[list[str]]:
+        history.append(node.state)
+        if node.parent:
+            return _get_history_helper(node.parent, history)
+        return history
+
+    return _get_history_helper(node, [])
 
 
-async def has_game_ended(server: GameServer, node: "Node") -> tuple[bool, int]:
+def has_game_ended(server: GameServerGo, node: "Node") -> tuple[bool, int]:
     # both pass back-to-back
     # if (
     #     node.action
@@ -51,18 +55,18 @@ async def has_game_ended(server: GameServer, node: "Node") -> tuple[bool, int]:
 
     # one pass, next player has no valid moves
     if node.parent:
-        valid_moves = np.sum(await node.get_valid_moves())
+        valid_moves = np.sum(node.get_valid_moves())
         if node.parent.action == 25 and valid_moves == 0:
             print(
                 f"node.parent.action: {node.parent.action}, valid_moves: {valid_moves}"
             )
             if node.parent.action == 25 and valid_moves == 0:
-                return (True, await get_score(server, node))
+                return (True, get_score(server, node))
 
     # # board full
     space_available = any([True for row in node.state if "." in row])
     if not space_available:
-        return (True, await get_score(server, node))
+        return (True, get_score(server, node))
 
     return (False, 0)
 
@@ -93,7 +97,7 @@ class Node:
     def __init__(
         self,
         state: list[str],
-        server: GameServer,
+        server: GameServerGo,
         is_white: bool,
         agent: AlphaZeroAgent,
         parent: Union["Node", None] = None,
@@ -119,15 +123,22 @@ class Node:
         # enough to check for childs > 0 since we expand to all possible states at once
         return len(self.children) > 0
 
-    async def get_valid_moves(self) -> np.ndarray:
+    def get_valid_moves(self) -> np.ndarray:
         if self.valid_moves is None:
             if self.parent is not None:
-                self.valid_moves = await self.server.request_valid_moves(
-                    self.is_white, self.state, self.parent.state
+                h = get_history(self)
+                self.valid_moves = self.server.request_valid_moves(
+                    self.is_white, self.state, h
                 )
             else:
-                self.valid_moves = await self.server.request_valid_moves(self.is_white)
+                self.valid_moves = self.server.request_valid_moves(
+                    self.is_white, self.state
+                )
         return self.valid_moves
+
+    def get_history(self):
+        # TODO
+        raise NotImplementedError("Not yet implemented")
 
     def next(self) -> "Node":
         best: tuple[Node | None, float] = (None, -999999999)
@@ -139,15 +150,14 @@ class Node:
         assert best[0] is not None
         return best[0]
 
-    async def expand(self, q_values: torch.Tensor) -> None:
-        valid_moves = np.array(await self.get_valid_moves()).flatten()
+    def expand(self, q_values: torch.Tensor) -> None:
+        valid_moves = np.array(self.get_valid_moves()).flatten()
         for action, q_value in enumerate(q_values):
             if not valid_moves[action]:
                 continue
-            action_decoded = self.agent.decode_action(action)
-            if action_decoded != "pass":
-                next_state = await self.server.get_state_after_move(
-                    action_decoded[0], action_decoded[1], self.state, self.is_white
+            if action != 25:
+                next_state = self.server.get_state_after_move(
+                    action, self.state, self.is_white
                 )
             else:
                 next_state = self.state
@@ -172,7 +182,7 @@ class Node:
 
 
 class MCTS:
-    def __init__(self, server: GameServer, search_iterations: int):
+    def __init__(self, server: GameServerGo, search_iterations: int):
         self.search_iterations = search_iterations
         self.server = server
 
@@ -180,7 +190,7 @@ class MCTS:
         self.agent = AlphaZeroAgent(5, 5, self.plotter)
 
     @torch.no_grad()
-    async def search(self, state: list[str], is_white: bool):
+    def search(self, state: list[str], is_white: bool):
         root: Node = Node(state, self.server, is_white, self.agent)
 
         # valid_moves = await root.get_valid_moves()
@@ -202,12 +212,12 @@ class MCTS:
                 node = node.next()
 
             # expansion
-            done, value = await has_game_ended(self.server, node)
+            done, value = has_game_ended(self.server, node)
             # value *= -1
             if not done:
-                valid_moves = await node.get_valid_moves()
-                history = get_history(node, [])
-                history.extend(await self.server.get_game_history())
+                valid_moves = node.get_valid_moves()
+                history = get_history(node)
+                history.extend(self.server.get_game_history())
                 logits, value = self.agent.get_actions_eval(
                     node.state, valid_moves, history, node.is_white
                 )
@@ -223,12 +233,12 @@ class MCTS:
                 logits[~valid_moves] = -1e9
                 policy = torch.softmax(logits, dim=0)
                 policy = policy / policy.sum()
-                await node.expand(policy)
+                node.expand(policy)
 
             # backpropagation
             node.backprop(value)
             # plot tree from root node for debugging
-            # if iter > 40:
+            # if iter == 999:
             #     TreePlot(root).create_tree()
 
         props = torch.zeros(26, device=self.agent.device)
@@ -239,11 +249,11 @@ class MCTS:
 
 
 async def main():
-    server = GameServer()
+    server = GameServerGo()
     await server.wait()
     print("GameServer ready and client connected")
 
-    mcts = MCTS(server, search_iterations=100)
+    mcts = MCTS(server, search_iterations=1000)
 
     NUM_EPISODES = 100
 
@@ -256,7 +266,10 @@ async def main():
         game_history = [state]
         mcts.agent.policy_net.eval()
         while not done:
-            pi_mcts = await mcts.search(state, is_white)
+            before = time.time()
+            pi_mcts = mcts.search(state, is_white)
+            after = time.time()
+            print(f"TOOK: {after-before}s")
             print(pi_mcts)
             best_move = torch.argmax(pi_mcts).item()
             print(f"{best_move}, {pi_mcts[best_move]}")
@@ -275,7 +288,9 @@ async def main():
             # outcome is from current players/root perspective
             # above maybe wrong
             # outcome is: 1 if black won, -1 is white won (TODO: change this in client)
-            next_state, outcome, done = await server.make_move(action, is_white)
+            next_state, outcome, done = await server.make_move(
+                action, best_move, is_white
+            )
             game_history.insert(0, next_state)
 
             is_white = not is_white
