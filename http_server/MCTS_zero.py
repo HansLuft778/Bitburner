@@ -10,6 +10,7 @@ from gameserver_local import GameServerGo
 from plotter import Plotter
 from TreePlotter import TreePlot
 import time
+from Go.Go import Go
 
 
 # returns score based on current node
@@ -259,6 +260,7 @@ async def main():
 
     for _ in range(NUM_EPISODES):
         state = await server.reset_game(True)
+        server.go = Go(5, 5, state)
 
         buffer = []
         is_white = False

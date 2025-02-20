@@ -100,5 +100,3 @@ class GameServerGo:
         asyncio.create_task(self.start_server())
         # Wait for the client to connect
         await self.wait_for_client()
-        game_state = await self.get_state()
-        self.go = Go(5, 5, game_state)
