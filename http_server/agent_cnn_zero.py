@@ -205,14 +205,14 @@ class AlphaZeroAgent:
         # Select the action with highest Q-value
         return policy.squeeze(0), value.item()
 
-    def decode_action(self, action_idx: int):
+    def decode_action(self, action_idx: int) -> tuple[int, int]:
         """
         Convert the action index back to (x, y) or 'pass'.
         If action_idx == board_size, then 'pass'.
         """
         board_size = self.board_width * self.board_height
         if action_idx == board_size:
-            return "pass"
+            return (-1, -1)
         else:
             x = action_idx // self.board_height
             y = action_idx % self.board_height
