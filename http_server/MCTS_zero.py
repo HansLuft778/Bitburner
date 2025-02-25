@@ -1,4 +1,6 @@
 import math
+import time
+from collections import defaultdict
 from typing import Union
 
 import numpy as np
@@ -7,10 +9,9 @@ import torch.nn.functional as F
 
 from agent_cnn_zero import AlphaZeroAgent
 from gameserver_local import GameServerGo
+from Go.Go import Go
 from plotter import Plotter
 from TreePlotter import TreePlot
-import time
-from Go.Go import Go
 
 
 # returns score based on current node
@@ -189,63 +190,85 @@ class MCTS:
 
         self.plotter = Plotter()
         self.agent = AlphaZeroAgent(5, 5, self.plotter)
+        self.timing_stats = defaultdict(float)
+        self.iterations_stats = defaultdict(int)
 
     @torch.no_grad()
     def search(self, state: list[str], is_white: bool):
         root: Node = Node(state, self.server, is_white, self.agent)
 
-        # valid_moves = await root.get_valid_moves()
-        # history = get_history(root, [])
-        # history.extend(await self.server.get_game_history())
-        # policy, _ = self.agent.get_actions_eval(state, valid_moves, history, is_white)
-        # policy1 = torch.softmax(policy, dim=1).squeeze(0).cpu().numpy()
-        # policy1 = (1 - 0.25) * policy1 + 0.25 * np.random.dirichlet([0.3] * (25 + 1))
-
-        # policy1 *= valid_moves
-        # policy1 /= np.sum(policy1)
-
-        # await root.expand(policy.squeeze(0))
+        self.timing_stats.clear()
+        self.iterations_stats.clear()
+        search_start = time.time()
 
         for iter in range(self.search_iterations):
             node = root
             # selection
+            select_start = time.time()
             while node.is_fully_expanded():
                 node = node.next()
+            self.timing_stats["selection"] += time.time() - select_start
+            self.iterations_stats["selection"] += 1
 
             # expansion
+            end_check_start = time.time()
             done, value = has_game_ended(self.server, node)
+            self.timing_stats["end_check"] += time.time() - end_check_start
             # value *= -1
             if not done:
+                prep_start = time.time()
                 valid_moves = node.get_valid_moves()
                 history = get_history(node)
                 history.extend(self.server.get_game_history())
+                self.timing_stats["move_prep"] += time.time() - prep_start
+
+                inference_start = time.time()
                 logits, value = self.agent.get_actions_eval(
                     node.state, valid_moves, history, node.is_white
                 )
+                self.timing_stats["nn_inference"] += time.time() - inference_start
+                self.iterations_stats["nn_inference"] += 1
 
-                # mask out invalid moves and normalize to 1
-                # action_policy = torch.softmax(action_policy, dim=1).squeeze(0)
-                # action_policy = action_policy * torch.tensor(
-                #     valid_moves, device=action_policy.device
-
-                # )
-                # action_policy = action_policy / action_policy.sum()
-
+                policy_start = time.time()
                 logits[~valid_moves] = -1e9
                 policy = torch.softmax(logits, dim=0)
                 policy = policy / policy.sum()
+                self.timing_stats["policy_compute"] += time.time() - policy_start
+
+                expand_start = time.time()
                 node.expand(policy)
+                self.timing_stats["expansion"] += time.time() - expand_start
 
             # backpropagation
+            backprop_start = time.time()
             node.backprop(value)
+            self.timing_stats["backprop"] += time.time() - backprop_start
             # plot tree from root node for debugging
             # if iter == 999:
             #     TreePlot(root).create_tree()
 
+        final_policy_start = time.time()
         props = torch.zeros(26, device=self.agent.device)
         for c in root.children:
             props[c.action] = c.visit_cnt
         props /= props.sum()
+        self.timing_stats["final_policy"] += time.time() - final_policy_start
+        total_time = time.time() - search_start
+        self.timing_stats["total"] = total_time
+
+        # Print timing statistics
+        print("\nMCTS Timing Statistics:")
+        print(f"Total search time: {total_time:.3f}s")
+        for key, value in self.timing_stats.items():
+            if key != "total":
+                percentage = (value / total_time) * 100
+                avg_time = value / self.iterations_stats.get(
+                    key, self.search_iterations
+                )
+                print(
+                    f"{key}: {value:.3f}s ({percentage:.1f}%) - Avg: {avg_time*1000:.2f}ms"
+                )
+
         return props
 
 
@@ -254,7 +277,7 @@ async def main():
     await server.wait()
     print("GameServer ready and client connected")
 
-    mcts = MCTS(server, search_iterations=1000)
+    mcts = MCTS(server, search_iterations=100)
 
     NUM_EPISODES = 100
 
