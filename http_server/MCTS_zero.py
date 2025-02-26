@@ -18,7 +18,7 @@ from TreePlotter import TreePlot
 # maybe should be based on root node (current player/who initiated the search)
 # or based on who started (black)?
 def get_score(server: GameServerGo, node: "Node"):
-    score = server.get_score(node.state)
+    score = server.get_score()
     # 1 means "current node is winning," -1 means "current node is losing"
     score_white = score["white"]["sum"]
     score_black = score["black"]["sum"]
@@ -32,16 +32,6 @@ def get_score(server: GameServerGo, node: "Node"):
         return normalized if node.is_white else -normalized
     else:
         return -normalized if node.is_white else normalized
-
-
-def get_history(node: "Node") -> list[list[str]]:
-    def _get_history_helper(node: "Node", history: list[list[str]]) -> list[list[str]]:
-        history.append(node.state)
-        if node.parent:
-            return _get_history_helper(node.parent, history)
-        return history
-
-    return _get_history_helper(node, [])
 
 
 def has_game_ended(server: GameServerGo, node: "Node") -> tuple[bool, int]:
@@ -66,7 +56,7 @@ def has_game_ended(server: GameServerGo, node: "Node") -> tuple[bool, int]:
                 return (True, get_score(server, node))
 
     # # board full
-    space_available = any([True for row in node.state if "." in row])
+    space_available = np.any(node.state == 3)
     if not space_available:
         return (True, get_score(server, node))
 
@@ -98,7 +88,7 @@ def get_ucb_value(child: "Node", parent_visit_count: int, c_puct=2.0) -> float:
 class Node:
     def __init__(
         self,
-        state: list[str],
+        state: np.ndarray,
         server: GameServerGo,
         is_white: bool,
         agent: AlphaZeroAgent,
@@ -107,6 +97,11 @@ class Node:
         selected_policy: float = 0,
         visit_count: int = 0,
     ):
+        assert state.shape == (5, 5), f"Array must be 5x5: {state}"
+        assert np.all(
+            np.isin(state, [0, 1, 2, 3])
+        ), f"Array must only contain values 0, 1, 2, or 3: {state}"
+
         self.state = state
         self.parent = parent
         self.action = action
@@ -128,9 +123,9 @@ class Node:
     def get_valid_moves(self) -> np.ndarray:
         if self.valid_moves is None:
             if self.parent is not None:
-                h = get_history(self)
+                history = self.get_history()
                 self.valid_moves = self.server.request_valid_moves(
-                    self.is_white, self.state, h
+                    self.is_white, self.state, history
                 )
             else:
                 self.valid_moves = self.server.request_valid_moves(
@@ -138,9 +133,16 @@ class Node:
                 )
         return self.valid_moves
 
-    def get_history(self):
-        # TODO
-        raise NotImplementedError("Not yet implemented")
+    def get_history(self) -> list[np.ndarray]:
+        history = []
+        current = self
+        while self:
+            history.append(self.state)
+            if current.parent is not None:
+                current = current.parent
+            else:
+                break
+        return history[::-1]  # Reverse for chronological order
 
     def next(self) -> "Node":
         best: tuple[Node | None, float] = (None, -999999999)
@@ -153,14 +155,25 @@ class Node:
         return best[0]
 
     def expand(self, q_values: torch.Tensor) -> None:
-        valid_moves = np.array(self.get_valid_moves()).flatten()
+        valid_moves = self.get_valid_moves().flatten()
         for action, q_value in enumerate(q_values):
             if not valid_moves[action]:
                 continue
             if action != 25:
-                next_state = self.server.get_state_after_move(
-                    action, self.state, self.is_white
+                print(
+                    f"self.server.get_state_after_move({action}, {self.state}, {self.is_white})"
                 )
+                next_state = self.server.get_state_after_move(
+                    action, self.state, self.is_white, self.get_history()
+                )
+                print(f"next_state = {next_state}")
+                assert next_state.shape == (
+                    5,
+                    5,
+                ), f"Array must be 5x5: action:{action} state: {next_state}"
+                assert np.all(
+                    np.isin(next_state, [0, 1, 2, 3])
+                ), f"Array must only contain values 0, 1, 2, or 3: {next_state}"
             else:
                 next_state = self.state
 
@@ -194,7 +207,13 @@ class MCTS:
         self.iterations_stats = defaultdict(int)
 
     @torch.no_grad()
-    def search(self, state: list[str], is_white: bool):
+    def search(self, state: np.ndarray, is_white: bool):
+
+        assert state.shape == (5, 5), f"Array must be 5x5: {state}"
+        assert np.all(
+            np.isin(state, [0, 1, 2, 3])
+        ), f"Array must only contain values 0, 1, 2, or 3: {state}"
+
         root: Node = Node(state, self.server, is_white, self.agent)
 
         self.timing_stats.clear()
@@ -218,7 +237,7 @@ class MCTS:
             if not done:
                 prep_start = time.time()
                 valid_moves = node.get_valid_moves()
-                history = get_history(node)
+                history = node.get_history()
                 history.extend(self.server.get_game_history())
                 self.timing_stats["move_prep"] += time.time() - prep_start
 
@@ -362,3 +381,29 @@ if __name__ == "__main__":
     import asyncio
 
     asyncio.run(main())
+
+
+"""
+using string list:
+selection: 0.001s (0.1%) - Avg: 0.01ms 
+end_check: 0.650s (36.8%) - Avg: 6.50ms 
+move_prep: 0.012s (0.7%) - Avg: 0.12ms 
+nn_inference: 0.467s (26.4%) - Avg: 4.67ms 
+policy_compute: 0.020s (1.1%) - Avg: 0.20ms 
+expansion: 0.615s (34.8%) - Avg: 6.15ms 
+backprop: 0.000s (0.0%) - Avg: 0.00ms 
+final_policy: 0.001s (0.1%) - Avg: 0.01ms 
+TOOK: 1.766082763671875s
+
+numppy array:
+selection: 0.013s (0.1%) - Avg: 0.01ms
+end_check: 7.162s (42.3%) - Avg: 7.16ms
+move_prep: 0.009s (0.1%) - Avg: 0.01ms
+nn_inference: 3.260s (19.2%) - Avg: 3.26ms
+policy_compute: 0.150s (0.9%) - Avg: 0.15ms
+expansion: 6.351s (37.5%) - Avg: 6.35ms
+backprop: 0.001s (0.0%) - Avg: 0.00ms
+final_policy: 0.001s (0.0%) - Avg: 0.00ms
+TOOK: 16.951805353164673s
+
+"""
