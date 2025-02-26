@@ -13,7 +13,7 @@ class GameServerGo:
         self.message_queue: asyncio.Queue[str] = asyncio.Queue()
         self.server = None  # Reference to the server task
 
-        self.go = Go(5, 5, np.zeros((5, 5), dtype=int))
+        self.go = Go(5, 5, np.zeros((5, 5), dtype=np.int8))
 
     async def handle_client(self, websocket):
         self.websocket = websocket
@@ -26,9 +26,6 @@ class GameServerGo:
             await self.websocket.send(json.dumps(command))
             async with self.recv_lock:
                 response = await self.message_queue.get()
-                # response = await asyncio.wait_for(
-                #     self.message_queue.get(), timeout=10
-                # )  # Added timeout
             return json.loads(response)
         except asyncio.TimeoutError:
             print("Request timed out")
