@@ -174,6 +174,10 @@ class Go:
                         elif self.state[nx][ny] in [1, 2]:
                             adjacent_colors.add(self.state[nx][ny])
 
+        # if territory is too large, its not valid
+        if len(territory) > 2 * self.board_width:
+            return None, territory
+
         # If territory touches exactly one color, it belongs to that color
         if len(adjacent_colors) == 1:
             return adjacent_colors.pop(), territory
