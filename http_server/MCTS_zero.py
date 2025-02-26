@@ -203,8 +203,8 @@ class MCTS:
 
         self.plotter = Plotter()
         self.agent = AlphaZeroAgent(5, 5, self.plotter)
-        self.timing_stats = defaultdict(float)
-        self.iterations_stats = defaultdict(int)
+        self.timing_stats: defaultdict[str, float] = defaultdict(float)
+        self.iterations_stats: defaultdict[str, int] = defaultdict(int)
 
     @torch.no_grad()
     def search(self, state: np.ndarray, is_white: bool):
@@ -278,14 +278,14 @@ class MCTS:
         # Print timing statistics
         print("\nMCTS Timing Statistics:")
         print(f"Total search time: {total_time:.3f}s")
-        for key, value in self.timing_stats.items():
+        for key, val in self.timing_stats.items():
             if key != "total":
-                percentage = (value / total_time) * 100
-                avg_time = value / self.iterations_stats.get(
-                    key, self.search_iterations
+                percentage = (val / total_time) * 100
+                avg_time = val / float(
+                    self.iterations_stats.get(key, self.search_iterations)
                 )
                 print(
-                    f"{key}: {value:.3f}s ({percentage:.1f}%) - Avg: {avg_time*1000:.2f}ms"
+                    f"{key}: {val:.3f}s ({percentage:.1f}%) - Avg: {avg_time*1000:.2f}ms"
                 )
 
         return props
