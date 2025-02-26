@@ -394,14 +394,26 @@ class Go:
     ) -> np.ndarray:
         player = 2 if is_white else 1
 
+        # TODO: make legal_moves shape (1,26)
         legal_moves: np.ndarray = np.zeros(
             [self.board_width, self.board_height], dtype=bool
         )
         for x in range(self.board_width):
             for y in range(self.board_height):
-                is_legal = self.check_move_is_valid(state, x, y, player, history)
-                legal_moves[x][y] = is_legal
+                if state[x][y] != 0:
+                    continue
+                if (
+                    self.simulate_move(state, x, y, 2 if is_white else 1, history)
+                    is not None
+                ):
+                    legal_moves[x][y] = True
         return legal_moves
+        # empty_positions = np.transpose(np.where(state == 0))
+        # for x, y in empty_positions:
+        #     # if self.check_move_is_valid(state, x, y, player, history):
+        #     if self.simulate_move(state, x, y, 2 if is_white else 1, history) is not None:
+        #         legal_moves[x][y] = True
+        # return legal_moves
 
     def has_game_ended(
         self,
