@@ -80,7 +80,7 @@ class Go:
           'O' -> 2 (white)
           '#' -> 3 (disabled)
         """
-        transformed = np.zeros([5, 5], dtype=int)
+        transformed = np.zeros([5, 5], dtype=np.int8)
         for i, row_str in enumerate(state):
             for j, char in enumerate(row_str):
                 if char == ".":
