@@ -13,7 +13,7 @@ class GameServerGo:
         self.message_queue: asyncio.Queue[str] = asyncio.Queue()
         self.server = None  # Reference to the server task
 
-        self.go = Go(5, 5, ["#####", "#####", "#####", "#####", "#####"])
+        self.go = Go(5, 5, np.zeros((5, 5), dtype=int))
 
     async def handle_client(self, websocket):
         self.websocket = websocket
@@ -37,21 +37,25 @@ class GameServerGo:
             print(f"Error waiting for response: {e}")
             return None
 
-    async def reset_game(self, no_ai: bool) -> list[str]:
+    async def reset_game(self, no_ai: bool) -> np.ndarray:
         res = await self.send_request({"command": "reset_game", "noAI": no_ai})
-        return res["board"]
+        enc_s = self.go.encode_state(res["board"])
+        return enc_s
 
     def request_valid_moves(
-        self, is_white: bool, state: list[str], history: list[list[str]] = []
-    ):
-        enc_h = [self.go.encode_state(e) for e in history]
-        enc_s = self.go.encode_state(state)
-        v = self.go.get_valid_moves(enc_s, is_white, enc_h)
+        self, is_white: bool, state: np.ndarray, history: list[np.ndarray] = []
+    ) -> np.ndarray:
+        assert state.shape == (5, 5), f"Array must be 5x5: {state}"
+        assert np.all(
+            np.isin(state, [0, 1, 2, 3])
+        ), f"Array must only contain values 0, 1, 2, or 3: {state}"
+
+        v = self.go.get_valid_moves(state, is_white, history)
         return np.append(v, True)
 
     async def make_move(
         self, action: tuple[int, int], action_idx: int, is_white: bool
-    ) -> tuple[list[str], float, bool]:
+    ) -> tuple[np.ndarray, float, bool]:
         if action == (-1, -1):  # pass
             res = await self.send_request(
                 {"command": "pass_turn", "playAsWhite": is_white}
@@ -62,23 +66,38 @@ class GameServerGo:
                 {"command": "make_move", "x": x, "y": y, "playAsWhite": is_white}
             )
 
-        self.go.make_move(action_idx, is_white)
+        s, r, d = self.go.make_move(action_idx, is_white)
         print(res)
         next_state = res.get("board", [])
         reward = res.get("outcome", 0.0)
         done = res.get("done", False)
-        return next_state, reward, done
 
-    def get_game_history(self) -> list[list[str]]:
-        history = self.go.get_history_decoded()
+        assert np.array_equal(
+            s, self.go.encode_state(next_state)
+        ), f"State mismatch: left: {s}, right: {self.go.encode_state(next_state)}"
+        assert r == reward, f"Reward mismatch: left: {r}, right: {reward}"
+        assert d == done, f"Done flag mismatch: left: {d}, right: {done}"
+
+        return s, r, d
+
+    def get_game_history(self) -> list[np.ndarray]:
+        history = self.go.get_history()
         return history
 
-    def get_state_after_move(self, action: int, state: list[str], is_white: bool):
-        res = self.go.state_after_action(action, is_white, state)
-        dec_s = self.go.decode_state(res)
-        return dec_s
+    def get_state_after_move(
+        self, action: int, state: np.ndarray, is_white: bool, additional_history: list[np.ndarray] = []
+    ) -> np.ndarray:
+        res = self.go.state_after_action(action, is_white, state, additional_history)
+        assert res.shape == (
+            5,
+            5,
+        ), f"Array must be 5x5: action: {action} state: {res}"
+        assert np.all(
+            np.isin(res, [0, 1, 2, 3])
+        ), f"Array must only contain values 0, 1, 2, or 3: {res}"
+        return res
 
-    def get_score(self, state: list[str]):
+    def get_score(self):
         scores = self.go.get_score()
         return scores
 
