@@ -1,5 +1,3 @@
-import datetime
-import os
 import random
 from collections import deque
 
@@ -10,10 +8,6 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 from plotter import Plotter
-
-"""
-TODO: add Dirichlet noise in fist self play iterations to improve stability
-"""
 
 
 class ResNet(nn.Module):
@@ -134,14 +128,14 @@ class AlphaZeroAgent:
         self.train_buffer = TrainingBuffer()
 
     def preprocess_state(
-        self, board_state: list[str], history: list[list[str]], is_white: bool
+        self, board_state: np.ndarray, history: list[np.ndarray], is_white: bool
     ):
         """
-        Convert the board (list of strings, e.g. ["XX.O#", ...]) into a float tensor of shape [1,8,w,h].
-        '#' -> 1.0  Channel 0
-        'X' -> 1.0  Black, Channel 1, 3, 5
-        'O' -> 1.0  White, Channel 2, 4, 6
-        '.' -> 0.0  (Empty)
+        Convert the board (numpy array) into a float tensor of shape [1,8,w,h].
+        1 -> 1.0  Black, Channel 1, 3, 5
+        2 -> 1.0  White, Channel 2, 4, 6
+        3 -> 1.0  Channel 0
+        0 -> 0.0  (Empty)
         """
         w, h = self.board_width, self.board_height
 
@@ -157,14 +151,21 @@ class AlphaZeroAgent:
         current_black = torch.zeros(w, h, device=self.device)
         current_white = torch.zeros(w, h, device=self.device)
 
+        # mask_black = torch.from_numpy(board_state == 1).to(self.device)
+        # mask_white = torch.from_numpy(board_state == 2).to(self.device)
+        # mask_disabled = torch.from_numpy(board_state == 3).to(self.device)
+        # current_black[mask_black] = 1.0
+        # current_white[mask_white] = 1.0
+        # disabled_channel[mask_disabled] = 1.0
+
         for x in range(w):
             for y in range(h):
                 ch = board_state[x][y]
-                if ch == "X":
+                if ch == 1:
                     current_black[x][y] = 1.0
-                elif ch == "O":
+                elif ch == 2:
                     current_white[x][y] = 1.0
-                elif ch == "#":
+                elif ch == 3:
                     disabled_channel[x][y] = 1.0
 
         channels.extend([disabled_channel, side_channel, current_black, current_white])
@@ -179,9 +180,9 @@ class AlphaZeroAgent:
                 for x in range(w):
                     for y in range(h):
                         ch = past_step[x][y]
-                        if ch == "X":
+                        if ch == 1:
                             history_black[x][y] = 1.0
-                        elif ch == "O":
+                        elif ch == 2:
                             history_white[x][y] = 1.0
 
             channels.extend([history_black, history_white])
