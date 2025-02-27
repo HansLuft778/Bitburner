@@ -56,7 +56,7 @@ def has_game_ended(server: GameServerGo, node: "Node") -> tuple[bool, int]:
                 return (True, get_score(server, node))
 
     # # board full
-    space_available = np.any(node.state == 3)
+    space_available = np.any(node.state == 0)
     if not space_available:
         return (True, get_score(server, node))
 
@@ -381,29 +381,3 @@ if __name__ == "__main__":
     import asyncio
 
     asyncio.run(main())
-
-
-"""
-using string list:
-selection: 0.001s (0.1%) - Avg: 0.01ms 
-end_check: 0.650s (36.8%) - Avg: 6.50ms 
-move_prep: 0.012s (0.7%) - Avg: 0.12ms 
-nn_inference: 0.467s (26.4%) - Avg: 4.67ms 
-policy_compute: 0.020s (1.1%) - Avg: 0.20ms 
-expansion: 0.615s (34.8%) - Avg: 6.15ms 
-backprop: 0.000s (0.0%) - Avg: 0.00ms 
-final_policy: 0.001s (0.1%) - Avg: 0.01ms 
-TOOK: 1.766082763671875s
-
-numppy array:
-selection: 0.013s (0.1%) - Avg: 0.01ms
-end_check: 7.162s (42.3%) - Avg: 7.16ms
-move_prep: 0.009s (0.1%) - Avg: 0.01ms
-nn_inference: 3.260s (19.2%) - Avg: 3.26ms
-policy_compute: 0.150s (0.9%) - Avg: 0.15ms
-expansion: 6.351s (37.5%) - Avg: 6.35ms
-backprop: 0.001s (0.0%) - Avg: 0.00ms
-final_policy: 0.001s (0.0%) - Avg: 0.00ms
-TOOK: 16.951805353164673s
-
-"""
