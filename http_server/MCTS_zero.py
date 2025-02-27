@@ -16,10 +16,8 @@ from TreePlotter import TreePlot
 
 # returns score based on current node
 # maybe should be based on root node (current player/who initiated the search)
-# or based on who started (black)?
 def get_score(server: GameServerGo, node: "Node"):
     score = server.get_score()
-    # 1 means "current node is winning," -1 means "current node is losing"
     score_white = score["white"]["sum"]
     score_black = score["black"]["sum"]
     diff = score_white - score_black
@@ -28,22 +26,19 @@ def get_score(server: GameServerGo, node: "Node"):
     max_score = len(node.state) ** 2
     normalized = diff / max_score
 
-    if score_white > score_black:
-        return normalized if node.is_white else -normalized
-    else:
-        return -normalized if node.is_white else normalized
+    return normalized if node.is_white else -normalized
 
 
 def has_game_ended(server: GameServerGo, node: "Node") -> tuple[bool, int]:
     # both pass back-to-back
-    # if (
-    #     node.action
-    #     and node.parent
-    #     and node.parent.action
-    #     and node.action == 25
-    #     and node.parent.action == 25
-    # ):
-    #     return (True, await get_score(server, node))
+    if (
+        node.action
+        and node.parent
+        and node.parent.action
+        and node.action == 25
+        and node.parent.action == 25
+    ):
+        return (True, get_score(server, node))
 
     # one pass, next player has no valid moves
     if node.parent:
@@ -52,8 +47,7 @@ def has_game_ended(server: GameServerGo, node: "Node") -> tuple[bool, int]:
             print(
                 f"node.parent.action: {node.parent.action}, valid_moves: {valid_moves}"
             )
-            if node.parent.action == 25 and valid_moves == 0:
-                return (True, get_score(server, node))
+            return (True, get_score(server, node))
 
     # # board full
     space_available = np.any(node.state == 0)
@@ -74,7 +68,7 @@ def get_ucb_value(child: "Node", parent_visit_count: int, c_puct=2.0) -> float:
     if child.visit_cnt == 0:
         q_value = 0.0
     else:
-        q_value = child.win_sum / child.visit_cnt
+        q_value = -(child.win_sum / child.visit_cnt)
         # q_value = 1 - ((child.win_sum / child.visit_cnt) + 1) / 2
     u_value = (
         c_puct
@@ -156,17 +150,20 @@ class Node:
 
     def expand(self, q_values: torch.Tensor) -> None:
         valid_moves = self.get_valid_moves().flatten()
+        empty_cells = np.sum(self.state == 0)
+        board_size = len(self.state) ** 2
+        # Penalize passing if board is mostly empty
+        empty_percentage = empty_cells / board_size
+        if empty_percentage > 0.5:
+            q_values[25] *= (1.0 - empty_percentage) * 0.5
+
         for action, q_value in enumerate(q_values):
             if not valid_moves[action]:
                 continue
             if action != 25:
-                print(
-                    f"self.server.get_state_after_move({action}, {self.state}, {self.is_white})"
-                )
                 next_state = self.server.get_state_after_move(
                     action, self.state, self.is_white, self.get_history()
                 )
-                print(f"next_state = {next_state}")
                 assert next_state.shape == (
                     5,
                     5,
@@ -245,13 +242,30 @@ class MCTS:
                 logits, value = self.agent.get_actions_eval(
                     node.state, valid_moves, history, node.is_white
                 )
+                if node.parent is None:
+                    print(
+                        f"Value estimate: {value:.3f} (from {'white' if node.is_white else 'black'}'s perspective)"
+                    )
+
                 self.timing_stats["nn_inference"] += time.time() - inference_start
                 self.iterations_stats["nn_inference"] += 1
 
                 policy_start = time.time()
                 logits[~valid_moves] = -1e9
                 policy = torch.softmax(logits, dim=0)
-                policy = policy / policy.sum()
+
+                # Apply dirichlet noise
+                if node.parent is None:
+                    alpha = 0.3
+                    dir_noise = np.random.dirichlet([alpha] * len(policy))
+                    dir_noise_tensor = torch.tensor(
+                        dir_noise, device=policy.device, dtype=policy.dtype
+                    )
+                    epsilon = 0.3  # noise weight
+                    policy = (1 - epsilon) * policy + epsilon * dir_noise_tensor
+
+                    # Renormalize
+                    policy = policy / torch.sum(policy)
                 self.timing_stats["policy_compute"] += time.time() - policy_start
 
                 expand_start = time.time()
@@ -267,6 +281,7 @@ class MCTS:
             #     TreePlot(root).create_tree()
 
         final_policy_start = time.time()
+
         props = torch.zeros(26, device=self.agent.device)
         for c in root.children:
             props[c.action] = c.visit_cnt
@@ -296,7 +311,7 @@ async def main():
     await server.wait()
     print("GameServer ready and client connected")
 
-    mcts = MCTS(server, search_iterations=100)
+    mcts = MCTS(server, search_iterations=1000)
 
     NUM_EPISODES = 100
 
@@ -331,7 +346,7 @@ async def main():
 
             # outcome is from current players/root perspective
             # above maybe wrong
-            # outcome is: 1 if black won, -1 is white won (TODO: change this in client)
+            # outcome is: 1 if black won, -1 is white won
             next_state, outcome, done = await server.make_move(
                 action, best_move, is_white
             )
@@ -340,36 +355,30 @@ async def main():
             is_white = not is_white
             state = next_state
 
-        # blacks move   => z = -1
-        # whites move   => z = 1
-        # white won -> final = -1
-
-        # blacks move   => z = 1
-        # whites move   => z = -1
-        # black won -> final = 1
-
-        # white move    => z = 1
-        # black move    => z = -1
-        # white won -> final = -1
-
-        # white move    => z = -1
-        # black move    => z = 1
-        # black won -> final = 1
-
         assert outcome != 0, "outcome should not be 0 after a game ended"
-        final_outcome = outcome
 
-        mcts.agent.plotter.update_wins_white(1 if final_outcome == 1 else -1)
-        mcts.agent.plotter.update_wins_black(1 if final_outcome == -1 else -1)
+        mcts.agent.plotter.update_wins_white(1 if outcome == -1 else -1)
+        mcts.agent.plotter.update_wins_black(1 if outcome == 1 else -1)
 
         mcts.agent.policy_net.train()
         for state, was_white, pi, history in buffer:
             # Flip if the buffer entry belongs to the opposite color
-            # what is opposite color?:
-            #  - opposite of last player (player who won)
-            #  - opposite of player who starts (always black) <- i chose this
+            #  - opposite of player who moves
 
-            z = final_outcome if not was_white else -final_outcome
+            z = outcome if not was_white else -outcome
+
+            score = server.get_score()
+            # add bonus for territory + pieces, without komi
+            white_territory = score["white"]["territory"] + score["white"]["pieces"]
+            black_territory = score["black"]["territory"] + score["black"]["pieces"]
+
+            territory_bonus = (black_territory - white_territory) / (5 * 5) * 1.5
+
+            z += territory_bonus if not was_white else -territory_bonus
+
+            # move_count_bonus = min(len(game_history) / 15.0, 0.5)  # Cap at 0.5
+            # z += move_count_bonus if not was_white else -move_count_bonus
+
             mcts.agent.train_buffer.push(state, pi, z, history, was_white)
 
         for _ in range(20):
