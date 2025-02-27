@@ -53,6 +53,7 @@ class GameServerGo:
     async def make_move(
         self, action: tuple[int, int], action_idx: int, is_white: bool
     ) -> tuple[np.ndarray, float, bool]:
+        # make move in bitburner
         if action == (-1, -1):  # pass
             res = await self.send_request(
                 {"command": "pass_turn", "playAsWhite": is_white}
@@ -63,12 +64,14 @@ class GameServerGo:
                 {"command": "make_move", "x": x, "y": y, "playAsWhite": is_white}
             )
 
+        # make same move locally
         s, r, d = self.go.make_move(action_idx, is_white)
         print(res)
         next_state = res.get("board", [])
         reward = res.get("outcome", 0.0)
         done = res.get("done", False)
 
+        # DEBUGGING ONLY: check both are equal
         assert np.array_equal(
             s, self.go.encode_state(next_state)
         ), f"State mismatch: left: {s}, right: {self.go.encode_state(next_state)}"

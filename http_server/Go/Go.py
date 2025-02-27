@@ -1,6 +1,7 @@
-import numpy as np
 from collections import deque
 from copy import deepcopy
+
+import numpy as np
 
 
 def rotate_state(state: list[str]) -> list[str]:
@@ -283,7 +284,6 @@ class Go:
         additional_history: list[np.ndarray] = [],
     ) -> np.ndarray | None:
         if state[x][y] != 0:
-            print("is not empty")
             return None
 
         sim_state = deepcopy(state)
@@ -307,13 +307,11 @@ class Go:
         libs, _ = self.get_liberties(sim_state, x, y, set())
         if len(libs) == 0:
             # move was actually a suicide
-            print("is suicide")
             return None
 
         # check for repeat
         is_repeat = self.check_state_is_repeat(sim_state, additional_history)
         if is_repeat:
-            print("is repeat")
             return None
 
         return sim_state
@@ -468,12 +466,13 @@ if __name__ == "__main__":
     # )
     decoded_board = np.array(
         [
-            [2, 2, 1, 1, 3],
-            [2, 0, 1, 1, 1],
-            [1, 0, 2, 1, 1],
-            [2, 2, 0, 2, 3],
-            [2, 2, 0, 3, 3],
-        ]
+            [3, 0, 1, 0, 0],
+            [3, 0, 0, 0, 0],
+            [3, 0, 0, 1, 0],
+            [3, 0, 0, 0, 0],
+            [3, 0, 0, 0, 0],
+        ],
+        dtype=np.int8,
     )
 
     go = Go(5, 5, decoded_board)
@@ -482,7 +481,7 @@ if __name__ == "__main__":
     # vis = set()
     # print(go.get_liberties(go.state, 3, 2, vis))
     print(go)
-    print(go.state_after_action(17, False, decoded_board))
+    print(go.get_score())
 """
 simulate fails on:
 array([[3, 2, 3, 2, 1],
@@ -493,10 +492,5 @@ array([[3, 2, 3, 2, 1],
        
 with action 23 and iswhite = True
 
-===========
-self.server.get_state_after_move(17, np.array([[2 2 1 1 3]
- [2 0 1 1 1]
- [1 0 2 1 1]
- [2 2 0 2 3]
- [2 2 0 3 3]]), False)
+ 
 """
