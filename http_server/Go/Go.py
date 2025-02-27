@@ -212,8 +212,8 @@ class Go:
         - Each empty node fully surrounded by one color also counts as territory
         """
         # Count stones directly
-        black_pieces = np.count_nonzero(self.state == 1)
-        white_pieces = np.count_nonzero(self.state == 2)
+        black_pieces = np.sum(self.state == 1)
+        white_pieces = np.sum(self.state == 2)
 
         # Get territory counts
         white_territory, black_territory = self.get_territory_scores()
@@ -321,14 +321,11 @@ class Go:
     def check_state_is_repeat(
         self, state: np.ndarray, additional_history: list[np.ndarray] = []
     ) -> bool:
-        tmp_history = set([str(e) for e in self.history])
-        tmp_history.update([str(e) for e in additional_history])
-        prev_len = len(tmp_history)
-        tmp_history.add(str(state))
+        state_bytes = state.tobytes()
+        history_bytes = [e.tobytes() for e in self.history]
+        additional_bytes = [e.tobytes() for e in additional_history]
 
-        if prev_len == len(tmp_history):
-            return True
-        return False
+        return state_bytes in history_bytes or state_bytes in additional_bytes
 
     def check_move_is_valid(
         self, state: np.ndarray, x: int, y: int, player: int, history=[]
@@ -393,27 +390,15 @@ class Go:
         self, state: np.ndarray, is_white: bool, history=[]
     ) -> np.ndarray:
         player = 2 if is_white else 1
-
         # TODO: make legal_moves shape (1,26)
-        legal_moves: np.ndarray = np.zeros(
-            [self.board_width, self.board_height], dtype=bool
-        )
-        for x in range(self.board_width):
-            for y in range(self.board_height):
-                if state[x][y] != 0:
-                    continue
-                if (
-                    self.simulate_move(state, x, y, 2 if is_white else 1, history)
-                    is not None
-                ):
-                    legal_moves[x][y] = True
+
+        legal_moves: np.ndarray = np.zeros_like(state, dtype=bool)
+        empty_mask = state == 0
+        empty_positions = np.where(empty_mask)
+        for x, y in zip(empty_positions[0], empty_positions[1]):
+            if self.simulate_move(state, x, y, player) is not None:
+                legal_moves[x][y] = True
         return legal_moves
-        # empty_positions = np.transpose(np.where(state == 0))
-        # for x, y in empty_positions:
-        #     # if self.check_move_is_valid(state, x, y, player, history):
-        #     if self.simulate_move(state, x, y, 2 if is_white else 1, history) is not None:
-        #         legal_moves[x][y] = True
-        # return legal_moves
 
     def has_game_ended(
         self,
@@ -435,11 +420,7 @@ class Go:
             return True
 
         # board is full
-        has_empty_node = False
-        for x in range(self.board_width):
-            for y in range(self.board_height):
-                if state[x][y] == 0:
-                    has_empty_node = True
+        has_empty_node = np.any(state == 0)
         if has_empty_node:
             return False
 
