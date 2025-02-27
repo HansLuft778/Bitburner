@@ -13,7 +13,7 @@ class GameServerGo:
         self.message_queue: asyncio.Queue[str] = asyncio.Queue()
         self.server = None  # Reference to the server task
 
-        self.go = Go(5, 5, np.zeros((5, 5), dtype=np.int8))
+        self.go = Go(5, np.zeros((5, 5), dtype=np.int8))
 
     async def handle_client(self, websocket):
         self.websocket = websocket
@@ -34,8 +34,8 @@ class GameServerGo:
             print(f"Error waiting for response: {e}")
             return None
 
-    async def reset_game(self, no_ai: bool) -> np.ndarray:
-        res = await self.send_request({"command": "reset_game", "noAI": no_ai})
+    async def reset_game(self, opponent: str) -> np.ndarray:
+        res = await self.send_request({"command": "reset_game", "opponent": opponent})
         enc_s = self.go.encode_state(res["board"])
         return enc_s
 
@@ -80,12 +80,49 @@ class GameServerGo:
 
         return s, r, d
 
+    async def make_move_eval(
+        self, action: tuple[int, int], action_idx: int, is_white: bool
+    ) -> tuple[np.ndarray, float, bool]:
+        # make move in bitburner
+        if action == (-1, -1):  # pass
+            res = await self.send_request(
+                {"command": "pass_turn", "playAsWhite": is_white}
+            )
+        else:
+            x, y = action
+            res = await self.send_request(
+                {"command": "make_move", "x": x, "y": y, "playAsWhite": is_white}
+            )
+
+        # make same move locally
+        self.go.make_move(action_idx, is_white)
+        print(res)
+
+        next_state = res["board"]
+        reward = res.get("outcome", 0.0)
+        done = res["done"]
+        opponent_x = res.get("x", -1)
+        opponent_y = res.get("y", -1)
+        move_type = res.get("opponent_move_type", "")
+
+        enc_state = self.go.encode_state(next_state)
+        self.go.state = enc_state
+
+        self.go.history.append(self.go.state)
+
+        print(f"state: {enc_state} reward: {reward} done: {done} x: {opponent_x} y: {opponent_y} type: {move_type}")
+        return enc_state, reward, done
+
     def get_game_history(self) -> list[np.ndarray]:
         history = self.go.get_history()
         return history
 
     def get_state_after_move(
-        self, action: int, state: np.ndarray, is_white: bool, additional_history: list[np.ndarray] = []
+        self,
+        action: int,
+        state: np.ndarray,
+        is_white: bool,
+        additional_history: list[np.ndarray] = [],
     ) -> np.ndarray:
         res = self.go.state_after_action(action, is_white, state, additional_history)
         assert res.shape == (

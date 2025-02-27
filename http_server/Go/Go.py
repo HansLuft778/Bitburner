@@ -31,14 +31,14 @@ def rotate_and_beatify(state: list[str], delim: str = "<br>") -> str:
 
 
 class Go:
-    def __init__(self, board_width: int, board_height: int, state: np.ndarray):
+    def __init__(self, board_width: int, state: np.ndarray):
         assert state.shape == (5, 5), f"Array must be 5x5: {state}"
         assert np.all(
             np.isin(state, [0, 1, 2, 3])
         ), f"Array must only contain values 0, 1, 2 or 3: {state}"
 
         self.board_width = board_width
-        self.board_height = board_height
+        self.board_height = board_width
         self.board_size = self.board_width * self.board_height
         self.history: list[np.ndarray] = []
         self.previous_action = -1
@@ -394,7 +394,7 @@ class Go:
         empty_mask = state == 0
         empty_positions = np.where(empty_mask)
         for x, y in zip(empty_positions[0], empty_positions[1]):
-            if self.simulate_move(state, x, y, player) is not None:
+            if self.simulate_move(state, x, y, player, history) is not None:
                 legal_moves[x][y] = True
         return legal_moves
 
@@ -466,22 +466,22 @@ if __name__ == "__main__":
     # )
     decoded_board = np.array(
         [
-            [3, 0, 1, 0, 0],
-            [3, 0, 0, 0, 0],
-            [3, 0, 0, 1, 0],
-            [3, 0, 0, 0, 0],
-            [3, 0, 0, 0, 0],
+            [0, 0, 3, 1, 1],
+            [1, 1, 0, 1, 0],
+            [1, 0, 1, 1, 1],
+            [0, 1, 1, 1, 1],
+            [2, 1, 1, 1, 1],
         ],
         dtype=np.int8,
     )
 
-    go = Go(5, 5, decoded_board)
+    go = Go(5, decoded_board)
     go.current_player = 1
 
     # vis = set()
     # print(go.get_liberties(go.state, 3, 2, vis))
     print(go)
-    print(go.get_score())
+    print(go.make_move(1, True))
 """
 simulate fails on:
 array([[3, 2, 3, 2, 1],
