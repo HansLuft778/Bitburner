@@ -1,6 +1,6 @@
-import numpy as np
 from collections import deque
-from copy import deepcopy
+
+import numpy as np
 
 
 def rotate_state(state: list[str]) -> list[str]:
@@ -30,20 +30,23 @@ def rotate_and_beatify(state: list[str], delim: str = "<br>") -> str:
 
 
 class Go:
-    def __init__(self, board_width: int, board_height: int, board: list[str]):
-        if len(board) != 5:
-            raise ValueError("board size must be 5x5")
+    def __init__(self, board_width: int, state: np.ndarray):
+        assert state.shape == (5, 5), f"Array must be 5x5: {state}"
+        assert np.all(
+            np.isin(state, [0, 1, 2, 3])
+        ), f"Array must only contain values 0, 1, 2 or 3: {state}"
+
         self.board_width = board_width
-        self.board_height = board_height
+        self.board_height = board_width
         self.board_size = self.board_width * self.board_height
         self.history: list[np.ndarray] = []
         self.previous_action = -1
 
-        self.state: np.ndarray = self.encode_board(board)
+        self.state: np.ndarray = state
         self.current_player = 1  # black starts
 
     def __str__(self):
-        board = self.decode_board(self.state)
+        board = self.decode_state(self.state)
         return rotate_and_beatify(board, "\n")
 
     def decode_action(self, action_idx: int):
@@ -68,7 +71,7 @@ class Go:
         """
         return x * self.board_height + y
 
-    def encode_board(self, board: list[str]):
+    def encode_state(self, state: list[str]):
         """
         Converts a list of strings (like [".....", "..X..", ...]) into a numpy array
         with the following encoding:
@@ -77,8 +80,8 @@ class Go:
           'O' -> 2 (white)
           '#' -> 3 (disabled)
         """
-        transformed = np.zeros([5, 5], dtype=int)
-        for i, row_str in enumerate(board):
+        transformed = np.zeros([5, 5], dtype=np.int8)
+        for i, row_str in enumerate(state):
             for j, char in enumerate(row_str):
                 if char == ".":
                     transformed[i][j] = 0
@@ -90,15 +93,15 @@ class Go:
                     transformed[i][j] = 3
         return transformed
 
-    def decode_board(self, board_array: np.ndarray) -> list[str]:
+    def decode_state(self, state: np.ndarray) -> list[str]:
         """
         Converts a numpy board array (with 0/1/2/3) back into the string-based representation.
         """
         decoded_board: list[str] = []
-        for i in range(board_array.shape[0]):
+        for i in range(state.shape[0]):
             tmp = ""
-            for j in range(board_array.shape[1]):
-                val = board_array[i][j]
+            for j in range(state.shape[1]):
+                val = state[i][j]
                 if val == 0:
                     tmp += "."
                 elif val == 1:
@@ -110,16 +113,23 @@ class Go:
             decoded_board.append(tmp)
         return decoded_board
 
-    def state_after_action(self, action: int, is_white: bool) -> np.ndarray:
-        """Returns (new_board_state_as_strings, captures)."""
+    def state_after_action(
+        self,
+        action: int,
+        is_white: bool,
+        provided_state: np.ndarray | None = None,
+        additional_history: list[np.ndarray] = [],
+    ) -> np.ndarray:
+        state = provided_state if provided_state is not None else self.state
+
         if action == self.board_size:  # Pass move
-            return self.state.copy()
+            return state.copy()
 
         x, y = self.decode_action(action)
         color = 2 if is_white else 1
 
-        new_state = self.simulate_move(self.state, x, y, color)
-        if new_state:
+        new_state = self.simulate_move(state, x, y, color, additional_history)
+        if new_state is not None:
             return new_state
         else:
             return np.array([])
@@ -164,6 +174,10 @@ class Go:
                         elif self.state[nx][ny] in [1, 2]:
                             adjacent_colors.add(self.state[nx][ny])
 
+        # if territory is too large, its not valid
+        if len(territory) > 2 * self.board_width:
+            return None, territory
+
         # If territory touches exactly one color, it belongs to that color
         if len(adjacent_colors) == 1:
             return adjacent_colors.pop(), territory
@@ -198,8 +212,8 @@ class Go:
         - Each empty node fully surrounded by one color also counts as territory
         """
         # Count stones directly
-        black_pieces = np.count_nonzero(self.state == 1)
-        white_pieces = np.count_nonzero(self.state == 2)
+        black_pieces = np.sum(self.state == 1)
+        white_pieces = np.sum(self.state == 2)
 
         # Get territory counts
         white_territory, black_territory = self.get_territory_scores()
@@ -261,12 +275,17 @@ class Go:
         return liberties, territory
 
     def simulate_move(
-        self, state: np.ndarray, x: int, y: int, color: int
+        self,
+        state: np.ndarray,
+        x: int,
+        y: int,
+        color: int,
+        additional_history: list[np.ndarray] = [],
     ) -> np.ndarray | None:
-        if state[x][y] != ".":
+        if state[x][y] != 0:
             return None
 
-        sim_state = deepcopy(state)
+        sim_state = state.copy()
         sim_state[x][y] = color
 
         # color = 1 => enemy = 2; color = 2 => ememy = 1
@@ -281,7 +300,7 @@ class Go:
                     # capture enemy stones if they have no liberties
                     if len(liberties) == 0:
                         for tx, ty in territory:
-                            sim_state[tx][ty] = "."
+                            sim_state[tx][ty] = 0
 
         # check if placed router has liberties
         libs, _ = self.get_liberties(sim_state, x, y, set())
@@ -290,84 +309,67 @@ class Go:
             return None
 
         # check for repeat
-        is_repeat = self.check_state_is_repeat(sim_state)
+        is_repeat = self.check_state_is_repeat(sim_state, additional_history)
         if is_repeat:
             return None
 
-        # return some useful data
         return sim_state
 
-    def check_state_is_repeat(self, state: np.ndarray) -> bool:
-        prev_len = len(self.history)
-        history_set = set([str(h_state) for h_state in self.history])
-        history_set.add(str(state))
-        if prev_len == len(history_set):
-            return True
-        return False
+    def check_state_is_repeat(
+        self, state: np.ndarray, additional_history: list[np.ndarray] = []
+    ) -> bool:
+        state_bytes = state.tobytes()
+        history_bytes = [e.tobytes() for e in self.history]
+        additional_bytes = [e.tobytes() for e in additional_history]
 
-    def check_move_is_valid(self, state: np.ndarray, x: int, y: int) -> bool:
-        # move is not empty
-        if state[x][y] != 0:
-            return False
+        return state_bytes in history_bytes or state_bytes in additional_bytes
 
-        has_empty_neighbor = False
-        has_capturable_enemy = False
-        has_safe_friendly = False
-
-        visited: set[tuple[int, int]] = set()
-        for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-            nx, ny = x + dx, y + dy
-            if 0 <= nx < self.board_width and 0 <= ny < self.board_height:
-                # case 1: valid, if cell has empty eighbors
-                if state[nx][ny] == 0:
-                    has_empty_neighbor = True
-                # case 2: any adjacent enemy cell has only one liberty (enemy group will be captured)
-                if state[nx][ny] in [1, 2]:
-                    libs, _ = self.get_liberties(state, nx, ny, visited)
-                    if len(libs) == 1 and state[nx][ny] != self.current_player:
-                        has_capturable_enemy = True
-                    # or a friendly cell has more than one
-                    elif len(libs) > 1 and state[nx][ny] == self.current_player:
-                        has_safe_friendly = True
-
-        if has_empty_neighbor or has_capturable_enemy or has_safe_friendly:
-            tmp_state = state.copy()
-            tmp_state[x][y] = self.current_player
-            is_repeat = self.check_state_is_repeat(tmp_state)
-            return not is_repeat
-        else:
-            simulated_board = self.simulate_move(state, x, y, self.current_player)
-            if not simulated_board or simulated_board[x][y] != self.current_player:
-                return False
-            is_repeat = self.check_state_is_repeat(simulated_board)
-
-            return not is_repeat
-
-    def make_move(self, action: int, is_white: bool) -> tuple[list[str], int, bool]:
+    def make_move(self, action: int, is_white: bool) -> tuple[np.ndarray, float, bool]:
         state_after_move = self.state_after_action(action, is_white)
+        game_ended = self.has_game_ended(action, is_white, self.state)
+
         self.state = state_after_move
         self.current_player = 3 - self.current_player
 
-        game_ended = self.has_game_ended(action)
-        decoded_state = self.decode_board(self.state)
-        # return next_state, reward, done
-        return decoded_state, 0, game_ended
+        # update history and prev action
+        self.history.append(self.state.copy())
+        self.previous_action = action
 
-    def get_valid_moves(self) -> np.ndarray:
-        legal_moves: np.ndarray = np.zeros([self.board_width, self.board_height])
-        for x in range(self.board_width):
-            for y in range(self.board_height):
-                is_legal = self.check_move_is_valid(self.state, x, y)
-                legal_moves[x][y] = is_legal
+        # outcome is 1 black won, -1 white won, 0 not ended
+        outcome = 0
+        if game_ended:
+            score = self.get_score()
+            print(f"score: {score}")
+            outcome = 1 if score["black"]["sum"] > score["white"]["sum"] else -1
+
+        return self.state, outcome, game_ended
+
+    def get_valid_moves(
+        self, state: np.ndarray, is_white: bool, history=[]
+    ) -> np.ndarray:
+        player = 2 if is_white else 1
+
+        legal_moves: np.ndarray = np.zeros_like(state, dtype=bool)
+        empty_mask = state == 0
+        empty_positions = np.where(empty_mask)
+        for x, y in zip(empty_positions[0], empty_positions[1]):
+            if self.simulate_move(state, x, y, player, history) is not None:
+                legal_moves[x][y] = True
         return legal_moves
 
-    def has_game_ended(self, action: int) -> bool:
+    def has_game_ended(
+        self,
+        action: int,
+        is_white: bool,
+        state: np.ndarray,
+        additional_history: list[np.ndarray] = [],
+    ) -> bool:
         # double pass
         if self.previous_action == action == self.board_width * self.board_height:
             return True
 
         # previous pass, current has no valid moves
-        valid = self.get_valid_moves()
+        valid = self.get_valid_moves(state, is_white, additional_history)
         if (
             self.previous_action == self.board_width * self.board_height
             and np.sum(valid) == 0
@@ -375,46 +377,71 @@ class Go:
             return True
 
         # board is full
-        has_empty_node = False
-        for x in range(self.board_width):
-            for y in range(self.board_height):
-                if self.state[x][y] == ".":
-                    has_empty_node = True
+        has_empty_node = np.any(state == 0)
         if has_empty_node:
             return False
 
         return False
 
+    def get_history(self) -> list[np.ndarray]:
+        return self.history
+
 
 if __name__ == "__main__":
-    decoded_board = [".X...", ".X.XO", "#XO..", ".XOOO", ".XO.#"]
-    decoded_board = [".XO..", "XXOO.", "OOO.#", "..OXX", ".X.XX"]
-    decoded_board = [".OXO.", ".O.O#", "#.O..", "....X", ".XXX#"]
-    decoded_board = [".OX..", ".O.O.", "..O..", ".....", ".XXX."]
-    decoded_board = [".OX.O", ".OXO.", "..O..", ".....", ".XXX."]
-    decoded_board = [
-        ".OX.O",
-        ".OXOX",
-        "..O..",
-        ".....",
-        ".XXXO",
-    ]  # place at 0, 3; legal for both
-    decoded_board = [
-        "#XO.X",
-        "#XOXX",
-        "#.XOO",
-        "#OO.O",
-        "#...X",
-    ]  # 0,3 -> both legal, 2,1 -> only for white
-    decoded_board = ["#....", "#...#", "#....", "#.O.X", "#.#X."]
-    go = Go(5, 5, decoded_board)
+    # decoded_board = [".X...", ".X.XO", "#XO..", ".XOOO", ".XO.#"]
+    # decoded_board = [".XO..", "XXOO.", "OOO.#", "..OXX", ".X.XX"]
+    # decoded_board = [".OXO.", ".O.O#", "#.O..", "....X", ".XXX#"]
+    # decoded_board = [".OX..", ".O.O.", "..O..", ".....", ".XXX."]
+    # decoded_board = [".OX.O", ".OXO.", "..O..", ".....", ".XXX."]
+    # decoded_board = [
+    #     ".OX.O",
+    #     ".OXOX",
+    #     "..O..",
+    #     ".....",
+    #     ".XXXO",
+    # ]  # place at 0, 3; legal for both
+    # decoded_board = [
+    #     "#XO.X",
+    #     "#XOXX",
+    #     "#.XOO",
+    #     "#OO.O",
+    #     "#...X",
+    # ]  # 0,3 -> both legal, 2,1 -> only for white
+    # decoded_board = ["#....", "#...#", "#....", "#.O.X", "#.#X."]
+    # decoded_board = np.array(
+    #     [
+    #         [3, 2, 3, 2, 1],
+    #         [2, 2, 2, 2, 0],
+    #         [2, 2, 1, 0, 1],
+    #         [3, 0, 0, 1, 3],
+    #         [3, 1, 3, 0, 1],
+    #     ]
+    # )
+    decoded_board = np.array(
+        [
+            [0, 0, 3, 1, 1],
+            [1, 1, 0, 1, 0],
+            [1, 0, 1, 1, 1],
+            [0, 1, 1, 1, 1],
+            [2, 1, 1, 1, 1],
+        ],
+        dtype=np.int8,
+    )
+
+    go = Go(5, decoded_board)
+    go.state = np.array(
+        [
+            [3, 2, 2, 2, 2],
+            [3, 2, 2, 0, 2],
+            [3, 2, 2, 2, 2],
+            [3, 2, 0, 2, 2],
+            [3, 3, 2, 2, 2],
+        ],
+        dtype=np.int8,
+    )
     go.current_player = 2
 
-    # vis = set()
-    # print(go.get_liberties(go.state, 3, 2, vis))
-    print(go)
-    print(go.check_move_is_valid(go.state, 4, 4))
+    print(go.make_move(8, True))
+"""
 
-
-# done: score
-# check move is valid
+"""

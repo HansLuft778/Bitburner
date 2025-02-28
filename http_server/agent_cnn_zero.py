@@ -1,4 +1,3 @@
-import datetime
 import os
 import random
 from collections import deque
@@ -10,10 +9,6 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 from plotter import Plotter
-
-"""
-TODO: add Dirichlet noise in fist self play iterations to improve stability
-"""
 
 
 class ResNet(nn.Module):
@@ -110,38 +105,80 @@ class AlphaZeroAgent:
     def __init__(
         self,
         board_width: int,
-        board_height: int,
         plotter: Plotter,
         lr=1e-4,
         batch_size=64,
         num_past_steps=2,
+        checkpoint_dir="models/checkpoints",
     ):
         self.board_width = board_width
-        self.board_height = board_height
+        self.board_height = board_width
         self.plotter = plotter
         self.batch_size = batch_size
         self.num_past_steps = num_past_steps
+        self.checkpoint_dir = checkpoint_dir
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.policy_net = ResNet(
-            board_width, board_height, 4, num_past_steps=num_past_steps
+            board_width, board_width, 4, num_past_steps=num_past_steps
         ).to(self.device)
+        # self.policy_net.load_state_dict(torch.load("mcts_zero_works_2.pt"))
         self.policy_net.eval()
 
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
 
         self.train_buffer = TrainingBuffer()
+        
+    def save_checkpoint(self, filename):
+        """Saves the model and optimizer state to a file."""
+        checkpoint_path = os.path.join(self.checkpoint_dir, filename)
+        torch.save(
+            {
+                "model_state_dict": self.policy_net.state_dict(),
+                "optimizer_state_dict": self.optimizer.state_dict(),
+            },
+            checkpoint_path,
+        )
+        print(f"Checkpoint saved to {checkpoint_path}")
+        self._manage_checkpoints()
+
+    def load_checkpoint(self, filename):
+        """Loads the model and optimizer state from a file."""
+        checkpoint_path = os.path.join(self.checkpoint_dir, filename)
+        checkpoint = torch.load(checkpoint_path)
+        self.policy_net.load_state_dict(checkpoint["model_state_dict"])
+        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        self.policy_net.eval()  # Set to eval mode after loading
+        print(f"Checkpoint loaded from {checkpoint_path}")
+
+    def _manage_checkpoints(self):
+        """Keeps only the last 10 checkpoints, deleting older ones."""
+        checkpoints = sorted(
+            [
+                f
+                for f in os.listdir(self.checkpoint_dir)
+                if f.startswith("checkpoint")
+            ],
+            key=lambda x: os.path.getmtime(os.path.join(self.checkpoint_dir, x)),
+            reverse=True,
+        )  # Sort by modification time, newest first
+
+        # Delete checkpoints beyond the last 10
+        for checkpoint in checkpoints[10:]:
+            filepath = os.path.join(self.checkpoint_dir, checkpoint)
+            os.remove(filepath)
+            print(f"Deleted old checkpoint: {checkpoint}")
 
     def preprocess_state(
-        self, board_state: list[str], history: list[list[str]], is_white: bool
+        self, board_state: np.ndarray, history: list[np.ndarray], is_white: bool
     ):
         """
-        Convert the board (list of strings, e.g. ["XX.O#", ...]) into a float tensor of shape [1,8,w,h].
-        '#' -> 1.0  Channel 0
-        'X' -> 1.0  Black, Channel 1, 3, 5
-        'O' -> 1.0  White, Channel 2, 4, 6
-        '.' -> 0.0  (Empty)
+        Convert the board (numpy array) into a float tensor of shape [1,8,w,h].
+        1 -> 1.0  Black, Channel 1, 3, 5
+        2 -> 1.0  White, Channel 2, 4, 6
+        3 -> 1.0  Channel 0
+        0 -> 0.0  (Empty)
         """
         w, h = self.board_width, self.board_height
 
@@ -157,15 +194,12 @@ class AlphaZeroAgent:
         current_black = torch.zeros(w, h, device=self.device)
         current_white = torch.zeros(w, h, device=self.device)
 
-        for x in range(w):
-            for y in range(h):
-                ch = board_state[x][y]
-                if ch == "X":
-                    current_black[x][y] = 1.0
-                elif ch == "O":
-                    current_white[x][y] = 1.0
-                elif ch == "#":
-                    disabled_channel[x][y] = 1.0
+        mask_black = torch.from_numpy(board_state == 1).to(self.device)
+        mask_white = torch.from_numpy(board_state == 2).to(self.device)
+        mask_disabled = torch.from_numpy(board_state == 3).to(self.device)
+        current_black[mask_black] = 1.0
+        current_white[mask_white] = 1.0
+        disabled_channel[mask_disabled] = 1.0
 
         channels.extend([disabled_channel, side_channel, current_black, current_white])
 
@@ -176,13 +210,11 @@ class AlphaZeroAgent:
             history_white = torch.zeros(w, h, device=self.device)
             if len(history) > past_idx:
                 past_step = history[past_idx]
-                for x in range(w):
-                    for y in range(h):
-                        ch = past_step[x][y]
-                        if ch == "X":
-                            history_black[x][y] = 1.0
-                        elif ch == "O":
-                            history_white[x][y] = 1.0
+                
+                mask_black = torch.from_numpy(past_step == 1).to(self.device)
+                mask_white = torch.from_numpy(past_step == 2).to(self.device)
+                history_black[mask_black] = 1.0
+                history_white[mask_white] = 1.0
 
             channels.extend([history_black, history_white])
 
@@ -205,14 +237,14 @@ class AlphaZeroAgent:
         # Select the action with highest Q-value
         return policy.squeeze(0), value.item()
 
-    def decode_action(self, action_idx: int):
+    def decode_action(self, action_idx: int) -> tuple[int, int]:
         """
         Convert the action index back to (x, y) or 'pass'.
         If action_idx == board_size, then 'pass'.
         """
         board_size = self.board_width * self.board_height
         if action_idx == board_size:
-            return "pass"
+            return (-1, -1)
         else:
             x = action_idx // self.board_height
             y = action_idx % self.board_height
