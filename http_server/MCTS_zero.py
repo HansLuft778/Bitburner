@@ -23,7 +23,7 @@ def get_score(server: GameServerGo, node: "Node"):
     diff = score_white - score_black
 
     # normalize score, so
-    max_score = len(node.state) ** 2
+    max_score = node.agent.board_width * node.agent.board_height
     normalized = diff / max_score
 
     return normalized if node.is_white else -normalized
@@ -59,17 +59,14 @@ def has_game_ended(server: GameServerGo, node: "Node") -> tuple[bool, int]:
 
 def get_ucb_value(child: "Node", parent_visit_count: int, c_puct=2.0) -> float:
     """
-    child.win_sum is from the parent's perspective? No, by flipping sign in backprop,
-    child.win_sum is actually from the parent's perspective if done correctly.
-    But let's do the standard:
-      Q(s,a) = child.win_sum/child.visit_cnt   (already parent's perspective)
+    child.win_sum is from the parent's perspective.
+      Q(s,a) = child.win_sum/child.visit_cnt
       U(s,a) = c_puct * P(s,a)* sqrt(parent.visit_cnt)/(1+child.visit_cnt)
     """
     if child.visit_cnt == 0:
         q_value = 0.0
     else:
         q_value = -(child.win_sum / child.visit_cnt)
-        # q_value = 1 - ((child.win_sum / child.visit_cnt) + 1) / 2
     u_value = (
         c_puct
         * child.selected_policy
@@ -151,7 +148,7 @@ class Node:
     def expand(self, q_values: torch.Tensor) -> None:
         valid_moves = self.get_valid_moves().flatten()
         empty_cells = np.sum(self.state == 0)
-        board_size = len(self.state) ** 2
+        board_size = self.agent.board_width * self.agent.board_height
         # Penalize passing if board is mostly empty
         empty_percentage = empty_cells / board_size
         if empty_percentage > 0.5:
@@ -194,12 +191,18 @@ class Node:
 
 
 class MCTS:
-    def __init__(self, server: GameServerGo, search_iterations: int):
+    def __init__(
+        self,
+        server: GameServerGo,
+        plotter: Plotter,
+        agent: AlphaZeroAgent,
+        search_iterations: int,
+    ):
         self.search_iterations = search_iterations
         self.server = server
 
-        self.plotter = Plotter()
-        self.agent = AlphaZeroAgent(5, 5, self.plotter)
+        self.plotter = plotter
+        self.agent = agent
         self.timing_stats: defaultdict[str, float] = defaultdict(float)
         self.iterations_stats: defaultdict[str, int] = defaultdict(int)
 
@@ -311,13 +314,15 @@ async def main():
     await server.wait()
     print("GameServer ready and client connected")
 
-    mcts = MCTS(server, search_iterations=1000)
+    plotter = Plotter()
+    agent = AlphaZeroAgent(5, plotter)
+    mcts = MCTS(server, plotter, agent, search_iterations=1000)
 
     NUM_EPISODES = 100
 
-    for _ in range(NUM_EPISODES):
-        state = await server.reset_game(True)
-        server.go = Go(5, 5, state)
+    for iter in range(NUM_EPISODES):
+        state = await server.reset_game("No AI")
+        server.go = Go(5, state)
 
         buffer = []
         is_white = False
@@ -334,6 +339,7 @@ async def main():
             print(f"{best_move}, {pi_mcts[best_move]}")
             action = mcts.agent.decode_action(best_move)
             print(f"make move: {action}")
+            scores = server.get_score()
 
             buffer.append(
                 (
@@ -341,11 +347,10 @@ async def main():
                     is_white,
                     pi_mcts,
                     game_history[: mcts.agent.num_past_steps],
+                    scores,
                 )
             )
 
-            # outcome is from current players/root perspective
-            # above maybe wrong
             # outcome is: 1 if black won, -1 is white won
             next_state, outcome, done = await server.make_move(
                 action, best_move, is_white
@@ -361,18 +366,17 @@ async def main():
         mcts.agent.plotter.update_wins_black(1 if outcome == 1 else -1)
 
         mcts.agent.policy_net.train()
-        for state, was_white, pi, history in buffer:
+        for state, was_white, pi, history, scores in buffer:
             # Flip if the buffer entry belongs to the opposite color
             #  - opposite of player who moves
 
             z = outcome if not was_white else -outcome
 
-            score = server.get_score()
             # add bonus for territory + pieces, without komi
-            white_territory = score["white"]["territory"] + score["white"]["pieces"]
-            black_territory = score["black"]["territory"] + score["black"]["pieces"]
+            white_territory = scores["white"]["territory"] + scores["white"]["pieces"]
+            black_territory = scores["black"]["territory"] + scores["black"]["pieces"]
 
-            territory_bonus = (black_territory - white_territory) / (5 * 5) * 1.5
+            territory_bonus = (black_territory - white_territory) / (mcts.agent.board_width * mcts.agent.board_width) * 1.5
 
             z += territory_bonus if not was_white else -territory_bonus
 
@@ -381,8 +385,47 @@ async def main():
 
             mcts.agent.train_buffer.push(state, pi, z, history, was_white)
 
-        for _ in range(20):
+        for _ in range(40):
             mcts.agent.train_step()
+        mcts.agent.save_checkpoint(f"checkpoint_{iter}.pth")
+
+
+async def main_eval():
+    server = GameServerGo()
+    await server.wait()
+    print("GameServer ready and client connected")
+
+    plotter = Plotter()
+    agent = AlphaZeroAgent(5, plotter)
+    mcts = MCTS(server, plotter, agent, search_iterations=1000)
+
+    NUM_EPISODES = 100
+
+    for _ in range(NUM_EPISODES):
+        state = await server.reset_game("Netburners")
+        server.go = Go(5, state)
+
+        is_white = False
+        done = False
+        mcts.agent.policy_net.eval()
+        while not done:
+            pi_mcts = mcts.search(state, is_white)
+            print(pi_mcts)
+            best_move = torch.argmax(pi_mcts).item()
+            print(f"{best_move}, {pi_mcts[best_move]}")
+            action = mcts.agent.decode_action(best_move)
+            print(f"make move: {action}")
+
+            # outcome is: 1 if black won, -1 is white won
+            next_state, outcome, done = await server.make_move_eval(
+                action, best_move, is_white
+            )
+            state = next_state
+
+        assert outcome != 0, "outcome should not be 0 after a game ended"
+
+        mcts.agent.plotter.update_wins_white(1 if outcome == -1 else -1)
+        mcts.agent.plotter.update_wins_black(1 if outcome == 1 else -1)
 
 
 # Run the main coroutine

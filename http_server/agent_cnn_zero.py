@@ -1,3 +1,4 @@
+import os
 import random
 from collections import deque
 
@@ -108,12 +109,14 @@ class AlphaZeroAgent:
         lr=1e-4,
         batch_size=64,
         num_past_steps=2,
+        checkpoint_dir="models/checkpoints",
     ):
         self.board_width = board_width
         self.board_height = board_width
         self.plotter = plotter
         self.batch_size = batch_size
         self.num_past_steps = num_past_steps
+        self.checkpoint_dir = checkpoint_dir
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -126,6 +129,46 @@ class AlphaZeroAgent:
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
 
         self.train_buffer = TrainingBuffer()
+        
+    def save_checkpoint(self, filename):
+        """Saves the model and optimizer state to a file."""
+        checkpoint_path = os.path.join(self.checkpoint_dir, filename)
+        torch.save(
+            {
+                "model_state_dict": self.policy_net.state_dict(),
+                "optimizer_state_dict": self.optimizer.state_dict(),
+            },
+            checkpoint_path,
+        )
+        print(f"Checkpoint saved to {checkpoint_path}")
+        self._manage_checkpoints()
+
+    def load_checkpoint(self, filename):
+        """Loads the model and optimizer state from a file."""
+        checkpoint_path = os.path.join(self.checkpoint_dir, filename)
+        checkpoint = torch.load(checkpoint_path)
+        self.policy_net.load_state_dict(checkpoint["model_state_dict"])
+        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        self.policy_net.eval()  # Set to eval mode after loading
+        print(f"Checkpoint loaded from {checkpoint_path}")
+
+    def _manage_checkpoints(self):
+        """Keeps only the last 10 checkpoints, deleting older ones."""
+        checkpoints = sorted(
+            [
+                f
+                for f in os.listdir(self.checkpoint_dir)
+                if f.startswith("checkpoint")
+            ],
+            key=lambda x: os.path.getmtime(os.path.join(self.checkpoint_dir, x)),
+            reverse=True,
+        )  # Sort by modification time, newest first
+
+        # Delete checkpoints beyond the last 10
+        for checkpoint in checkpoints[10:]:
+            filepath = os.path.join(self.checkpoint_dir, checkpoint)
+            os.remove(filepath)
+            print(f"Deleted old checkpoint: {checkpoint}")
 
     def preprocess_state(
         self, board_state: np.ndarray, history: list[np.ndarray], is_white: bool
