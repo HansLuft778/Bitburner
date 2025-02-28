@@ -1,0 +1,58 @@
+
+using string list:
+selection: 0.001s (0.1%) - Avg: 0.01ms 
+end_check: 0.650s (36.8%) - Avg: 6.50ms 
+move_prep: 0.012s (0.7%) - Avg: 0.12ms 
+nn_inference: 0.467s (26.4%) - Avg: 4.67ms 
+policy_compute: 0.020s (1.1%) - Avg: 0.20ms 
+expansion: 0.615s (34.8%) - Avg: 6.15ms 
+backprop: 0.000s (0.0%) - Avg: 0.00ms 
+final_policy: 0.001s (0.1%) - Avg: 0.01ms 
+TOOK: 1.766082763671875s
+
+numppy array:
+selection: 0.013s (0.1%) - Avg: 0.01ms
+end_check: 7.162s (42.3%) - Avg: 7.16ms
+move_prep: 0.009s (0.1%) - Avg: 0.01ms
+nn_inference: 3.260s (19.2%) - Avg: 3.26ms
+policy_compute: 0.150s (0.9%) - Avg: 0.15ms
+expansion: 6.351s (37.5%) - Avg: 6.35ms
+backprop: 0.001s (0.0%) - Avg: 0.00ms
+final_policy: 0.001s (0.0%) - Avg: 0.00ms
+TOOK: 16.951805353164673s
+
+
+Total search time: 16.356s
+selection: 0.016s (0.1%) - Avg: 0.02ms
+end_check: 5.556s (34.0%) - Avg: 5.56ms
+move_prep: 0.006s (0.0%) - Avg: 0.01ms
+nn_inference: 2.657s (16.2%) - Avg: 2.66ms
+policy_compute: 0.252s (1.5%) - Avg: 0.25ms
+expansion: 7.862s (48.1%) - Avg: 7.86ms
+backprop: 0.001s (0.0%) - Avg: 0.00ms
+final_policy: 0.002s (0.0%) - Avg: 0.00ms
+TOOK: 16.357322931289673s
+
+numpy vecorization:
+Total search time: 4.973s
+selection: 0.018s (0.4%) - Avg: 0.02ms
+end_check: 0.195s (3.9%) - Avg: 0.20ms
+move_prep: 0.002s (0.0%) - Avg: 0.00ms
+nn_inference: 2.412s (48.5%) - Avg: 2.41ms
+policy_compute: 0.163s (3.3%) - Avg: 0.16ms
+expansion: 2.179s (43.8%) - Avg: 2.18ms
+backprop: 0.001s (0.0%) - Avg: 0.00ms
+final_policy: 0.001s (0.0%) - Avg: 0.00ms
+TOOK: 4.974031209945679s
+
+Average of above (numpy vecorization) throughout a single game:
+Total search time: 4.768s
+selection: 0.017s (0.4%)
+end_check: 0.211s (4.4%)
+move_prep: 0.002s (0.0%)
+nn_inference: 2.916s (61.2%)
+policy_compute: 0.110s (2.3%)
+expansion: 1.507s (31.6%)
+backprop: 0.001s (0.0%)
+final_policy: 0.001s (0.0%)
+TOOK: 4.768s
