@@ -151,22 +151,12 @@ class AlphaZeroAgent:
         current_black = torch.zeros(w, h, device=self.device)
         current_white = torch.zeros(w, h, device=self.device)
 
-        # mask_black = torch.from_numpy(board_state == 1).to(self.device)
-        # mask_white = torch.from_numpy(board_state == 2).to(self.device)
-        # mask_disabled = torch.from_numpy(board_state == 3).to(self.device)
-        # current_black[mask_black] = 1.0
-        # current_white[mask_white] = 1.0
-        # disabled_channel[mask_disabled] = 1.0
-
-        for x in range(w):
-            for y in range(h):
-                ch = board_state[x][y]
-                if ch == 1:
-                    current_black[x][y] = 1.0
-                elif ch == 2:
-                    current_white[x][y] = 1.0
-                elif ch == 3:
-                    disabled_channel[x][y] = 1.0
+        mask_black = torch.from_numpy(board_state == 1).to(self.device)
+        mask_white = torch.from_numpy(board_state == 2).to(self.device)
+        mask_disabled = torch.from_numpy(board_state == 3).to(self.device)
+        current_black[mask_black] = 1.0
+        current_white[mask_white] = 1.0
+        disabled_channel[mask_disabled] = 1.0
 
         channels.extend([disabled_channel, side_channel, current_black, current_white])
 
@@ -177,13 +167,11 @@ class AlphaZeroAgent:
             history_white = torch.zeros(w, h, device=self.device)
             if len(history) > past_idx:
                 past_step = history[past_idx]
-                for x in range(w):
-                    for y in range(h):
-                        ch = past_step[x][y]
-                        if ch == 1:
-                            history_black[x][y] = 1.0
-                        elif ch == 2:
-                            history_white[x][y] = 1.0
+                
+                mask_black = torch.from_numpy(past_step == 1).to(self.device)
+                mask_white = torch.from_numpy(past_step == 2).to(self.device)
+                history_black[mask_black] = 1.0
+                history_white[mask_white] = 1.0
 
             channels.extend([history_black, history_white])
 
