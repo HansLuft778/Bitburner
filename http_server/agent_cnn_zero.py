@@ -104,14 +104,13 @@ class AlphaZeroAgent:
     def __init__(
         self,
         board_width: int,
-        board_height: int,
         plotter: Plotter,
         lr=1e-4,
         batch_size=64,
         num_past_steps=2,
     ):
         self.board_width = board_width
-        self.board_height = board_height
+        self.board_height = board_width
         self.plotter = plotter
         self.batch_size = batch_size
         self.num_past_steps = num_past_steps
@@ -119,8 +118,9 @@ class AlphaZeroAgent:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.policy_net = ResNet(
-            board_width, board_height, 4, num_past_steps=num_past_steps
+            board_width, board_width, 4, num_past_steps=num_past_steps
         ).to(self.device)
+        # self.policy_net.load_state_dict(torch.load("mcts_zero_works_2.pt"))
         self.policy_net.eval()
 
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr)
