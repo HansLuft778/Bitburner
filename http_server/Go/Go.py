@@ -1,5 +1,4 @@
 from collections import deque
-from copy import deepcopy
 
 import numpy as np
 
@@ -286,7 +285,7 @@ class Go:
         if state[x][y] != 0:
             return None
 
-        sim_state = deepcopy(state)
+        sim_state = state.copy()
         sim_state[x][y] = color
 
         # color = 1 => enemy = 2; color = 2 => ememy = 1
@@ -325,52 +324,12 @@ class Go:
 
         return state_bytes in history_bytes or state_bytes in additional_bytes
 
-    def check_move_is_valid(
-        self, state: np.ndarray, x: int, y: int, player: int, history=[]
-    ) -> bool:
-        # move is not empty
-        if state[x][y] != 0:
-            return False
-
-        has_empty_neighbor = False
-        has_capturable_enemy = False
-        has_safe_friendly = False
-
-        for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-            nx, ny = x + dx, y + dy
-            if 0 <= nx < self.board_width and 0 <= ny < self.board_height:
-                # case 1: valid, if cell has empty eighbors
-                if state[nx][ny] == 0:
-                    has_empty_neighbor = True
-                # case 2: any adjacent enemy cell has only one liberty (enemy group will be captured)
-                if state[nx][ny] in [1, 2]:
-                    # visited: set[tuple[int, int]] = set()
-                    libs, _ = self.get_liberties(state, nx, ny, set())
-                    if len(libs) == 1 and state[nx][ny] != player:
-                        has_capturable_enemy = True
-                    # or a friendly cell has more than one
-                    elif len(libs) > 1 and state[nx][ny] == player:
-                        has_safe_friendly = True
-
-        if has_empty_neighbor or has_capturable_enemy or has_safe_friendly:
-            tmp_state = state.copy()
-            tmp_state[x][y] = player
-            is_repeat = self.check_state_is_repeat(tmp_state, history)
-            return not is_repeat
-        else:
-            simulated_board = self.simulate_move(state, x, y, player)
-            if not simulated_board or simulated_board[x][y] != player:
-                return False
-            is_repeat = self.check_state_is_repeat(simulated_board, history)
-
-            return not is_repeat
-
     def make_move(self, action: int, is_white: bool) -> tuple[np.ndarray, float, bool]:
         state_after_move = self.state_after_action(action, is_white)
+        game_ended = self.has_game_ended(action, is_white, self.state)
+
         self.state = state_after_move
         self.current_player = 3 - self.current_player
-
-        game_ended = self.has_game_ended(action, is_white, self.state)
 
         # update history and prev action
         self.history.append(self.state.copy())
@@ -380,6 +339,7 @@ class Go:
         outcome = 0
         if game_ended:
             score = self.get_score()
+            print(f"score: {score}")
             outcome = 1 if score["black"]["sum"] > score["white"]["sum"] else -1
 
         return self.state, outcome, game_ended
@@ -388,7 +348,6 @@ class Go:
         self, state: np.ndarray, is_white: bool, history=[]
     ) -> np.ndarray:
         player = 2 if is_white else 1
-        # TODO: make legal_moves shape (1,26)
 
         legal_moves: np.ndarray = np.zeros_like(state, dtype=bool)
         empty_mask = state == 0
@@ -426,12 +385,6 @@ class Go:
 
     def get_history(self) -> list[np.ndarray]:
         return self.history
-
-    def get_history_decoded(self) -> list[list[str]]:
-        encoded_history = []
-        for history_state in self.history:
-            encoded_history.append(self.decode_state(history_state))
-        return encoded_history
 
 
 if __name__ == "__main__":
@@ -476,21 +429,19 @@ if __name__ == "__main__":
     )
 
     go = Go(5, decoded_board)
-    go.current_player = 1
+    go.state = np.array(
+        [
+            [3, 2, 2, 2, 2],
+            [3, 2, 2, 0, 2],
+            [3, 2, 2, 2, 2],
+            [3, 2, 0, 2, 2],
+            [3, 3, 2, 2, 2],
+        ],
+        dtype=np.int8,
+    )
+    go.current_player = 2
 
-    # vis = set()
-    # print(go.get_liberties(go.state, 3, 2, vis))
-    print(go)
-    print(go.make_move(1, True))
+    print(go.make_move(8, True))
 """
-simulate fails on:
-array([[3, 2, 3, 2, 1],
-       [2, 2, 2, 2, 0],
-       [2, 2, 1, 0, 1],
-       [3, 0, 0, 1, 3],
-       [3, 1, 3, 0, 1]])
-       
-with action 23 and iswhite = True
 
- 
 """
