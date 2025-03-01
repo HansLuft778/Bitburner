@@ -29,7 +29,7 @@ def rotate_and_beatify(state: list[str], delim: str = "<br>") -> str:
     return beatify_state(rotate_state(state), delim)
 
 
-class Go:
+class Go_uf:
     def __init__(self, board_width: int, state: np.ndarray):
         assert state.shape == (5, 5), f"Array must be 5x5: {state}"
         assert np.all(
@@ -45,6 +45,17 @@ class Go:
         self.state: np.ndarray = state
         self.current_player = 1  # black starts
 
+        # union find data structure
+        self.parent = np.zeros(5 * 5, dtype=np.int8)  # parent of each stone
+        self.stones: list[set[int]] = [
+            set() for _ in range(5 * 5)
+        ]  # set of which stones are in the same group of a root
+        self.colors = np.zeros(5 * 5, dtype=np.int8)
+        self.liberties: list[set[int]] = [set() for _ in range(5 * 5)]
+        self.rank = np.zeros(
+            5 * 5, dtype=np.int8
+        )  # rank starts at 0 for unused positions
+
     def __str__(self):
         board = self.decode_state(self.state)
         return rotate_and_beatify(board, "\n")
@@ -57,8 +68,7 @@ class Go:
                 - If action_idx is width*height, returns (-1,-1) representing a pass move
                 - Otherwise returns (x,y) coordinates on the board
         """
-        board_size = self.board_width * self.board_height
-        if action_idx == board_size:
+        if action_idx == self.board_width * self.board_height:
             return (-1, -1)
         else:
             x = action_idx // self.board_height
@@ -113,22 +123,68 @@ class Go:
             decoded_board.append(tmp)
         return decoded_board
 
+    def find(self, i: int) -> int:
+        """
+        Find with path compression.
+        Note: Path compression changes the tree structure but doesn't affect ranks
+        """
+        if self.parent[i] == i:
+            return i
+        self.parent[i] = self.find(self.parent[i])  # path compression
+        return self.parent[i]
+
+    # Remove or comment out the old union() method
+
+    # Rename union_2 to union and use it as the primary implementation
+    def union(self, a: int, b: int) -> None:
+        """
+        Unites two groups of stones together using union by rank.
+        Rank represents the upper bound of the height of the tree.
+        """
+        root_a = self.find(a)
+        root_b = self.find(b)
+        if root_a == root_b:
+            return
+
+        assert (
+            self.colors[root_a] == self.colors[root_b]
+        ), f"Colors must be the same: {root_a} {root_b}"
+
+        # Union by rank - attach smaller rank tree under root of higher rank tree
+        if self.rank[root_a] > self.rank[root_b]:
+            # No rank change needed when attaching smaller to larger
+            self.parent[root_b] = root_a
+            self.stones[root_a].update(self.stones[root_b])
+            self.stones[root_b].clear()
+            self.liberties[root_a].update(self.liberties[root_b])
+            self.liberties[root_b].clear()
+            self.colors[root_a] = self.colors[root_b]  # probably not needed
+        else:
+            self.parent[root_a] = root_b
+            self.stones[root_b].update(self.stones[root_a])
+            self.stones[root_a].clear()
+            self.liberties[root_b].update(self.liberties[root_a])
+            self.liberties[root_a].clear()
+            self.colors[root_b] = self.colors[root_a]  # probably not needed
+            # Increment rank of root_b only if ranks were equal
+            if self.rank[root_a] == self.rank[root_b]:
+                self.rank[root_b] += 1
+
     def state_after_action(
         self,
         action: int,
         is_white: bool,
-        provided_state: np.ndarray | None = None,
+        provided_state: np.ndarray,
         additional_history: list[np.ndarray] = [],
     ) -> np.ndarray:
-        state = provided_state if provided_state is not None else self.state
-
         if action == self.board_size:  # Pass move
-            return state.copy()
+            return provided_state.copy()
 
-        x, y = self.decode_action(action)
         color = 2 if is_white else 1
 
-        new_state = self.simulate_move(state, x, y, color, additional_history)
+        new_state = self.simulate_move(
+            provided_state, action, color, additional_history
+        )
         if new_state is not None:
             return new_state
         else:
@@ -277,11 +333,11 @@ class Go:
     def simulate_move(
         self,
         state: np.ndarray,
-        x: int,
-        y: int,
+        action: int,
         color: int,
         additional_history: list[np.ndarray] = [],
     ) -> np.ndarray | None:
+        x, y = self.decode_action(action)
         if state[x][y] != 0:
             return None
 
@@ -291,21 +347,47 @@ class Go:
         # color = 1 => enemy = 2; color = 2 => ememy = 1
         enemy = 3 - color
 
-        # check for capture
+        # Initialize the new stone's data
+        self.colors[action] = color
+        self.parent[action] = action  # stone is its own root initially
+        self.stones[action] = set([action])
+        self.liberties[action] = set()
+        self.rank[action] = 0  # new single nodes start with rank 0
+
+        action_root = action
         for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
             nx, ny = x + dx, y + dy
+            nidx = self.encode_action(nx, ny)
             if 0 <= nx < self.board_width and 0 <= ny < self.board_height:
-                if sim_state[nx][ny] == enemy:
-                    liberties, territory = self.get_liberties(sim_state, nx, ny, set())
-                    # capture enemy stones if they have no liberties
-                    if len(liberties) == 0:
-                        for tx, ty in territory:
-                            sim_state[tx][ty] = 0
+                # neighbor is empty
+                if self.state[nx][ny] == 0:
+                    self.liberties[action_root].add(nidx)
+                # neighbor is same color
+                elif self.colors[nidx] == color:
+                    self.union(action, nidx)
+                    action_root = self.find(action)
+                # neighbor is enemy
+                elif self.colors[nidx] == (3 - color):
+                    enemy_group = self.find(nidx)
+                    self.liberties[enemy_group].discard(action)
+                    if len(self.liberties[enemy_group]) == 0:
+                        for stone in self.stones[enemy_group]:
+                            x, y = self.decode_action(stone)
+                            sim_state[x][y] = 0
+                            self.colors[stone] = 0
+                            self.parent[stone] = 0
+                            self.stones[stone].clear()
+                            self.liberties[stone].clear()
+                            self.rank[stone] = 0
+                # neighbor is disabled (ignore)
+                # elif self.state[nx][ny] == 3:
+                #     pass
 
-        # check if placed router has liberties
-        libs, _ = self.get_liberties(sim_state, x, y, set())
-        if len(libs) == 0:
-            # move was actually a suicide
+        # check if placed stone has liberties
+        # libs, _ = self.get_liberties(sim_state, x, y, set())
+        if len(self.liberties[action_root]) == 0:
+            # move was actually a suicide, revert changes
+            raise NotADirectoryError("not yet")
             return None
 
         # check for repeat
@@ -325,7 +407,7 @@ class Go:
         return state_bytes in history_bytes or state_bytes in additional_bytes
 
     def make_move(self, action: int, is_white: bool) -> tuple[np.ndarray, float, bool]:
-        state_after_move = self.state_after_action(action, is_white)
+        state_after_move = self.state_after_action(action, is_white, self.state)
         game_ended = self.has_game_ended(action, is_white, self.state)
 
         self.state = state_after_move
@@ -353,7 +435,8 @@ class Go:
         empty_mask = state == 0
         empty_positions = np.where(empty_mask)
         for x, y in zip(empty_positions[0], empty_positions[1]):
-            if self.simulate_move(state, x, y, player, history) is not None:
+            action = self.encode_action(x, y)
+            if self.simulate_move(state, action, player, history) is not None:
                 legal_moves[x][y] = True
         return legal_moves
 
@@ -428,7 +511,8 @@ if __name__ == "__main__":
         dtype=np.int8,
     )
 
-    go = Go(5, decoded_board)
+    go = Go_uf(5, decoded_board)
+    print(go)
     go.state = np.array(
         [
             [3, 2, 2, 2, 2],
@@ -442,6 +526,3 @@ if __name__ == "__main__":
     go.current_player = 2
 
     print(go.make_move(8, True))
-"""
-
-"""

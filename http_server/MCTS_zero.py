@@ -316,6 +316,7 @@ async def main():
 
     plotter = Plotter()
     agent = AlphaZeroAgent(5, plotter)
+    agent.load_checkpoint("checkpoint_56.pth")
     mcts = MCTS(server, plotter, agent, search_iterations=1000)
 
     NUM_EPISODES = 100
@@ -397,6 +398,7 @@ async def main_eval():
 
     plotter = Plotter()
     agent = AlphaZeroAgent(5, plotter)
+    agent.load_checkpoint("checkpoint_56.pth")
     mcts = MCTS(server, plotter, agent, search_iterations=1000)
 
     NUM_EPISODES = 100
@@ -432,4 +434,4 @@ async def main_eval():
 if __name__ == "__main__":
     import asyncio
 
-    asyncio.run(main())
+    asyncio.run(main_eval())
