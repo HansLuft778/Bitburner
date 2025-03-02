@@ -6,14 +6,14 @@ from Go.Go import Go
 
 
 class GameServerGo:
-    def __init__(self) -> None:
+    def __init__(self, board_size: int) -> None:
         self.client_connected = asyncio.Event()
         self.websocket = None
         self.recv_lock = asyncio.Lock()
         self.message_queue: asyncio.Queue[str] = asyncio.Queue()
         self.server = None  # Reference to the server task
 
-        self.go = Go(5, np.zeros((5, 5), dtype=np.int8))
+        self.go = Go(board_size, np.zeros((board_size, board_size), dtype=np.int8))
 
     async def handle_client(self, websocket):
         self.websocket = websocket
@@ -42,7 +42,7 @@ class GameServerGo:
     def request_valid_moves(
         self, is_white: bool, state: np.ndarray, history: list[np.ndarray] = []
     ) -> np.ndarray:
-        assert state.shape == (5, 5), f"Array must be 5x5: {state}"
+        assert state.shape == (self.go.board_height, self.go.board_height), f"Array must be 5x5: {state}"
         assert np.all(
             np.isin(state, [0, 1, 2, 3])
         ), f"Array must only contain values 0, 1, 2, or 3: {state}"
@@ -126,7 +126,8 @@ class GameServerGo:
     ) -> np.ndarray:
         res = self.go.state_after_action(action, is_white, state, additional_history)
         assert res.shape == (
-            5,
+            self.go.board_height,
+            self.go.board_height,
             5,
         ), f"Array must be 5x5: action: {action} state: {res}"
         assert np.all(

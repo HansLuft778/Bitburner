@@ -35,15 +35,18 @@ def has_game_ended(server: GameServerGo, node: "Node") -> tuple[bool, int]:
         node.action
         and node.parent
         and node.parent.action
-        and node.action == 25
-        and node.parent.action == 25
+        and node.action == server.go.board_height * server.go.board_height
+        and node.parent.action == server.go.board_height * server.go.board_height
     ):
         return (True, get_score(server, node))
 
     # one pass, next player has no valid moves
     if node.parent:
         valid_moves = np.sum(node.get_valid_moves())
-        if node.parent.action == 25 and valid_moves == 0:
+        if (
+            node.parent.action == server.go.board_height * server.go.board_height
+            and valid_moves == 0
+        ):
             print(
                 f"node.parent.action: {node.parent.action}, valid_moves: {valid_moves}"
             )
@@ -88,7 +91,10 @@ class Node:
         selected_policy: float = 0,
         visit_count: int = 0,
     ):
-        assert state.shape == (5, 5), f"Array must be 5x5: {state}"
+        assert state.shape == (
+            agent.board_width,
+            agent.board_width,
+        ), f"Array must be 5x5: {state}"
         assert np.all(
             np.isin(state, [0, 1, 2, 3])
         ), f"Array must only contain values 0, 1, 2, or 3: {state}"
@@ -152,18 +158,20 @@ class Node:
         # Penalize passing if board is mostly empty
         empty_percentage = empty_cells / board_size
         if empty_percentage > 0.5:
-            q_values[25] *= (1.0 - empty_percentage) * 0.5
+            q_values[self.agent.board_width * self.agent.board_width] *= (
+                1.0 - empty_percentage
+            ) * 0.5
 
         for action, q_value in enumerate(q_values):
             if not valid_moves[action]:
                 continue
-            if action != 25:
+            if action != self.agent.board_width * self.agent.board_width:
                 next_state = self.server.get_state_after_move(
                     action, self.state, self.is_white, self.get_history()
                 )
                 assert next_state.shape == (
-                    5,
-                    5,
+                    self.agent.board_width,
+                    self.agent.board_width,
                 ), f"Array must be 5x5: action:{action} state: {next_state}"
                 assert np.all(
                     np.isin(next_state, [0, 1, 2, 3])
@@ -209,7 +217,7 @@ class MCTS:
     @torch.no_grad()
     def search(self, state: np.ndarray, is_white: bool):
 
-        assert state.shape == (5, 5), f"Array must be 5x5: {state}"
+        # assert state.shape == (5, 5), f"Array must be 5x5: {state}"
         assert np.all(
             np.isin(state, [0, 1, 2, 3])
         ), f"Array must only contain values 0, 1, 2, or 3: {state}"
@@ -233,7 +241,7 @@ class MCTS:
             end_check_start = time.time()
             done, value = has_game_ended(self.server, node)
             self.timing_stats["end_check"] += time.time() - end_check_start
-            # value *= -1
+
             if not done:
                 prep_start = time.time()
                 valid_moves = node.get_valid_moves()
@@ -285,7 +293,10 @@ class MCTS:
 
         final_policy_start = time.time()
 
-        props = torch.zeros(26, device=self.agent.device)
+        props = torch.zeros(
+            self.agent.board_height * self.agent.board_height + 1,
+            device=self.agent.device,
+        )
         for c in root.children:
             props[c.action] = c.visit_cnt
         props /= props.sum()
@@ -310,7 +321,7 @@ class MCTS:
 
 
 async def main():
-    server = GameServerGo()
+    server = GameServerGo(5)
     await server.wait()
     print("GameServer ready and client connected")
 

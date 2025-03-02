@@ -31,7 +31,7 @@ def rotate_and_beatify(state: list[str], delim: str = "<br>") -> str:
 
 class Go:
     def __init__(self, board_width: int, state: np.ndarray):
-        assert state.shape == (5, 5), f"Array must be 5x5: {state}"
+        assert state.shape == (board_width, board_width), f"Array must be 5x5: {state}"
         assert np.all(
             np.isin(state, [0, 1, 2, 3])
         ), f"Array must only contain values 0, 1, 2 or 3: {state}"
@@ -80,7 +80,7 @@ class Go:
           'O' -> 2 (white)
           '#' -> 3 (disabled)
         """
-        transformed = np.zeros([5, 5], dtype=np.int8)
+        transformed = np.zeros([self.board_width, self.board_width], dtype=np.int8)
         for i, row_str in enumerate(state):
             for j, char in enumerate(row_str):
                 if char == ".":
