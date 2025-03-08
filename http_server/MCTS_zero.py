@@ -15,7 +15,6 @@ from TreePlotter import TreePlot
 
 
 # returns score based on current node
-# maybe should be based on root node (current player/who initiated the search)
 def get_score(server: GameServerGo, node: "Node"):
     score = server.get_score()
     score_white = score["white"]["sum"]
@@ -144,7 +143,7 @@ class Node:
     def next(self) -> "Node":
         best: tuple[Node | None, float] = (None, -999999999)
         for c in self.children:
-            score = get_ucb_value(c, self.visit_cnt, c_puct=2.0)
+            score = get_ucb_value(c, self.visit_cnt, c_puct=1.5)
             if score > best[1]:
                 best = (c, score)
 
@@ -267,12 +266,12 @@ class MCTS:
 
                 # Apply dirichlet noise
                 if node.parent is None:
-                    alpha = 0.3
+                    alpha = 0.15
                     dir_noise = np.random.dirichlet([alpha] * len(policy))
                     dir_noise_tensor = torch.tensor(
                         dir_noise, device=policy.device, dtype=policy.dtype
                     )
-                    epsilon = 0.3  # noise weight
+                    epsilon = 0.15  # noise weight
                     policy = (1 - epsilon) * policy + epsilon * dir_noise_tensor
 
                     # Renormalize
@@ -327,14 +326,14 @@ async def main():
 
     plotter = Plotter()
     agent = AlphaZeroAgent(5, plotter)
-    agent.load_checkpoint("checkpoint_56.pth")
+    # agent.load_checkpoint("checkpoint_69.pth")
     mcts = MCTS(server, plotter, agent, search_iterations=1000)
 
-    NUM_EPISODES = 100
+    NUM_EPISODES = 1000
 
     for iter in range(NUM_EPISODES):
-        state = await server.reset_game("No AI")
-        server.go = Go(5, state)
+        state, komi = await server.reset_game("No AI")
+        server.go = Go(5, state, komi)
 
         buffer = []
         is_white = False
@@ -385,19 +384,34 @@ async def main():
             z = outcome if not was_white else -outcome
 
             # add bonus for territory + pieces, without komi
-            white_territory = scores["white"]["territory"] + scores["white"]["pieces"]
-            black_territory = scores["black"]["territory"] + scores["black"]["pieces"]
+            white_territory = (
+                scores["white"]["territory"] * 1.2 + scores["white"]["pieces"] * 0.8
+            )
+            black_territory = (
+                scores["black"]["territory"] * 1.2 + scores["black"]["pieces"] * 0.8
+            )
 
-            territory_bonus = (black_territory - white_territory) / (mcts.agent.board_width * mcts.agent.board_width) * 1.5
+            territory_bonus = (
+                (black_territory - white_territory)
+                / (mcts.agent.board_width * mcts.agent.board_width)
+                * 0.5
+            )
 
             z += territory_bonus if not was_white else -territory_bonus
 
-            # move_count_bonus = min(len(game_history) / 15.0, 0.5)  # Cap at 0.5
-            # z += move_count_bonus if not was_white else -move_count_bonus
+            mcts.agent.augment_state(state, pi, z, history, was_white)
+            # mcts.agent.train_buffer.push(state, pi, z, history, was_white)
 
-            mcts.agent.train_buffer.push(state, pi, z, history, was_white)
+        game_length = len(game_history)
+        min_train_steps = 10  # Minimum number of training steps
+        max_train_steps = 40  # Maximum number of training steps
 
-        for _ in range(40):
+        # Calculate training steps - scales with game length
+        train_steps = min(
+            max_train_steps, max(min_train_steps, int(game_length * 0.75))
+        )
+        print(f"Game length: {game_length}, performing {train_steps} training steps")
+        for _ in range(train_steps):
             mcts.agent.train_step()
         mcts.agent.save_checkpoint(f"checkpoint_{iter}.pth")
 
@@ -408,7 +422,7 @@ async def main_eval():
     print("GameServer ready and client connected")
 
     plotter = Plotter()
-    agent = AlphaZeroAgent(5, plotter)
+    agent = AlphaZeroAgent(5, plotter, batch_size=128)
     agent.load_checkpoint("checkpoint_56.pth")
     mcts = MCTS(server, plotter, agent, search_iterations=1000)
 
@@ -445,4 +459,4 @@ async def main_eval():
 if __name__ == "__main__":
     import asyncio
 
-    asyncio.run(main_eval())
+    asyncio.run(main())
