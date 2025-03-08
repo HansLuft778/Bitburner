@@ -155,7 +155,8 @@ export async function waitForIncomingRequests(ns: NS) {
             else opponent = "The Black Hand";
 
             const board = ns.go.resetBoardState(opponent, 5);
-            socket.send(JSON.stringify({ board: board }));
+            const state = ns.go.getGameState()
+            socket.send(JSON.stringify({ board: board, komi: state.komi }));
         } else if (requestData.command == "get_history") {
             const history = ns.go.getMoveHistory();
             socket.send(JSON.stringify({ history: history }));

@@ -1,6 +1,5 @@
-import igraph  # type: ignore
 import plotly.graph_objects as go  # type: ignore
-from igraph import EdgeSeq, Graph
+from igraph import EdgeSeq, Graph  # type: ignore
 
 # from MCTS_zero import Node
 
@@ -61,7 +60,7 @@ class TreePlot:
         for i, pos in enumerate(lay):
             Xn.append(pos[0])
             Yn.append(pos[1])
-            
+
         for e in G.es:
             Xe += [lay[e.source][0], lay[e.target][0], None]
             Ye += [lay[e.source][1], lay[e.target][1], None]

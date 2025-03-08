@@ -435,7 +435,7 @@ class DQNAgentCNN:
         """
         Gradually reduce epsilon for less random exploration over time.
         """
-        self.plotter.update_epsilon(self.epsilon)
+        self.plotter.update_policy_loss(self.epsilon)
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 

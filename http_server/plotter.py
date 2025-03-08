@@ -8,6 +8,8 @@ class Plotter:
         self.cumulative_reward_black = []
         self.cumulative_reward_white = []  # Add white player data
         self.loss = []
+        self.value_loss = []
+        self.policy_loss = []
         self.epsilon = []
         self.winrate = deque(maxlen=100)
         self.winrate_data = []
@@ -25,8 +27,8 @@ class Plotter:
             self.cumulative_reward_white, label="White"
         )
         self.ax1.set_xlabel("Updates")
-        self.ax1.set_ylabel("Cumulative Reward")
-        self.ax1.set_title("Cumulative Reward Over Time")
+        self.ax1.set_ylabel("Cumulative Wins")
+        self.ax1.set_title("Cumulative Wins Over Time")
         self.ax1.legend()
 
         # Loss subplot
@@ -35,18 +37,17 @@ class Plotter:
         self.ax2.set_ylabel("Loss")
         self.ax2.set_title("Training Loss Over Time")
 
-        # epsilon subplot
-        (self.epsilon_line,) = self.ax3.plot(self.epsilon)
-        self.ax3.set_xlabel("Episodes")
-        self.ax3.set_ylabel("Epsilon")
-        self.ax3.set_title("Expsilon Over Time")
+        # policy loss subplot
+        (self.policy_loss_line,) = self.ax3.plot(self.policy_loss)
+        self.ax3.set_xlabel("policy loss")
+        self.ax3.set_ylabel("policy loss")
+        self.ax3.set_title("policy loss Over Time")
 
-        # Winrate subplot
-        (self.winrate_line,) = self.ax4.plot(self.winrate_data)
-        self.ax4.set_xlabel("Episodes")
-        self.ax4.set_ylabel("Win Rate")
-        self.ax4.set_title("Win Rate Over Time")
-        self.ax4.set_ylim([0, 1])
+        # value loss subplot
+        (self.value_loss_line,) = self.ax4.plot(self.value_loss)
+        self.ax4.set_xlabel("Value Loss")
+        self.ax4.set_ylabel("Value Loss")
+        self.ax4.set_title("Value Loss Over Time")
 
         plt.tight_layout()
 
@@ -103,24 +104,24 @@ class Plotter:
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
 
-    def update_epsilon(self, new_eplsilon: float):
-        self.epsilon.append(new_eplsilon)
-        self.epsilon = self.downsample_data(self.epsilon)
+    def update_policy_loss(self, new_policy_loss: float):
+        self.policy_loss.append(new_policy_loss)
+        # self.epsilon = self.downsample_data(self.epsilon)
 
-        self.epsilon_line.set_ydata(self.epsilon)
-        self.epsilon_line.set_xdata(range(len(self.epsilon)))
+        self.policy_loss_line.set_ydata(self.policy_loss)
+        self.policy_loss_line.set_xdata(range(len(self.policy_loss)))
         self.ax3.relim()
         self.ax3.autoscale_view()
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
 
-    def update_winrate(self, new_winrate: int):
-        self.winrate.append(new_winrate)
-        self.winrate_data.append(sum(self.winrate) / len(self.winrate))
-        self.winrate_data = self.downsample_data(self.winrate_data)
+    def update_value_loss(self, new_value_loss: float):
+        self.value_loss.append(new_value_loss)
+        # self.winrate_data.append(sum(self.winrate) / len(self.winrate))
+        # self.winrate_data = self.downsample_data(self.winrate_data)
 
-        self.winrate_line.set_ydata(self.winrate_data)
-        self.winrate_line.set_xdata(range(len(self.winrate_data)))
+        self.value_loss_line.set_ydata(self.value_loss)
+        self.value_loss_line.set_xdata(range(len(self.value_loss)))
         self.ax4.relim()
         self.ax4.autoscale_view()
         self.fig.canvas.draw()

@@ -13,7 +13,7 @@ class GameServerGo:
         self.message_queue: asyncio.Queue[str] = asyncio.Queue()
         self.server = None  # Reference to the server task
 
-        self.go = Go(board_size, np.zeros((board_size, board_size), dtype=np.int8))
+        self.go = Go(board_size, np.zeros((board_size, board_size), dtype=np.int8), 0)
 
     async def handle_client(self, websocket):
         self.websocket = websocket
@@ -34,15 +34,18 @@ class GameServerGo:
             print(f"Error waiting for response: {e}")
             return None
 
-    async def reset_game(self, opponent: str) -> np.ndarray:
+    async def reset_game(self, opponent: str) -> tuple[np.ndarray, float]:
         res = await self.send_request({"command": "reset_game", "opponent": opponent})
         enc_s = self.go.encode_state(res["board"])
-        return enc_s
+        return enc_s, res["komi"]
 
     def request_valid_moves(
         self, is_white: bool, state: np.ndarray, history: list[np.ndarray] = []
     ) -> np.ndarray:
-        assert state.shape == (self.go.board_height, self.go.board_height), f"Array must be 5x5: {state}"
+        assert state.shape == (
+            self.go.board_height,
+            self.go.board_height,
+        ), f"Array must be 5x5: {state}"
         assert np.all(
             np.isin(state, [0, 1, 2, 3])
         ), f"Array must only contain values 0, 1, 2, or 3: {state}"
@@ -99,19 +102,16 @@ class GameServerGo:
         print(res)
 
         next_state = res["board"]
-        reward = res.get("outcome", 0.0)
+        outcome = res["outcome"]
         done = res["done"]
-        opponent_x = res.get("x", -1)
-        opponent_y = res.get("y", -1)
-        move_type = res.get("opponent_move_type", "")
 
         enc_state = self.go.encode_state(next_state)
         self.go.state = enc_state
 
         self.go.history.append(self.go.state)
 
-        print(f"state: {enc_state} reward: {reward} done: {done} x: {opponent_x} y: {opponent_y} type: {move_type}")
-        return enc_state, reward, done
+        print(f"state: {enc_state} reward: {outcome} done: {done}")
+        return enc_state, outcome, done
 
     def get_game_history(self) -> list[np.ndarray]:
         history = self.go.get_history()

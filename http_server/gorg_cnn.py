@@ -104,9 +104,9 @@ class GameServer:
                 # 3. Execute in environment
                 next_board, reward, done = await self.make_move(action_decoded)
                 if done and reward > 0:
-                    self.plotter.update_winrate(1)
+                    self.plotter.update_value_loss(1)
                 elif done and reward < 0:
-                    self.plotter.update_winrate(0)
+                    self.plotter.update_value_loss(0)
 
                 self.plotter.update_wins_black(reward)
 

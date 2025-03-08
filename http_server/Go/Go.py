@@ -30,7 +30,7 @@ def rotate_and_beatify(state: list[str], delim: str = "<br>") -> str:
 
 
 class Go:
-    def __init__(self, board_width: int, state: np.ndarray):
+    def __init__(self, board_width: int, state: np.ndarray, komi: float):
         assert state.shape == (board_width, board_width), f"Array must be 5x5: {state}"
         assert np.all(
             np.isin(state, [0, 1, 2, 3])
@@ -41,6 +41,7 @@ class Go:
         self.board_size = self.board_width * self.board_height
         self.history: list[np.ndarray] = []
         self.previous_action = -1
+        self.komi = komi
 
         self.state: np.ndarray = state
         self.current_player = 1  # black starts
@@ -205,7 +206,7 @@ class Go:
 
         return white_territory, black_territory
 
-    def get_score(self, komi: float = 5.5) -> dict:
+    def get_score(self) -> dict:
         """
         Computes the score for white and black, including komi for white.
         - Each stone on the board counts as 1 point
@@ -218,14 +219,14 @@ class Go:
         # Get territory counts
         white_territory, black_territory = self.get_territory_scores()
 
-        white_sum = white_pieces + white_territory + komi
+        white_sum = white_pieces + white_territory + self.komi
         black_sum = black_pieces + black_territory
 
         return {
             "white": {
                 "pieces": white_pieces,
                 "territory": white_territory,
-                "komi": komi,
+                "komi": self.komi,
                 "sum": white_sum,
             },
             "black": {
@@ -428,7 +429,7 @@ if __name__ == "__main__":
         dtype=np.int8,
     )
 
-    go = Go(5, decoded_board)
+    go = Go(5, decoded_board, 5.5)
     go.state = np.array(
         [
             [3, 2, 2, 2, 2],
