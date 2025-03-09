@@ -180,6 +180,7 @@ class Node:
                 ), f"Array must only contain values 0, 1, 2, or 3: {next_state}"
             else:
                 next_state = self.state
+                next_uf = self.uf.copy()
 
             child = Node(
                 next_state,
