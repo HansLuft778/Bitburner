@@ -12,13 +12,14 @@ class UnionFind:
         rank: np.ndarray,
         stones: list[set[int]],
         liberties: list[set[int]],
+        board_size: int,
     ):
         self.parent = parent
         self.colors = colors
         self.rank = rank
         self.stones = stones
         self.liberties = liberties
-        self.board_height = 5
+        self.board_height = board_size
 
     def __eq__(self, value) -> bool:
         return (
@@ -107,7 +108,7 @@ class UnionFind:
         rank = np.full(width * width, -1, dtype=np.int8)
         stones: list[set[int]] = [set() for _ in range(width * width)]
         liberties: list[set[int]] = [set() for _ in range(width * width)]
-        uf = UnionFind(parent, colors, rank, stones, liberties)
+        uf = UnionFind(parent, colors, rank, stones, liberties, width)
 
         for x in range(width):
             for y in range(width):
@@ -150,7 +151,7 @@ class UnionFind:
                             enemy_group = uf.find(nidx)
                             uf.liberties[enemy_group].discard(idx)
 
-        return UnionFind(parent, colors, rank, stones, liberties)
+        return uf
 
     def copy(self):
         return UnionFind(
@@ -159,6 +160,7 @@ class UnionFind:
             self.rank.copy(),
             [s.copy() for s in self.stones],
             [s.copy() for s in self.liberties],
+            self.board_height,
         )
 
     def print(self):
@@ -217,7 +219,7 @@ class Go_uf:
         liberties: list[set[int]] = [
             set() for _ in range(self.board_width * self.board_width)
         ]
-        self.uf = UnionFind(parent, colors, rank, stones, liberties)
+        self.uf = UnionFind(parent, colors, rank, stones, liberties, self.board_width)
 
     def __str__(self):
         board = self.decode_state(self.state)
@@ -311,11 +313,16 @@ class Go_uf:
             provided_state, x, y, color, additional_history
         )
 
-        assert (
-            new_state is not None
-            and new_state_original is not None
-            and np.array_equal(new_state, new_state_original)
-        ), f"States must be equal"
+        if new_state is None:
+            assert (
+                new_state_original is None
+            ), f"States must be equal: {new_state_original}"
+        if new_state_original is None:
+            assert new_state is None, f"States must be equal: {new_state}"
+        if new_state is not None and new_state_original is not None:
+            assert np.array_equal(
+                new_state, new_state_original
+            ), f"States must be equal: {new_state} {new_state_original}"
         if new_state_original is not None:
             return new_state_original, new_uf
         else:
