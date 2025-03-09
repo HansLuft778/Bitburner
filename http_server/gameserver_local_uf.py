@@ -47,8 +47,8 @@ class GameServerGo:
         self,
         is_white: bool,
         state: np.ndarray,
+        uf: UnionFind,
         history: list[np.ndarray] = [],
-        uf = None
     ) -> np.ndarray:
         assert state.shape == (
             self.go.board_height,
@@ -58,21 +58,9 @@ class GameServerGo:
             np.isin(state, [0, 1, 2, 3])
         ), f"Array must only contain values 0, 1, 2, or 3: {state}"
 
-        if uf is None:
-            v = self.go.get_valid_moves(state, self.go.uf, is_white, history)
-        else:
-            v = self.go.get_valid_moves(state, uf, is_white, history)
-        # v = self.go.get_valid_moves(state, uf, is_white, history)
+        v = self.go.get_valid_moves(state, uf, is_white, history)
         return np.append(v, True)
     
-    def get_state_and_uf_after_move(
-        self, action: int, state: np.ndarray, is_white: bool, history=[], uf=None
-    ) -> tuple[np.ndarray, UnionFind]:
-        """Simulate a move and return resulting state and updated Union-Find structure"""
-        if uf is None:
-            return self.go.state_after_action(action, is_white, state, self.go.uf, history)
-        else:
-            return self.go.state_after_action(action, is_white, state, uf, history)
 
     async def make_move(
         self, action: tuple[int, int], action_idx: int, is_white: bool
