@@ -29,6 +29,12 @@ class UnionFind:
             and self.liberties == value.liberties
         )
 
+    def __str__(self):
+        parent_str = ", ".join(map(str, self.parent))
+        colors_str = ", ".join(map(str, self.colors))
+        rank_str = ", ".join(map(str, self.rank))
+        return f"parent: [{parent_str}],\ncolors: [{colors_str}],\nrank: [{rank_str}],\nstones: {self.stones},\nliberties: {self.liberties}"
+
     def find(self, i: int) -> int:
         """
         Find with path compression.
@@ -55,6 +61,8 @@ class UnionFind:
         assert (
             self.colors[root_a] == self.colors[root_b]
         ), f"Colors must be the same: {root_a} {root_b}"
+        assert root_a != root_b, f"Roots must be different: {root_a} {root_b}"
+        assert root_a != -1 and root_b != -1, f"Roots must be valid: {root_a} {root_b}"
 
         # Union by rank - attach smaller rank tree under root of higher rank tree
         if self.rank[root_a] > self.rank[root_b]:
@@ -64,17 +72,17 @@ class UnionFind:
             self.stones[root_b].clear()
             self.liberties[root_a].update(self.liberties[root_b])
             self.liberties[root_b].clear()
-            self.colors[root_a] = self.colors[root_b]  # probably not needed
+            self.rank[root_b] = -1
         else:
             self.parent[root_a] = root_b
             self.stones[root_b].update(self.stones[root_a])
             self.stones[root_a].clear()
             self.liberties[root_b].update(self.liberties[root_a])
             self.liberties[root_a].clear()
-            self.colors[root_b] = self.colors[root_a]  # probably not needed
             # Increment rank of root_b only if ranks were equal
             if self.rank[root_a] == self.rank[root_b]:
                 self.rank[root_b] += 1
+            self.rank[root_a] = -1
 
         new_root = self.find(a)
         self.liberties[new_root].clear()
@@ -88,6 +96,61 @@ class UnionFind:
                     if state[nx][ny] == 0:  # Empty = liberty
                         liberty_pos = nx * self.board_height + ny
                         self.liberties[new_root].add(liberty_pos)
+
+    @staticmethod
+    def get_uf_from_state(state: np.ndarray) -> "UnionFind":
+
+        width: int = state.shape[0]
+
+        parent = np.full(width * width, -1, dtype=np.int8)
+        colors = np.full(width * width, -1, dtype=np.int8)
+        rank = np.full(width * width, -1, dtype=np.int8)
+        stones: list[set[int]] = [set() for _ in range(width * width)]
+        liberties: list[set[int]] = [set() for _ in range(width * width)]
+        uf = UnionFind(parent, colors, rank, stones, liberties)
+
+        for x in range(width):
+            for y in range(width):
+                idx = x * width + y
+                if state[x][y] == 3:
+                    continue
+                if state[x][y] == 0:
+                    # check if the empty cell is a liberty
+                    for dx, dy in [(0, -1), (-1, 0)]:
+                        nx, ny = x + dx, y + dy
+                        if 0 <= nx < width and 0 <= ny < width:
+                            nidx = nx * width + ny
+                            if state[nx][ny] in (1, 2):
+                                n_root = uf.find(nidx)
+                                liberties[n_root].add(idx)
+                    continue
+
+                parent[idx] = idx
+                colors[idx] = state[x][y]
+                stones[idx] = set([idx])
+                liberties[idx] = set()
+                rank[idx] = 0
+
+                color = state[x][y]
+                enemy = 3 - color
+                idx_root = idx
+                for dx, dy in [(0, -1), (-1, 0)]:
+                    nx, ny = x + dx, y + dy
+                    if 0 <= nx < width and 0 <= ny < width:
+                        nidx = nx * width + ny
+                        # neighbor is empty
+                        if state[nx][ny] == 0:
+                            liberties[idx_root].add(nidx)
+                        # neighbor is same color
+                        elif colors[nidx] == color:
+                            uf.union(idx, nidx, state)
+                            idx_root = uf.find(idx)
+                        # neighbor is enemy
+                        elif uf.colors[nidx] == enemy:
+                            enemy_group = uf.find(nidx)
+                            uf.liberties[enemy_group].discard(idx)
+
+        return UnionFind(parent, colors, rank, stones, liberties)
 
     def copy(self):
         return UnionFind(
@@ -633,159 +696,7 @@ if __name__ == "__main__":
             [0, 0, 0, 0, 0],
         ]
     )
-    uf = UnionFind(
-        np.array(
-            [
-                -1,
-                -1,
-                6,
-                8,
-                8,
-                -1,
-                6,
-                6,
-                8,
-                -1,
-                -1,
-                11,
-                -1,
-                13,
-                14,
-                15,
-                -1,
-                -1,
-                18,
-                19,
-                -1,
-                -1,
-                -1,
-                -1,
-                19,
-            ]
-        ),
-        np.array(
-            [
-                -1,
-                -1,
-                1,
-                2,
-                2,
-                -1,
-                1,
-                1,
-                2,
-                -1,
-                -1,
-                2,
-                -1,
-                1,
-                2,
-                1,
-                -1,
-                -1,
-                2,
-                1,
-                -1,
-                -1,
-                -1,
-                -1,
-                1,
-            ]
-        ),
-        np.array(
-            [
-                -1,
-                -1,
-                0,
-                0,
-                0,
-                -1,
-                1,
-                0,
-                1,
-                -1,
-                -1,
-                0,
-                -1,
-                0,
-                0,
-                0,
-                -1,
-                -1,
-                0,
-                1,
-                -1,
-                -1,
-                -1,
-                -1,
-                0,
-            ]
-        ),
-        [
-            set(),
-            set(),
-            set(),
-            set(),
-            set(),
-            set(),
-            {2, 6, 7},
-            set(),
-            {8, 3, 4},
-            set(),
-            set(),
-            {11},
-            set(),
-            {13},
-            {14},
-            {15},
-            set(),
-            set(),
-            {18},
-            {24, 19},
-            set(),
-            set(),
-            set(),
-            set(),
-            set(),
-        ],
-        [
-            set(),
-            set(),
-            set(),
-            set(),
-            set(),
-            set(),
-            {1, 12, 5},
-            set(),
-            {9},
-            set(),
-            set(),
-            {16, 10, 12},
-            set(),
-            {12},
-            {9},
-            {16, 10, 20},
-            set(),
-            set(),
-            {17, 23},
-            {23},
-            set(),
-            set(),
-            set(),
-            set(),
-            set(),
-        ],
-    )
+    uf = UnionFind.get_uf_from_state(decoded_board)
+    print(uf)
 
-    go = Go_uf(5, decoded_board, 5.5)
-    go.state = decoded_board
-    go.uf = uf
-
-    r3 = go.simulate_move(
-        decoded_board,
-        uf,
-        24,
-        2,
-    )
-    print(r3[0])
-    r3[1].print()
+    # go = Go_uf(5, decoded_board, 5.5)
