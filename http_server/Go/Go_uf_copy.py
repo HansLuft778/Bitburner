@@ -578,6 +578,9 @@ class Go_uf:
                                     if uf_before.colors[snidx] == color:
                                         neighbor_root = uf_before.find(snidx)
                                         uf_before.liberties[neighbor_root].add(stone)
+                                        
+        is_consitent = self.verify_uf_consistency(sim_state, uf_before)
+        assert is_consitent, f"UF is not consistent with the board state"
 
         # check if placed stone has liberties
         if len(uf_before.liberties[action_root]) == 0:
@@ -591,6 +594,19 @@ class Go_uf:
             return None, uf_before
 
         return sim_state, uf_before
+
+    def verify_uf_consistency(self, state: np.ndarray, uf: UnionFind) -> bool:
+        """Verify that the UnionFind structure is consistent with the board state"""
+        for x in range(self.board_width):
+            for y in range(self.board_height):
+                idx = self.encode_action(x, y)
+                if state[x][y] in [1, 2]:  # Stone exists
+                    if uf.colors[idx] != state[x][y]:
+                        return False
+                else:  # Empty or disabled
+                    if uf.colors[idx] != -1:
+                        return False
+        return True
 
     def check_state_is_repeat(
         self, state: np.ndarray, additional_history: list[np.ndarray] = []
