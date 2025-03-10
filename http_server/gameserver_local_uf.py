@@ -1,11 +1,12 @@
 import asyncio
 import json
+from typing import Any
+
 import numpy as np
 import websockets
 
 # from Go.Go import Go
 from Go.Go_uf_copy import Go_uf, UnionFind
-from typing import Any
 
 State = np.ndarray[Any, np.dtype[np.int8]]
 

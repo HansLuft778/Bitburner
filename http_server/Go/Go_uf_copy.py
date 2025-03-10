@@ -1,8 +1,8 @@
-import time # pyright: ignore
+import time  # pyright: ignore
 from collections import deque
+from typing import Any, cast
 
 import numpy as np
-from typing import Any, cast
 
 State = np.ndarray[Any, np.dtype[np.int8]]
 
