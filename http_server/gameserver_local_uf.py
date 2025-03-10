@@ -5,12 +5,14 @@ import websockets
 
 # from Go.Go import Go
 from Go.Go_uf_copy import Go_uf, UnionFind
+from typing import Any
+
+State = np.ndarray[Any, np.dtype[np.int8]]
 
 
 class GameServerGo:
     def __init__(self, board_size: int) -> None:
         self.client_connected = asyncio.Event()
-        self.websocket = None
         self.recv_lock = asyncio.Lock()
         self.message_queue: asyncio.Queue[str] = asyncio.Queue()
         self.server = None  # Reference to the server task
@@ -18,14 +20,13 @@ class GameServerGo:
         self.go = Go_uf(
             board_size, np.zeros((board_size, board_size), dtype=np.int8), 0
         )
-
-    async def handle_client(self, websocket):
+    async def handle_client(self, websocket: Any):
         self.websocket = websocket
         self.client_connected.set()
         async for message in websocket:
             await self.message_queue.put(message)
 
-    async def send_request(self, command):
+    async def send_request(self, command: dict[str, Any]) -> dict[str, Any]:
         try:
             await self.websocket.send(json.dumps(command))
             async with self.recv_lock:
@@ -33,12 +34,12 @@ class GameServerGo:
             return json.loads(response)
         except asyncio.TimeoutError:
             print("Request timed out")
-            return None
+            raise TimeoutError
         except Exception as e:
             print(f"Error waiting for response: {e}")
-            return None
+            raise e
 
-    async def reset_game(self, opponent: str) -> tuple[np.ndarray, float]:
+    async def reset_game(self, opponent: str) -> tuple[State, float]:
         res = await self.send_request({"command": "reset_game", "opponent": opponent})
         enc_s = self.go.encode_state(res["board"])
         return enc_s, res["komi"]
@@ -46,10 +47,10 @@ class GameServerGo:
     def request_valid_moves(
         self,
         is_white: bool,
-        state: np.ndarray,
+        state: State,
         uf: UnionFind,
-        history: list[np.ndarray] = [],
-    ) -> np.ndarray:
+        history: list[State] = [],
+    ) -> np.ndarray[Any, np.dtype[np.bool_]]:
         assert state.shape == (
             self.go.board_height,
             self.go.board_height,
@@ -64,7 +65,7 @@ class GameServerGo:
 
     async def make_move(
         self, action: tuple[int, int], action_idx: int, is_white: bool
-    ) -> tuple[np.ndarray, float, bool]:
+    ) -> tuple[State, int, bool]:
         # make move in bitburner
         if action == (-1, -1):  # pass
             res = await self.send_request(
@@ -80,7 +81,7 @@ class GameServerGo:
         s, r, d = self.go.make_move(action_idx, is_white)
         print(res)
         next_state = res.get("board", [])
-        reward = res.get("outcome", 0.0)
+        reward = res.get("outcome", 0)
         done = res.get("done", False)
 
         # DEBUGGING ONLY: check both are equal
@@ -94,7 +95,7 @@ class GameServerGo:
 
     async def make_move_eval(
         self, action: tuple[int, int], action_idx: int, is_white: bool
-    ) -> tuple[np.ndarray, float, bool]:
+    ) -> tuple[State, float, bool]:
         # make move in bitburner
         if action == (-1, -1):  # pass
             res = await self.send_request(
@@ -122,18 +123,18 @@ class GameServerGo:
         print(f"state: {enc_state} reward: {outcome} done: {done}")
         return enc_state, outcome, done
 
-    def get_game_history(self) -> list[np.ndarray]:
+    def get_game_history(self) -> list[State]:
         history = self.go.get_history()
         return history
 
     def get_state_after_move(
         self,
         action: int,
-        state: np.ndarray,
+        state: State,
         is_white: bool,
         uf: UnionFind,
-        additional_history: list[np.ndarray] = [],
-    ) -> tuple[np.ndarray, UnionFind]:
+        additional_history: list[State] = [],
+    ) -> tuple[State, UnionFind]:
         res = self.go.state_after_action(
             action, is_white, state, uf, additional_history
         )
@@ -146,8 +147,8 @@ class GameServerGo:
         ), f"Array must only contain values 0, 1, 2, or 3: {res[0]}"
         return res
 
-    def get_score(self):
-        scores = self.go.get_score()
+    def get_score(self) -> dict[str, dict[str, float]]:
+        scores = self.go.get_score(self.go.komi)
         return scores
 
     async def get_state(self) -> list[str]:

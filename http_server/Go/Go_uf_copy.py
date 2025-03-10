@@ -1,15 +1,18 @@
-import time
+import time # pyright: ignore
 from collections import deque
 
 import numpy as np
+from typing import Any, cast
+
+State = np.ndarray[Any, np.dtype[np.int8]]
 
 
 class UnionFind:
     def __init__(
         self,
-        parent: np.ndarray,
-        colors: np.ndarray,
-        rank: np.ndarray,
+        parent: np.ndarray[Any, np.dtype[np.int8]],
+        colors: np.ndarray[Any, np.dtype[np.int8]],
+        rank: np.ndarray[Any, np.dtype[np.int8]],
         stones: list[set[int]],
         liberties: list[set[int]],
         board_size: int,
@@ -21,13 +24,15 @@ class UnionFind:
         self.liberties = liberties
         self.board_height = board_size
 
-    def __eq__(self, value) -> bool:
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, UnionFind):
+            return NotImplemented
         return (
-            (self.parent == value.parent).all()
-            and (self.colors == value.colors).all()
-            and (self.rank == value.rank).all()
-            and self.stones == value.stones
-            and self.liberties == value.liberties
+            (self.parent == other.parent).all()
+            and (self.colors == other.colors).all()
+            and (self.rank == other.rank).all()
+            and self.stones == other.stones
+            and self.liberties == other.liberties
         )
 
     def __str__(self):
@@ -49,7 +54,7 @@ class UnionFind:
     # Remove or comment out the old union() method
 
     # Rename union_2 to union and use it as the primary implementation
-    def union(self, a: int, b: int, state: np.ndarray) -> None:
+    def union(self, a: int, b: int, state: State) -> None:
         """
         Unites two groups of stones together using union by rank.
         Rank represents the upper bound of the height of the tree.
@@ -99,7 +104,7 @@ class UnionFind:
                         self.liberties[new_root].add(liberty_pos)
 
     @staticmethod
-    def get_uf_from_state(state: np.ndarray) -> "UnionFind":
+    def get_uf_from_state(state: State) -> "UnionFind":
 
         width: int = state.shape[0]
 
@@ -167,8 +172,10 @@ class UnionFind:
         print("parent: ", ", ".join(map(str, self.parent)))
         print("colors: ", ", ".join(map(str, self.colors)))
         print("rank: ", ", ".join(map(str, self.rank)))
-        print("stones: ", [s if s else set() for s in self.stones])
-        print("liberties: ", [l if l else set() for l in self.liberties])
+        print("stones: ", [s if s else cast(set[int], set()) for s in self.stones])
+        print(
+            "liberties: ", [l if l else cast(set[int], set()) for l in self.liberties]
+        )
 
 
 def rotate_state(state: list[str]) -> list[str]:
@@ -184,7 +191,7 @@ def rotate_state(state: list[str]) -> list[str]:
     return rotated_state
 
 
-def beatify_state(state: list[str], delim="<br>") -> str:
+def beatify_state(state: list[str], delim: str = "<br>") -> str:
     beautified_state: str = ""
     for i in range(len(state)):
         for j in range(len(state)):
@@ -198,16 +205,17 @@ def rotate_and_beatify(state: list[str], delim: str = "<br>") -> str:
 
 
 class Go_uf:
-    def __init__(self, board_width: int, state: np.ndarray, komi: float):
+    def __init__(self, board_width: int, state: State, komi: float):
 
         self.board_width = board_width
         self.board_height = board_width
         self.board_size = self.board_width * self.board_height
-        self.history: list[np.ndarray] = []
+        self.history: list[State] = []
         self.previous_action = -1
 
-        self.state: np.ndarray = state
+        self.state: State = state
         self.current_player = 1  # black starts
+        self.komi = komi
 
         # union find data structure
         parent = np.full(self.board_width * self.board_height, -1, dtype=np.int8)
@@ -268,7 +276,7 @@ class Go_uf:
                     transformed[i][j] = 3
         return transformed
 
-    def decode_state(self, state: np.ndarray) -> list[str]:
+    def decode_state(self, state: State) -> list[str]:
         """
         Converts a numpy board array (with 0/1/2/3) back into the string-based representation.
         """
@@ -292,10 +300,10 @@ class Go_uf:
         self,
         action: int,
         is_white: bool,
-        provided_state: np.ndarray,
+        provided_state: State,
         uf: UnionFind,
-        additional_history: list[np.ndarray] = [],
-    ) -> tuple[np.ndarray, UnionFind]:
+        additional_history: list[State] = [],
+    ) -> tuple[State, UnionFind]:
         if action == self.board_size:  # Pass move
             return provided_state, uf
 
@@ -329,7 +337,7 @@ class Go_uf:
             return np.array([]), uf
 
     def flood_fill_territory(
-        self, x: int, y: int, visited: set
+        self, x: int, y: int, visited: set[tuple[int, int]]
     ) -> tuple[int | None, set[tuple[int, int]]]:
         """
         A helper for territory detection, territory is how many empty nodes a color surrounds:
@@ -345,8 +353,8 @@ class Go_uf:
 
         queue: deque[tuple[int, int]] = deque()
         queue.append((x, y))
-        territory = set()
-        adjacent_colors = set()
+        territory: set[tuple[int, int]] = set()
+        adjacent_colors: set[int] = set()
 
         while queue:
             cx, cy = queue.popleft()
@@ -399,7 +407,7 @@ class Go_uf:
 
         return white_territory, black_territory
 
-    def get_score(self, komi: float = 5.5) -> dict:
+    def get_score(self, komi: float) -> dict[str, dict[str, float]]:
         """
         Computes the score for white and black, including komi for white.
         - Each stone on the board counts as 1 point
@@ -431,7 +439,7 @@ class Go_uf:
         }
 
     def get_liberties(
-        self, state: np.ndarray, x: int, y: int, visited: set[tuple[int, int]]
+        self, state: State, x: int, y: int, visited: set[tuple[int, int]]
     ):
         """
         Returns a set of all liberties the color at (x, y) has and the territory
@@ -470,12 +478,12 @@ class Go_uf:
 
     def simulate_move_original(
         self,
-        state: np.ndarray,
+        state: State,
         x: int,
         y: int,
         color: int,
-        additional_history: list[np.ndarray] = [],
-    ) -> np.ndarray | None:
+        additional_history: list[State] = [],
+    ) -> State | None:
         if state[x][y] != 0:
             return None
 
@@ -511,13 +519,13 @@ class Go_uf:
 
     def simulate_move(
         self,
-        state: np.ndarray,
+        state: State,
         uf: UnionFind,
         action: int,
         color: int,
         # i_know_its_legal: bool,
-        additional_history: list[np.ndarray] = [],
-    ) -> tuple[np.ndarray | None, UnionFind]:
+        additional_history: list[State] = [],
+    ) -> tuple[State | None, UnionFind]:
         x, y = self.decode_action(action)
         if state[x][y] != 0:
             return None, uf
@@ -585,7 +593,7 @@ class Go_uf:
                                     if uf_before.colors[snidx] == color:
                                         neighbor_root = uf_before.find(snidx)
                                         uf_before.liberties[neighbor_root].add(stone)
-                                        
+
         is_consitent = self.verify_uf_consistency(sim_state, uf_before)
         assert is_consitent, f"UF is not consistent with the board state"
 
@@ -602,7 +610,7 @@ class Go_uf:
 
         return sim_state, uf_before
 
-    def verify_uf_consistency(self, state: np.ndarray, uf: UnionFind) -> bool:
+    def verify_uf_consistency(self, state: State, uf: UnionFind) -> bool:
         """Verify that the UnionFind structure is consistent with the board state"""
         for x in range(self.board_width):
             for y in range(self.board_height):
@@ -616,7 +624,7 @@ class Go_uf:
         return True
 
     def check_state_is_repeat(
-        self, state: np.ndarray, additional_history: list[np.ndarray] = []
+        self, state: State, additional_history: list[State] = []
     ) -> bool:
         state_bytes = state.tobytes()
         history_bytes = [e.tobytes() for e in self.history]
@@ -624,7 +632,7 @@ class Go_uf:
 
         return state_bytes in history_bytes or state_bytes in additional_bytes
 
-    def make_move(self, action: int, is_white: bool) -> tuple[np.ndarray, float, bool]:
+    def make_move(self, action: int, is_white: bool) -> tuple[State, int, bool]:
         state_after_move, uf_after_move = self.state_after_action(
             action, is_white, self.state, self.uf
         )
@@ -641,7 +649,7 @@ class Go_uf:
         # outcome is 1 black won, -1 white won, 0 not ended
         outcome = 0
         if game_ended:
-            score = self.get_score()
+            score = self.get_score(self.komi)
             print(f"score: {score}")
             outcome = 1 if score["black"]["sum"] > score["white"]["sum"] else -1
 
@@ -649,18 +657,20 @@ class Go_uf:
 
     def get_valid_moves(
         self,
-        state: np.ndarray,
+        state: State,
         uf: UnionFind,
         is_white: bool,
-        history=[],
-    ) -> np.ndarray:
+        history: list[State] = [],
+    ) -> np.ndarray[Any, np.dtype[np.bool_]]:
         player = 2 if is_white else 1
 
-        legal_moves: np.ndarray = np.zeros_like(state, dtype=bool)
+        legal_moves: np.ndarray[Any, np.dtype[np.bool_]] = np.zeros_like(
+            state, dtype=bool
+        )
         empty_mask = state == 0
         empty_positions = np.where(empty_mask)
         for x, y in zip(empty_positions[0], empty_positions[1]):
-            action = self.encode_action(x, y)
+            action = self.encode_action(int(x), int(y))
             new = self.simulate_move(
                 state,
                 uf,
@@ -668,7 +678,7 @@ class Go_uf:
                 player,
                 history,
             )[0]
-            old = self.simulate_move_original(state, x, y, player, history)
+            old = self.simulate_move_original(state, int(x), int(y), player, history)
             if new is not None and old is not None:
                 assert np.array_equal(new, old), f"States must be equal"
             else:
@@ -682,9 +692,9 @@ class Go_uf:
         self,
         action: int,
         is_white: bool,
-        state: np.ndarray,
+        state: State,
         uf: UnionFind,
-        additional_history: list[np.ndarray] = [],
+        additional_history: list[State] = [],
     ) -> bool:
         # double pass
         if self.previous_action == action == self.board_width * self.board_height:
@@ -705,7 +715,7 @@ class Go_uf:
 
         return False
 
-    def get_history(self) -> list[np.ndarray]:
+    def get_history(self) -> list[State]:
         return self.history
 
 

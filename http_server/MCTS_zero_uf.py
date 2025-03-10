@@ -1,23 +1,24 @@
 import math
 import time
 from collections import defaultdict
-from typing import Union
+from typing import Any, Union
 
 import numpy as np
 import torch
-import torch.nn.functional as F
 
 from agent_cnn_zero import AlphaZeroAgent
 from gameserver_local_uf import GameServerGo
 from Go.Go_uf_copy import Go_uf, UnionFind
 from plotter import Plotter
-from TreePlotter import TreePlot
+from TreePlotter import TreePlot  # pyright: ignore
+
+State = np.ndarray[Any, np.dtype[np.int8]]
 
 
 # returns score based on current node
 # maybe should be based on root node (current player/who initiated the search)
-def get_score(server: GameServerGo, node: "Node"):
-    score = server.get_score()
+def get_score(server: GameServerGo, node: "Node") -> float:
+    score: dict[str, dict[str, float]] = server.get_score()
     score_white = score["white"]["sum"]
     score_black = score["black"]["sum"]
     diff = score_white - score_black
@@ -29,7 +30,7 @@ def get_score(server: GameServerGo, node: "Node"):
     return normalized if node.is_white else -normalized
 
 
-def has_game_ended(server: GameServerGo, node: "Node") -> tuple[bool, int]:
+def has_game_ended(server: GameServerGo, node: "Node") -> tuple[bool, float]:
     # both pass back-to-back
     if (
         node.action
@@ -60,7 +61,7 @@ def has_game_ended(server: GameServerGo, node: "Node") -> tuple[bool, int]:
     return (False, 0)
 
 
-def get_ucb_value(child: "Node", parent_visit_count: int, c_puct=2.0) -> float:
+def get_ucb_value(child: "Node", parent_visit_count: int, c_puct: float=2.0) -> float:
     """
     child.win_sum is from the parent's perspective.
       Q(s,a) = child.win_sum/child.visit_cnt
@@ -82,7 +83,7 @@ def get_ucb_value(child: "Node", parent_visit_count: int, c_puct=2.0) -> float:
 class Node:
     def __init__(
         self,
-        state: np.ndarray,
+        state: State,
         uf: UnionFind,
         server: GameServerGo,
         is_white: bool,
@@ -108,7 +109,7 @@ class Node:
         self.is_white = is_white
         self.agent = agent
         self.selected_policy = selected_policy
-        self.valid_moves: np.ndarray | None = None
+        self.valid_moves: np.ndarray[Any, np.dtype[np.bool_]] | None = None
 
         self.children: list[Node] = []
 
@@ -119,7 +120,7 @@ class Node:
         # enough to check for childs > 0 since we expand to all possible states at once
         return len(self.children) > 0
 
-    def get_valid_moves(self) -> np.ndarray:
+    def get_valid_moves(self) -> np.ndarray[Any, np.dtype[np.bool_]]:
         if self.valid_moves is None:
             if self.parent is not None:
                 history = self.get_history()
@@ -132,8 +133,8 @@ class Node:
                 )
         return self.valid_moves
 
-    def get_history(self) -> list[np.ndarray]:
-        history = []
+    def get_history(self) -> list[np.ndarray[Any, np.dtype[np.int8]]]:
+        history: list[State] = []
         current = self
         while self:
             history.append(self.state)
@@ -219,8 +220,8 @@ class MCTS:
         self.timing_stats: defaultdict[str, float] = defaultdict(float)
         self.iterations_stats: defaultdict[str, int] = defaultdict(int)
 
-    @torch.no_grad()
-    def search(self, state: np.ndarray, uf: UnionFind, is_white: bool):
+    @torch.no_grad() # pyright: ignore
+    def search(self, state: State, uf: UnionFind, is_white: bool):
 
         # assert state.shape == (5, 5), f"Array must be 5x5: {state}"
         assert np.all(
@@ -233,7 +234,7 @@ class MCTS:
         self.iterations_stats.clear()
         search_start = time.time()
 
-        for iter in range(self.search_iterations):
+        for _ in range(self.search_iterations):
             node = root
             # selection
             select_start = time.time()
@@ -267,7 +268,8 @@ class MCTS:
                 self.iterations_stats["nn_inference"] += 1
 
                 policy_start = time.time()
-                logits[~valid_moves] = -1e9
+                valid_mask = torch.tensor(valid_moves, device=self.agent.device, dtype=torch.bool)
+                logits[~valid_mask] = -1e9
                 policy = torch.softmax(logits, dim=0)
 
                 # Apply dirichlet noise
@@ -325,7 +327,7 @@ class MCTS:
         return props
 
 
-async def main():
+async def main() -> None:
     server = GameServerGo(5)
     await server.wait()
     print("GameServer ready and client connected")
@@ -336,12 +338,12 @@ async def main():
     mcts = MCTS(server, plotter, agent, search_iterations=1000)
 
     NUM_EPISODES = 1000
-
+    outcome = 0
     for iter in range(NUM_EPISODES):
         state, komi = await server.reset_game("No AI")
         server.go = Go_uf(5, state, komi)
 
-        buffer = []
+        buffer: list[tuple[State, bool, torch.Tensor, list[State], dict[str, dict[str, Any]]]] = []
         is_white = False
         done = False
         game_history = [state]
@@ -352,7 +354,7 @@ async def main():
             after = time.time()
             print(f"TOOK: {after-before}s")
             print(pi_mcts)
-            best_move = torch.argmax(pi_mcts).item()
+            best_move = int(torch.argmax(pi_mcts).item())
             print(f"{best_move}, {pi_mcts[best_move]}")
             action = mcts.agent.decode_action(best_move)
             print(f"make move: {action}")
@@ -397,7 +399,7 @@ async def main():
                 scores["black"]["territory"] * 1.2 + scores["black"]["pieces"] * 0.8
             )
 
-            territory_bonus = (
+            territory_bonus = ( # pyright: ignore
                 (black_territory - white_territory)
                 / (mcts.agent.board_width * mcts.agent.board_width)
                 * 0.5
@@ -425,7 +427,7 @@ async def main():
 
 
 async def main_eval():
-    server = GameServerGo()
+    server = GameServerGo(5)
     await server.wait()
     print("GameServer ready and client connected")
 
@@ -435,18 +437,18 @@ async def main_eval():
     mcts = MCTS(server, plotter, agent, search_iterations=1000)
 
     NUM_EPISODES = 100
-
+    outcome = 0
     for _ in range(NUM_EPISODES):
-        state = await server.reset_game("Netburners")
-        server.go = Go_uf(5, state)
+        state, komi = await server.reset_game("Netburners")
+        server.go = Go_uf(5, state, komi)
 
         is_white = False
         done = False
         mcts.agent.policy_net.eval()
         while not done:
-            pi_mcts = mcts.search(state, is_white)
+            pi_mcts = mcts.search(state, server.go.uf, is_white)
             print(pi_mcts)
-            best_move = torch.argmax(pi_mcts).item()
+            best_move = int(torch.argmax(pi_mcts).item())
             print(f"{best_move}, {pi_mcts[best_move]}")
             action = mcts.agent.decode_action(best_move)
             print(f"make move: {action}")
