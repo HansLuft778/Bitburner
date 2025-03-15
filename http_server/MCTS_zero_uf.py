@@ -61,7 +61,7 @@ def has_game_ended(server: GameServerGo, node: "Node") -> tuple[bool, float]:
     return (False, 0)
 
 
-def get_ucb_value(child: "Node", parent_visit_count: int, c_puct: float=2.0) -> float:
+def get_ucb_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) -> float:
     """
     child.win_sum is from the parent's perspective.
       Q(s,a) = child.win_sum/child.visit_cnt
@@ -169,10 +169,12 @@ class Node:
             if not valid_moves[action]:
                 continue
             if action != self.agent.board_width * self.agent.board_width:
-                next_state, next_uf = self.server.get_state_after_move(
+                next_state_tmp, next_uf_tmp = self.server.get_state_after_move(
                     action, self.state, self.is_white, self.uf, self.get_history()
                 )
-                assert self.server.go.verify_uf_consistency(next_state, next_uf)
+                next_state = next_state_tmp.copy()
+                next_uf = next_uf_tmp.copy()
+                # assert self.server.go.verify_uf_consistency(next_state, next_uf)
                 assert next_state.shape == (
                     self.agent.board_width,
                     self.agent.board_width,
@@ -220,7 +222,7 @@ class MCTS:
         self.timing_stats: defaultdict[str, float] = defaultdict(float)
         self.iterations_stats: defaultdict[str, int] = defaultdict(int)
 
-    @torch.no_grad() # pyright: ignore
+    @torch.no_grad()  # pyright: ignore
     def search(self, state: State, uf: UnionFind, is_white: bool):
 
         # assert state.shape == (5, 5), f"Array must be 5x5: {state}"
@@ -234,7 +236,7 @@ class MCTS:
         self.iterations_stats.clear()
         search_start = time.time()
 
-        for _ in range(self.search_iterations):
+        for iter in range(self.search_iterations):
             node = root
             # selection
             select_start = time.time()
@@ -268,7 +270,9 @@ class MCTS:
                 self.iterations_stats["nn_inference"] += 1
 
                 policy_start = time.time()
-                valid_mask = torch.tensor(valid_moves, device=self.agent.device, dtype=torch.bool)
+                valid_mask = torch.tensor(
+                    valid_moves, device=self.agent.device, dtype=torch.bool
+                )
                 logits[~valid_mask] = -1e9
                 policy = torch.softmax(logits, dim=0)
 
@@ -343,7 +347,9 @@ async def main() -> None:
         state, komi = await server.reset_game("No AI")
         server.go = Go_uf(5, state, komi)
 
-        buffer: list[tuple[State, bool, torch.Tensor, list[State], dict[str, dict[str, Any]]]] = []
+        buffer: list[
+            tuple[State, bool, torch.Tensor, list[State], dict[str, dict[str, Any]]]
+        ] = []
         is_white = False
         done = False
         game_history = [state]
@@ -399,7 +405,7 @@ async def main() -> None:
                 scores["black"]["territory"] * 1.2 + scores["black"]["pieces"] * 0.8
             )
 
-            territory_bonus = ( # pyright: ignore
+            territory_bonus = (  # pyright: ignore
                 (black_territory - white_territory)
                 / (mcts.agent.board_width * mcts.agent.board_width)
                 * 0.5
