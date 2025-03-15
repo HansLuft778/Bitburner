@@ -169,11 +169,9 @@ class Node:
             if not valid_moves[action]:
                 continue
             if action != self.agent.board_width * self.agent.board_width:
-                next_state_tmp, next_uf_tmp = self.server.get_state_after_move(
-                    action, self.state, self.is_white, self.uf, self.get_history()
+                next_state, next_uf = self.server.get_state_after_move(
+                    action, self.state, self.is_white, self.uf, self.get_history(), True
                 )
-                next_state = next_state_tmp.copy()
-                next_uf = next_uf_tmp.copy()
                 # assert self.server.go.verify_uf_consistency(next_state, next_uf)
                 assert next_state.shape == (
                     self.agent.board_width,

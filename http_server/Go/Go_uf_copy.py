@@ -8,6 +8,7 @@ import numpy as np
 
 State = np.ndarray[Any, np.dtype[np.int8]]
 
+
 class UndoActionType(Enum):
     SET_STATE = 1
     SET_PARENT = 2
@@ -21,7 +22,7 @@ class UndoActionType(Enum):
 class UndoAction:
     action_type: UndoActionType
     position: int  # Can be board position or group index
-    value: Any     # The value before change
+    value: Any  # The value before change
 
 
 class UnionFind:
@@ -174,12 +175,15 @@ class UnionFind:
                             uf.liberties[enemy_group].discard(idx)
 
         return uf
-    
+
     def undo_move_changes(self, sim_state: State, undo_stack: list[UndoAction]) -> None:
         """Apply the undo stack to revert changes to both state and UF"""
         for action in reversed(undo_stack):
             if action.action_type == UndoActionType.SET_STATE:
-                x, y = action.position // self.board_height, action.position % self.board_height
+                x, y = (
+                    action.position // self.board_height,
+                    action.position % self.board_height,
+                )
                 sim_state[x][y] = action.value
             else:
                 # Let the UF handle other undo actions
@@ -339,19 +343,28 @@ class Go_uf:
         provided_state: State,
         uf: UnionFind,
         additional_history: list[State] = [],
+        rollback: bool = False,
     ) -> tuple[State, UnionFind]:
         if action == self.board_size:  # Pass move
             return provided_state, uf
 
         color = 2 if is_white else 1
 
-        new_state, new_uf, _ = self.simulate_move(
-            provided_state.copy(),
+        is_consitent = self.verify_uf_consistency(provided_state, uf)
+        assert is_consitent, "state and uf do not match"
+
+        new_state, new_uf, undo = self.simulate_move(
+            provided_state,
             uf,
             action,
             color,
             additional_history,
         )
+        if new_state is not None and rollback and len(undo) > 0:
+            new_state = new_state.copy()
+            new_uf = new_uf.copy()
+            uf.undo_move_changes(new_state, undo)
+
         x, y = self.decode_action(action)
         new_state_original = self.simulate_move_original(
             provided_state.copy(), x, y, color, additional_history
@@ -562,6 +575,10 @@ class Go_uf:
         # i_know_its_legal: bool,
         additional_history: list[State] = [],
     ) -> tuple[State | None, UnionFind, list[UndoAction]]:
+
+        is_consitent = self.verify_uf_consistency(state, uf)
+        assert is_consitent, "state and uf do not match"
+
         x, y = self.decode_action(action)
         if state[x][y] != 0:
             return None, uf, []
@@ -575,14 +592,29 @@ class Go_uf:
 
         # color = 1 => enemy = 2; color = 2 => ememy = 1
         enemy = 3 - color
-        
-        # Record original UF state for this position
-        undo_stack.append(UndoAction(UndoActionType.SET_PARENT, action, uf.parent[action]))
-        undo_stack.append(UndoAction(UndoActionType.SET_COLOR, action, uf.colors[action]))
-        undo_stack.append(UndoAction(UndoActionType.SET_RANK, action, uf.rank[action]))
-        undo_stack.append(UndoAction(UndoActionType.SET_STONES, action, uf.stones[action].copy() if action < len(uf.stones) else set()))
-        undo_stack.append(UndoAction(UndoActionType.SET_LIBERTIES, action, uf.liberties[action].copy() if action < len(uf.liberties) else set()))
 
+        # Record original UF state for this position
+        undo_stack.append(
+            UndoAction(UndoActionType.SET_PARENT, action, uf.parent[action])
+        )
+        undo_stack.append(
+            UndoAction(UndoActionType.SET_COLOR, action, uf.colors[action])
+        )
+        undo_stack.append(UndoAction(UndoActionType.SET_RANK, action, uf.rank[action]))
+        undo_stack.append(
+            UndoAction(
+                UndoActionType.SET_STONES,
+                action,
+                uf.stones[action].copy() if action < len(uf.stones) else set(),
+            )
+        )
+        undo_stack.append(
+            UndoAction(
+                UndoActionType.SET_LIBERTIES,
+                action,
+                uf.liberties[action].copy() if action < len(uf.liberties) else set(),
+            )
+        )
 
         # Initialize the new stone's data
         uf.parent[action] = action  # stone is its own root initially
@@ -590,6 +622,9 @@ class Go_uf:
         uf.stones[action] = set([action])
         uf.liberties[action] = set()
         uf.rank[action] = 0  # new single nodes start with rank 0
+
+        is_consitent = self.verify_uf_consistency(state, uf)
+        assert is_consitent, "state and uf do not match"
 
         action_root = action
         for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
@@ -599,35 +634,83 @@ class Go_uf:
                 # neighbor is empty
                 if state[nx][ny] == 0:
                     old_liberties = uf.liberties[action_root].copy()
-                    undo_stack.append(UndoAction(UndoActionType.SET_LIBERTIES, action_root, old_liberties))
-                    
+                    undo_stack.append(
+                        UndoAction(
+                            UndoActionType.SET_LIBERTIES, action_root, old_liberties
+                        )
+                    )
+
                     uf.liberties[action_root].add(nidx)
                 # neighbor is same color
                 elif uf.colors[nidx] == color:
                     root_nidx = uf.find(nidx)
-                    
+
                     # Record original parent, rank, stones, liberties for both roots
-                    undo_stack.append(UndoAction(UndoActionType.SET_PARENT, action_root, uf.parent[action_root]))
-                    undo_stack.append(UndoAction(UndoActionType.SET_RANK, action_root, uf.rank[action_root]))
-                    undo_stack.append(UndoAction(UndoActionType.SET_STONES, action_root, uf.stones[action_root].copy()))
-                    undo_stack.append(UndoAction(UndoActionType.SET_LIBERTIES, action_root, uf.liberties[action_root].copy()))
-                    
-                    undo_stack.append(UndoAction(UndoActionType.SET_PARENT, root_nidx, uf.parent[root_nidx]))
-                    undo_stack.append(UndoAction(UndoActionType.SET_RANK, root_nidx, uf.rank[root_nidx]))
-                    undo_stack.append(UndoAction(UndoActionType.SET_STONES, root_nidx, uf.stones[root_nidx].copy()))
-                    undo_stack.append(UndoAction(UndoActionType.SET_LIBERTIES, root_nidx, uf.liberties[root_nidx].copy()))
-                    
-                    
+                    undo_stack.append(
+                        UndoAction(
+                            UndoActionType.SET_PARENT,
+                            action_root,
+                            uf.parent[action_root],
+                        )
+                    )
+                    undo_stack.append(
+                        UndoAction(
+                            UndoActionType.SET_RANK, action_root, uf.rank[action_root]
+                        )
+                    )
+                    undo_stack.append(
+                        UndoAction(
+                            UndoActionType.SET_STONES,
+                            action_root,
+                            uf.stones[action_root].copy(),
+                        )
+                    )
+                    undo_stack.append(
+                        UndoAction(
+                            UndoActionType.SET_LIBERTIES,
+                            action_root,
+                            uf.liberties[action_root].copy(),
+                        )
+                    )
+
+                    undo_stack.append(
+                        UndoAction(
+                            UndoActionType.SET_PARENT, root_nidx, uf.parent[root_nidx]
+                        )
+                    )
+                    undo_stack.append(
+                        UndoAction(
+                            UndoActionType.SET_RANK, root_nidx, uf.rank[root_nidx]
+                        )
+                    )
+                    undo_stack.append(
+                        UndoAction(
+                            UndoActionType.SET_STONES,
+                            root_nidx,
+                            uf.stones[root_nidx].copy(),
+                        )
+                    )
+                    undo_stack.append(
+                        UndoAction(
+                            UndoActionType.SET_LIBERTIES,
+                            root_nidx,
+                            uf.liberties[root_nidx].copy(),
+                        )
+                    )
+
                     uf.union(action, nidx, state)
                     action_root = uf.find(action)
                 # neighbor is enemy
                 elif uf.colors[nidx] == enemy:
                     enemy_group = uf.find(nidx)
-                    
+
                     # Record original liberties for the enemy group
                     old_liberties = uf.liberties[enemy_group].copy()
-                    undo_stack.append(UndoAction(UndoActionType.SET_LIBERTIES, enemy_group, old_liberties))
-                    
+                    undo_stack.append(
+                        UndoAction(
+                            UndoActionType.SET_LIBERTIES, enemy_group, old_liberties
+                        )
+                    )
 
                     uf.liberties[enemy_group].discard(action)
 
@@ -635,19 +718,41 @@ class Go_uf:
                     if len(uf.liberties[enemy_group]) == 0:
                         enemy_group_stones = list(uf.stones[enemy_group])
                         # Record original state for the enemy group
-                        undo_stack.append(UndoAction(UndoActionType.SET_STONES, enemy_group, uf.stones[enemy_group].copy()))
-                        
+                        undo_stack.append(
+                            UndoAction(
+                                UndoActionType.SET_STONES,
+                                enemy_group,
+                                uf.stones[enemy_group].copy(),
+                            )
+                        )
+
                         for stone in enemy_group_stones:
                             sx, sy = self.decode_action(stone)
                             # Record original state value
-                            undo_stack.append(UndoAction(UndoActionType.SET_STATE, stone, state[sx][sy]))
+                            undo_stack.append(
+                                UndoAction(
+                                    UndoActionType.SET_STATE, stone, state[sx][sy]
+                                )
+                            )
                             state[sx][sy] = 0
-                            
+
                             # Record original stone properties
-                            undo_stack.append(UndoAction(UndoActionType.SET_COLOR, stone, uf.colors[stone]))
-                            undo_stack.append(UndoAction(UndoActionType.SET_PARENT, stone, uf.parent[stone]))
-                            undo_stack.append(UndoAction(UndoActionType.SET_RANK, stone, uf.rank[stone]))
-                            
+                            undo_stack.append(
+                                UndoAction(
+                                    UndoActionType.SET_COLOR, stone, uf.colors[stone]
+                                )
+                            )
+                            undo_stack.append(
+                                UndoAction(
+                                    UndoActionType.SET_PARENT, stone, uf.parent[stone]
+                                )
+                            )
+                            undo_stack.append(
+                                UndoAction(
+                                    UndoActionType.SET_RANK, stone, uf.rank[stone]
+                                )
+                            )
+
                             uf.colors[stone] = -1
                             uf.parent[stone] = -1
                             uf.rank[stone] = -1
@@ -667,14 +772,20 @@ class Go_uf:
                                     if uf.colors[snidx] == color:
                                         neighbor_root = uf.find(snidx)
                                         # Record original liberties
-                                        if not any(a.action_type == UndoActionType.SET_LIBERTIES and a.position == neighbor_root for a in undo_stack):
-                                            undo_stack.append(UndoAction(
-                                                UndoActionType.SET_LIBERTIES, 
-                                                neighbor_root, 
-                                                uf.liberties[neighbor_root].copy()
-                                            ))
+                                        if not any(
+                                            a.action_type
+                                            == UndoActionType.SET_LIBERTIES
+                                            and a.position == neighbor_root
+                                            for a in undo_stack
+                                        ):
+                                            undo_stack.append(
+                                                UndoAction(
+                                                    UndoActionType.SET_LIBERTIES,
+                                                    neighbor_root,
+                                                    uf.liberties[neighbor_root].copy(),
+                                                )
+                                            )
                                         uf.liberties[neighbor_root].add(stone)
-
 
         # check if placed stone has liberties
         if len(uf.liberties[action_root]) == 0:
