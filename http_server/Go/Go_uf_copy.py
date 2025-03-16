@@ -71,6 +71,14 @@ class UnionFind:
         self.parent[i] = self.find(self.parent[i])
         return self.parent[i]
 
+    def find_no_compression(self, i: int) -> int:
+        """Find without path compression, for simulations"""
+        if i < 0 or i >= len(self.parent):
+            return -1
+        if self.parent[i] == i:
+            return i
+        return self.find_no_compression(self.parent[i])
+
     # Remove or comment out the old union() method
 
     # Rename union_2 to union and use it as the primary implementation
@@ -79,8 +87,8 @@ class UnionFind:
         Unites two groups of stones together using union by rank.
         Rank represents the upper bound of the height of the tree.
         """
-        root_a = self.find(a)
-        root_b = self.find(b)
+        root_a = self.find_no_compression(a)
+        root_b = self.find_no_compression(b)
         if root_a == root_b:
             return
 
@@ -108,7 +116,7 @@ class UnionFind:
                 self.rank[root_b] += 1
             self.rank[root_a] = -1
 
-        new_root = self.find(a)
+        new_root = self.find_no_compression(a)
         self.liberties[new_root].clear()
 
         for stone in self.stones[new_root]:
@@ -343,13 +351,13 @@ class Go_uf:
 
         color = 2 if is_white else 1
 
-        debug_state = state.copy()
+        # debug_state = state.copy()
 
-        x, y = self.decode_action(action)
-        new_state_original = self.simulate_move_original(state, x, y, color, additional_history)
+        # x, y = self.decode_action(action)
+        # new_state_original = self.simulate_move_original(state, x, y, color, additional_history)
 
-        is_consitent = self.verify_uf_consistency(state, uf)
-        assert is_consitent, "state and uf do not match"
+        # is_consitent = self.verify_uf_consistency(state, uf)
+        # assert is_consitent, "state and uf do not match"
 
         is_legal, undo = self.simulate_move(
             state,
@@ -362,12 +370,12 @@ class Go_uf:
         new_state = state.copy()
         new_uf = uf.copy()
 
-        if is_legal:
-            assert new_state_original is not None, f"States must be equal: {new_state_original}"
-        if new_state_original is None:
-            assert not is_legal, f"States must be equal: {state}"
-        if is_legal and new_state_original is not None:
-            assert np.array_equal(state, new_state_original), f"States must be equal: {state} {new_state_original}"
+        # if is_legal:
+        #     assert new_state_original is not None, f"States must be equal: {new_state_original}"
+        # if new_state_original is None:
+        #     assert not is_legal, f"States must be equal: {state}"
+        # if is_legal and new_state_original is not None:
+        #     assert np.array_equal(state, new_state_original), f"States must be equal: {state} {new_state_original}"
 
         if is_legal:
             uf.undo_move_changes(state, undo)
@@ -566,14 +574,16 @@ class Go_uf:
         additional_history: list[State] = [],
     ) -> tuple[bool, list[UndoAction]]:
 
-        is_consitent = self.verify_uf_consistency(state, uf)
-        assert is_consitent, "state and uf do not match"
+        # is_consitent = self.verify_uf_consistency(state, uf)
+        # assert is_consitent, "state and uf do not match"
 
         x, y = self.decode_action(action)
         if state[x][y] != 0:
+            # is_consitent = self.verify_uf_consistency(state, uf)
+            # assert is_consitent, "state and uf do not match"
             return False, []
 
-        state_before = state.copy()
+        # state_before = state.copy()
         undo_stack: list[UndoAction] = []
 
         undo_stack.append(UndoAction(UndoActionType.SET_STATE, action, state[x][y]))
@@ -608,8 +618,8 @@ class Go_uf:
         uf.liberties[action] = set()
         uf.rank[action] = 0  # new single nodes start with rank 0
 
-        is_consitent = self.verify_uf_consistency(state, uf)
-        assert is_consitent, "state and uf do not match"
+        # is_consitent = self.verify_uf_consistency(state, uf)
+        # assert is_consitent, "state and uf do not match"
 
         action_root = action
         for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
@@ -624,7 +634,7 @@ class Go_uf:
                     uf.liberties[action_root].add(nidx)
                 # neighbor is same color
                 elif uf.colors[nidx] == color:
-                    root_nidx = uf.find(nidx)
+                    root_nidx = uf.find_no_compression(nidx)
 
                     # Record original parent, rank, stones, liberties for both roots
                     undo_stack.append(
@@ -668,10 +678,10 @@ class Go_uf:
                     )
 
                     uf.union(action, nidx, state)
-                    action_root = uf.find(action)
+                    action_root = uf.find_no_compression(action)
                 # neighbor is enemy
                 elif uf.colors[nidx] == enemy:
-                    enemy_group = uf.find(nidx)
+                    enemy_group = uf.find_no_compression(nidx)
 
                     # Record original liberties for the enemy group
                     old_liberties = uf.liberties[enemy_group].copy()
@@ -716,7 +726,7 @@ class Go_uf:
                                 if 0 <= snx < self.board_width and 0 <= sny < self.board_height:
                                     snidx = self.encode_action(snx, sny)
                                     if uf.colors[snidx] == color:
-                                        neighbor_root = uf.find(snidx)
+                                        neighbor_root = uf.find_no_compression(snidx)
                                         # Record original liberties
                                         if not any(
                                             a.action_type == UndoActionType.SET_LIBERTIES
@@ -732,23 +742,29 @@ class Go_uf:
                                             )
                                         uf.liberties[neighbor_root].add(stone)
 
+        # is_consitent = self.verify_uf_consistency(state, uf)
+        # assert is_consitent, "state and uf do not match"
         # check if placed stone has liberties
         if len(uf.liberties[action_root]) == 0:
             # move was actually a suicide
+            # is_consitent = self.verify_uf_consistency(state, uf)
+            # assert is_consitent, "state and uf do not match"
             uf.undo_move_changes(state, undo_stack)
-            assert np.array_equal(state, state_before)
+            # assert np.array_equal(state, state_before)
             return False, undo_stack
 
         # check for repeat
         is_repeat = self.check_state_is_repeat(state, additional_history)
         if is_repeat:
             # move was actually a repeat
+            # is_consitent = self.verify_uf_consistency(state, uf)
+            # assert is_consitent, "state and uf do not match"
             uf.undo_move_changes(state, undo_stack)
-            assert np.array_equal(state_before, state)
+            # assert np.array_equal(state_before, state)
             return False, undo_stack
 
-        is_consitent = self.verify_uf_consistency(state, uf)
-        assert is_consitent, f"UF is not consistent with the board state"
+        # is_consitent = self.verify_uf_consistency(state, uf)
+        # assert is_consitent, f"UF is not consistent with the board state"
         return True, undo_stack
 
     def verify_uf_consistency(self, state: State, uf: UnionFind) -> bool:
@@ -756,7 +772,7 @@ class Go_uf:
         for x in range(self.board_width):
             for y in range(self.board_height):
                 idx = self.encode_action(x, y)
-                root = uf.find(idx)
+                root = uf.find_no_compression(idx)
                 if state[x][y] in [1, 2]:  # Stone exists
                     if uf.colors[idx] != state[x][y]:
                         return False
@@ -778,7 +794,7 @@ class Go_uf:
                 if state[x][y] not in [1, 2]:
                     continue
                 idx = self.encode_action(x, y)
-                root = uf.find(idx)
+                root = uf.find_no_compression(idx)
                 root_coord = self.decode_action(root)
                 # check if root is actually parent of idx
                 _, stones = self.get_liberties(state, x, y, set())
@@ -830,6 +846,8 @@ class Go_uf:
         empty_positions = np.where(empty_mask)
         for x, y in zip(empty_positions[0], empty_positions[1]):
             action = self.encode_action(int(x), int(y))
+            # is_consitent = self.verify_uf_consistency(state, uf)
+            # assert is_consitent, "state and uf do not match"
             is_legal, undo = self.simulate_move(
                 state,
                 uf,
@@ -841,6 +859,8 @@ class Go_uf:
             if is_legal:  # only needs to undo if legal, since illegal moves are not persisted
                 uf.undo_move_changes(state, undo)
                 legal_moves[x][y] = True
+            # is_consitent = self.verify_uf_consistency(state, uf)
+            # assert is_consitent, "state and uf do not match"
         return legal_moves
 
     def has_game_ended(

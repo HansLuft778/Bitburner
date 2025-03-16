@@ -214,7 +214,7 @@ class MCTS:
         self.iterations_stats.clear()
         search_start = time.time()
 
-        for iter in range(self.search_iterations):
+        for _ in range(self.search_iterations):
             node = root
             # selection
             select_start = time.time()
