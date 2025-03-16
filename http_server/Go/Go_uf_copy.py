@@ -25,14 +25,27 @@ class UndoAction:
     value: Any  # The value before change
 
 
+def get_bit_indices(mask: int) -> np.ndarray[Any, np.dtype[np.int32]]:
+    indices = [i for i in range(256) if (mask >> i) & 1]
+    return np.array(indices, dtype=np.int32)
+
+
+def add_stone_to_group(array: np.ndarray[Any, np.dtype[np.int256]], group_idx: int, pos: int):
+    array[group_idx] |= 1 << pos
+
+
+def remove_stone_from_group(array: np.ndarray[Any, np.dtype[np.int256]], group_idx: int, pos: int):
+    array[group_idx] &= ~(1 << pos)
+
+
 class UnionFind:
     def __init__(
         self,
         parent: np.ndarray[Any, np.dtype[np.int8]],
         colors: np.ndarray[Any, np.dtype[np.int8]],
         rank: np.ndarray[Any, np.dtype[np.int8]],
-        stones: np.ndarray[Any, np.dtype[np.int8]],  # list[set[int]],
-        liberties: np.ndarray[Any, np.dtype[np.int8]],  # list[set[int]],
+        stones: np.ndarray[Any, np.dtype[np.int256]],  # list[set[int]],
+        liberties: np.ndarray[Any, np.dtype[np.int256]],  # list[set[int]],
         board_size: int,
     ):
         self.parent = parent
@@ -103,26 +116,27 @@ class UnionFind:
             # No rank change needed when attaching smaller to larger
             self.parent[root_b] = root_a
             self.stones[root_a] |= self.stones[root_b]
-            self.stones[root_b].fill(0)
+            self.stones[root_b] = 0
             self.liberties[root_a] |= self.liberties[root_b]
-            self.liberties[root_b].fill(0)
+            self.liberties[root_b] = 0
             self.rank[root_b] = -1
         else:
             self.parent[root_a] = root_b
             self.stones[root_b] |= self.stones[root_a]
-            self.stones[root_a].fill(0)
+            self.stones[root_a] = 0
             self.liberties[root_b] |= self.liberties[root_a]
-            self.liberties[root_a].fill(0)
+            self.liberties[root_a] = 0
             # Increment rank of root_b only if ranks were equal
             if self.rank[root_a] == self.rank[root_b]:
                 self.rank[root_b] += 1
             self.rank[root_a] = -1
 
         new_root = self.find_no_compression(a)
-        self.liberties[new_root].fill(0)
+        self.liberties[new_root] = 0
 
         # recalculate liberties
-        stone_indices = np.where(self.stones[new_root] == 1)[0]
+        # stone_indices = np.where(self.stones[new_root] == 1)[0]
+        stone_indices = get_bit_indices(self.stones[new_root])
         sx = stone_indices // self.board_height
         sy = stone_indices % self.board_height
 
@@ -143,7 +157,13 @@ class UnionFind:
         empty_ny = all_ny[empty_mask]
 
         lib_positions = empty_nx * self.board_height + empty_ny
-        self.liberties[new_root][lib_positions] = 1
+        # self.liberties[new_root][lib_positions] = 1
+        # for lib_pos in lib_positions:
+        #     add_stone_to_group(self.liberties, new_root, lib_pos)
+        bit_positions = lib_positions.astype(np.uint256)
+        bit_masks = np.left_shift(np.uint256(1), bit_positions)
+        mask = np.bitwise_or.reduce(bit_masks, initial=np.uint256(0))
+        self.liberties[new_root] |= mask
 
     def undo_move_changes(self, sim_state: State, undo_stack: list[UndoAction]) -> None:
         """Apply the undo stack to revert changes to both state and UF"""
@@ -167,15 +187,6 @@ class UnionFind:
                 elif action.action_type == UndoActionType.SET_COLOR:
                     self.colors[action.position] = action.value
 
-    def add_stone_to_group(self, stone, group_idx, x, y):
-        pass
-    
-    def remove_stone_from_group(self, stone, group_idx, x, y):
-        pass
-    
-    def group_union(self, group_a, group_b):
-        pass
-
     @staticmethod
     def get_uf_from_state(state: State) -> "UnionFind":
 
@@ -184,8 +195,8 @@ class UnionFind:
         parent = np.full(width * width, -1, dtype=np.int8)
         colors = np.full(width * width, -1, dtype=np.int8)
         rank = np.full(width * width, -1, dtype=np.int8)
-        stones = np.zeros((width * width, width * width), dtype=np.int8)
-        liberties = np.zeros((width * width, width * width), dtype=np.int8)
+        stones = np.zeros(width * width, dtype=np.int256)
+        liberties = np.zeros(width * width, dtype=np.int256)
         uf = UnionFind(parent, colors, rank, stones, liberties, width)
 
         for x in range(width):
@@ -201,14 +212,15 @@ class UnionFind:
                             nidx = nx * width + ny
                             if state[nx][ny] in (1, 2):
                                 n_root = uf.find(nidx)
-                                liberties[n_root][idx] = 1
+                                # liberties[n_root][idx] = 1
+                                add_stone_to_group(liberties, n_root, idx)
                     continue
 
                 parent[idx] = idx
                 colors[idx] = state[x][y]
-                stones[idx].fill(0)
-                stones[idx][idx] = 1
-                liberties[idx].fill(0)
+                stones[idx] = 0
+                add_stone_to_group(stones, idx, idx)
+                liberties[idx] = 0
                 rank[idx] = 0
 
                 color = state[x][y]
@@ -220,7 +232,8 @@ class UnionFind:
                         nidx = nx * width + ny
                         # neighbor is empty
                         if state[nx][ny] == 0:
-                            liberties[idx_root][nidx] = 1
+                            # liberties[idx_root][nidx] = 1
+                            add_stone_to_group(liberties, idx_root, nidx)
                         # neighbor is same color
                         elif colors[nidx] == color:
                             uf.union(idx, nidx, state)
@@ -228,7 +241,8 @@ class UnionFind:
                         # neighbor is enemy
                         elif uf.colors[nidx] == enemy:
                             enemy_group = uf.find(nidx)
-                            uf.liberties[enemy_group][idx] = 0
+                            # uf.liberties[enemy_group][idx] = 0
+                            remove_stone_from_group(uf.liberties, enemy_group, idx)
 
         return uf
 
@@ -286,8 +300,8 @@ class Go_uf:
         parent = np.full(self.board_width * self.board_height, -1, dtype=np.int8)
         colors = np.full(self.board_width * self.board_height, -1, dtype=np.int8)
         rank = np.full(self.board_width * self.board_height, -1, dtype=np.int8)
-        stones = np.zeros((board_width * board_width, board_width * board_width), dtype=np.int8)
-        liberties = np.zeros((board_width * board_width, board_width * board_width), dtype=np.int8)
+        stones = np.zeros(board_width * board_width, dtype=np.int256)
+        liberties = np.zeros(board_width * board_width, dtype=np.int256)
 
         self.uf = UnionFind(parent, colors, rank, stones, liberties, self.board_width)
 
@@ -626,9 +640,10 @@ class Go_uf:
         # Initialize the new stone's data
         uf.parent[action] = action  # stone is its own root initially
         uf.colors[action] = color
-        uf.stones[action].fill(0)
-        uf.stones[action][action] = 1
-        uf.liberties[action].fill(0)
+        uf.stones[action] = 0
+        add_stone_to_group(uf.stones, action, action)
+        # uf.stones[action][action] = 1
+        uf.liberties[action] = 0  # liberties are bitmask, 0 (empty) initially
         uf.rank[action] = 0  # new single nodes start with rank 0
         # is_consitent = self.verify_uf_consistency(state, uf)
         # assert is_consitent, "state and uf do not match"
@@ -642,10 +657,10 @@ class Go_uf:
                 nidx = self.encode_action(nx, ny)
                 # neighbor is empty
                 if state[nx][ny] == 0:
-                    old_liberties = uf.liberties[action_root].copy()
-                    undo_stack.append(UndoAction(UndoActionType.SET_LIBERTIES, action_root, old_liberties))
+                    undo_stack.append(UndoAction(UndoActionType.SET_LIBERTIES, action_root, uf.liberties[action_root]))
 
-                    uf.liberties[action_root][nidx] = 1
+                    # uf.liberties[action_root][nidx] = 1
+                    add_stone_to_group(uf.liberties, action_root, nidx)
                 # neighbor is same color
                 elif uf.colors[nidx] == color:
                     root_nidx = uf.find_no_compression(nidx)
@@ -659,37 +674,13 @@ class Go_uf:
                         )
                     )
                     undo_stack.append(UndoAction(UndoActionType.SET_RANK, action_root, uf.rank[action_root]))
-                    undo_stack.append(
-                        UndoAction(
-                            UndoActionType.SET_STONES,
-                            action_root,
-                            uf.stones[action_root].copy(),
-                        )
-                    )
-                    undo_stack.append(
-                        UndoAction(
-                            UndoActionType.SET_LIBERTIES,
-                            action_root,
-                            uf.liberties[action_root].copy(),
-                        )
-                    )
+                    undo_stack.append(UndoAction(UndoActionType.SET_STONES, action_root, uf.stones[action_root]))
+                    undo_stack.append(UndoAction(UndoActionType.SET_LIBERTIES, action_root, uf.liberties[action_root]))
 
                     undo_stack.append(UndoAction(UndoActionType.SET_PARENT, root_nidx, uf.parent[root_nidx]))
                     undo_stack.append(UndoAction(UndoActionType.SET_RANK, root_nidx, uf.rank[root_nidx]))
-                    undo_stack.append(
-                        UndoAction(
-                            UndoActionType.SET_STONES,
-                            root_nidx,
-                            uf.stones[root_nidx].copy(),
-                        )
-                    )
-                    undo_stack.append(
-                        UndoAction(
-                            UndoActionType.SET_LIBERTIES,
-                            root_nidx,
-                            uf.liberties[root_nidx].copy(),
-                        )
-                    )
+                    undo_stack.append(UndoAction(UndoActionType.SET_STONES, root_nidx, uf.stones[root_nidx]))
+                    undo_stack.append(UndoAction(UndoActionType.SET_LIBERTIES, root_nidx, uf.liberties[root_nidx]))
 
                     uf.union(action, nidx, state)
                     action_root = uf.find_no_compression(action)
@@ -698,23 +689,18 @@ class Go_uf:
                     enemy_group = uf.find_no_compression(nidx)
 
                     # Record original liberties for the enemy group
-                    old_liberties = uf.liberties[enemy_group].copy()
-                    undo_stack.append(UndoAction(UndoActionType.SET_LIBERTIES, enemy_group, old_liberties))
+                    undo_stack.append(UndoAction(UndoActionType.SET_LIBERTIES, enemy_group, uf.liberties[enemy_group]))
 
-                    uf.liberties[enemy_group][action] = 0
+                    # uf.liberties[enemy_group][action] = 0
+                    remove_stone_from_group(uf.liberties, enemy_group, action)
 
                     # capture enemy group if no liberties
                     # if len(uf.liberties[enemy_group]) == 0:
-                    if np.count_nonzero(uf.liberties[enemy_group]) == 0:
-                        stone_indices = np.where(uf.stones[enemy_group] == 1)[0]
+                    if uf.liberties[enemy_group] == 0:
+                        # stone_indices = np.where(uf.stones[enemy_group] == 1)[0]
+                        stone_indices = get_bit_indices(uf.stones[enemy_group])
                         # Record original state for the enemy group
-                        undo_stack.append(
-                            UndoAction(
-                                UndoActionType.SET_STONES,
-                                enemy_group,
-                                uf.stones[enemy_group].copy(),
-                            )
-                        )
+                        undo_stack.append(UndoAction(UndoActionType.SET_STONES, enemy_group, uf.stones[enemy_group]))
 
                         for stone in stone_indices:
                             sx, sy = self.decode_action(stone)
@@ -730,8 +716,8 @@ class Go_uf:
                             uf.colors[stone] = -1
                             uf.parent[stone] = -1
                             uf.rank[stone] = -1
-                        uf.stones[enemy_group].fill(0)
-                        uf.liberties[enemy_group].fill(0)
+                        uf.stones[enemy_group] = 0
+                        uf.liberties[enemy_group] = 0
 
                         # update liberties of neighboring groups
                         for stone in stone_indices:
@@ -752,10 +738,11 @@ class Go_uf:
                                                 UndoAction(
                                                     UndoActionType.SET_LIBERTIES,
                                                     neighbor_root,
-                                                    uf.liberties[neighbor_root].copy(),
+                                                    uf.liberties[neighbor_root],
                                                 )
                                             )
-                                        uf.liberties[neighbor_root][stone] = 1
+                                        # uf.liberties[neighbor_root][stone] = 1
+                                        add_stone_to_group(uf.liberties, neighbor_root, stone)
 
         end = time.time()
         print(f"UNION FIND: Time: {end - start}")
@@ -764,7 +751,7 @@ class Go_uf:
         # assert is_consitent, "state and uf do not match"
         # check if placed stone has liberties
         # if len(uf.liberties[action_root]) == 0:
-        if np.count_nonzero(uf.liberties[action_root]) == 0:
+        if uf.liberties[action_root] == 0:
             # move was actually a suicide
             # is_consitent = self.verify_uf_consistency(state, uf)
             # assert is_consitent, "state and uf do not match"
@@ -799,7 +786,7 @@ class Go_uf:
                         return False
                     elif uf.rank[root] == -1:
                         return False
-                    elif np.count_nonzero(uf.stones[root]) == 0:
+                    elif uf.stones[root] == 0:
                         return False
                 else:  # Empty or disabled
                     if uf.colors[idx] != -1:
