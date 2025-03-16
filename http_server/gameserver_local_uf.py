@@ -135,10 +135,9 @@ class GameServerGo:
         is_white: bool,
         uf: UnionFind,
         additional_history: list[State] = [],
-        rollback: bool = False,
     ) -> tuple[State, UnionFind]:
         res = self.go.state_after_action(
-            action, is_white, state, uf, additional_history, rollback
+            action, is_white, state, uf, additional_history
         )
         assert res[0].shape == (
             self.go.board_height,

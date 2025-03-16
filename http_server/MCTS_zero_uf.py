@@ -44,13 +44,8 @@ def has_game_ended(server: GameServerGo, node: "Node") -> tuple[bool, float]:
     # one pass, next player has no valid moves
     if node.parent:
         valid_moves = np.sum(node.get_valid_moves())
-        if (
-            node.parent.action == server.go.board_height * server.go.board_height
-            and valid_moves == 0
-        ):
-            print(
-                f"node.parent.action: {node.parent.action}, valid_moves: {valid_moves}"
-            )
+        if node.parent.action == server.go.board_height * server.go.board_height and valid_moves == 0:
+            print(f"node.parent.action: {node.parent.action}, valid_moves: {valid_moves}")
             return (True, get_score(server, node))
 
     # # board full
@@ -71,12 +66,7 @@ def get_ucb_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) -
         q_value = 0.0
     else:
         q_value = -(child.win_sum / child.visit_cnt)
-    u_value = (
-        c_puct
-        * child.selected_policy
-        * math.sqrt(parent_visit_count)
-        / (1 + child.visit_cnt)
-    )
+    u_value = c_puct * child.selected_policy * math.sqrt(parent_visit_count) / (1 + child.visit_cnt)
     return q_value + u_value
 
 
@@ -97,9 +87,7 @@ class Node:
             agent.board_width,
             agent.board_width,
         ), f"Array must be 5x5: {state}"
-        assert np.all(
-            np.isin(state, [0, 1, 2, 3])
-        ), f"Array must only contain values 0, 1, 2, or 3: {state}"
+        assert np.all(np.isin(state, [0, 1, 2, 3])), f"Array must only contain values 0, 1, 2, or 3: {state}"
 
         self.state = state
         self.uf = uf
@@ -124,20 +112,16 @@ class Node:
         if self.valid_moves is None:
             if self.parent is not None:
                 history = self.get_history()
-                self.valid_moves = self.server.request_valid_moves(
-                    self.is_white, self.state, self.uf, history
-                )
+                self.valid_moves = self.server.request_valid_moves(self.is_white, self.state, self.uf, history)
             else:
-                self.valid_moves = self.server.request_valid_moves(
-                    self.is_white, self.state, self.uf
-                )
+                self.valid_moves = self.server.request_valid_moves(self.is_white, self.state, self.uf)
         return self.valid_moves
 
     def get_history(self) -> list[np.ndarray[Any, np.dtype[np.int8]]]:
         history: list[State] = []
         current = self
         while self:
-            history.append(self.state)
+            history.append(self.state.copy())
             if current.parent is not None:
                 current = current.parent
             else:
@@ -161,18 +145,16 @@ class Node:
         # Penalize passing if board is mostly empty
         empty_percentage = empty_cells / board_size
         if empty_percentage > 0.5:
-            q_values[self.agent.board_width * self.agent.board_width] *= (
-                1.0 - empty_percentage
-            ) * 0.5
+            q_values[self.agent.board_width * self.agent.board_width] *= (1.0 - empty_percentage) * 0.5
 
         for action, q_value in enumerate(q_values):
             if not valid_moves[action]:
                 continue
             if action != self.agent.board_width * self.agent.board_width:
                 next_state, next_uf = self.server.get_state_after_move(
-                    action, self.state, self.is_white, self.uf, self.get_history(), True
+                    action, self.state, self.is_white, self.uf, self.get_history()
                 )
-                # assert self.server.go.verify_uf_consistency(next_state, next_uf)
+
                 assert next_state.shape == (
                     self.agent.board_width,
                     self.agent.board_width,
@@ -181,7 +163,7 @@ class Node:
                     np.isin(next_state, [0, 1, 2, 3])
                 ), f"Array must only contain values 0, 1, 2, or 3: {next_state}"
             else:
-                next_state = self.state
+                next_state = self.state.copy()
                 next_uf = self.uf.copy()
 
             child = Node(
@@ -224,9 +206,7 @@ class MCTS:
     def search(self, state: State, uf: UnionFind, is_white: bool):
 
         # assert state.shape == (5, 5), f"Array must be 5x5: {state}"
-        assert np.all(
-            np.isin(state, [0, 1, 2, 3])
-        ), f"Array must only contain values 0, 1, 2, or 3: {state}"
+        assert np.all(np.isin(state, [0, 1, 2, 3])), f"Array must only contain values 0, 1, 2, or 3: {state}"
 
         root: Node = Node(state, uf, self.server, is_white, self.agent)
 
@@ -256,21 +236,15 @@ class MCTS:
                 self.timing_stats["move_prep"] += time.time() - prep_start
 
                 inference_start = time.time()
-                logits, value = self.agent.get_actions_eval(
-                    node.state, valid_moves, history, node.is_white
-                )
+                logits, value = self.agent.get_actions_eval(node.state, valid_moves, history, node.is_white)
                 if node.parent is None:
-                    print(
-                        f"Value estimate: {value:.3f} (from {'white' if node.is_white else 'black'}'s perspective)"
-                    )
+                    print(f"Value estimate: {value:.3f} (from {'white' if node.is_white else 'black'}'s perspective)")
 
                 self.timing_stats["nn_inference"] += time.time() - inference_start
                 self.iterations_stats["nn_inference"] += 1
 
                 policy_start = time.time()
-                valid_mask = torch.tensor(
-                    valid_moves, device=self.agent.device, dtype=torch.bool
-                )
+                valid_mask = torch.tensor(valid_moves, device=self.agent.device, dtype=torch.bool)
                 logits[~valid_mask] = -1e9
                 policy = torch.softmax(logits, dim=0)
 
@@ -278,9 +252,7 @@ class MCTS:
                 if node.parent is None:
                     alpha = 0.15
                     dir_noise = np.random.dirichlet([alpha] * len(policy))
-                    dir_noise_tensor = torch.tensor(
-                        dir_noise, device=policy.device, dtype=policy.dtype
-                    )
+                    dir_noise_tensor = torch.tensor(dir_noise, device=policy.device, dtype=policy.dtype)
                     epsilon = 0.15  # noise weight
                     policy = (1 - epsilon) * policy + epsilon * dir_noise_tensor
 
@@ -319,12 +291,8 @@ class MCTS:
         for key, val in self.timing_stats.items():
             if key != "total":
                 percentage = (val / total_time) * 100
-                avg_time = val / float(
-                    self.iterations_stats.get(key, self.search_iterations)
-                )
-                print(
-                    f"{key}: {val:.3f}s ({percentage:.1f}%) - Avg: {avg_time*1000:.2f}ms"
-                )
+                avg_time = val / float(self.iterations_stats.get(key, self.search_iterations))
+                print(f"{key}: {val:.3f}s ({percentage:.1f}%) - Avg: {avg_time*1000:.2f}ms")
 
         return props
 
@@ -345,9 +313,7 @@ async def main() -> None:
         state, komi = await server.reset_game("No AI")
         server.go = Go_uf(5, state, komi)
 
-        buffer: list[
-            tuple[State, bool, torch.Tensor, list[State], dict[str, dict[str, Any]]]
-        ] = []
+        buffer: list[tuple[State, bool, torch.Tensor, list[State], dict[str, dict[str, Any]]]] = []
         is_white = False
         done = False
         game_history = [state]
@@ -375,9 +341,7 @@ async def main() -> None:
             )
 
             # outcome is: 1 if black won, -1 is white won
-            next_state, outcome, done = await server.make_move(
-                action, best_move, is_white
-            )
+            next_state, outcome, done = await server.make_move(action, best_move, is_white)
             game_history.insert(0, next_state)
 
             is_white = not is_white
@@ -396,17 +360,11 @@ async def main() -> None:
             z = outcome if not was_white else -outcome
 
             # add bonus for territory + pieces, without komi
-            white_territory = (
-                scores["white"]["territory"] * 1.2 + scores["white"]["pieces"] * 0.8
-            )
-            black_territory = (
-                scores["black"]["territory"] * 1.2 + scores["black"]["pieces"] * 0.8
-            )
+            white_territory = scores["white"]["territory"] * 1.2 + scores["white"]["pieces"] * 0.8
+            black_territory = scores["black"]["territory"] * 1.2 + scores["black"]["pieces"] * 0.8
 
             territory_bonus = (  # pyright: ignore
-                (black_territory - white_territory)
-                / (mcts.agent.board_width * mcts.agent.board_width)
-                * 0.5
+                (black_territory - white_territory) / (mcts.agent.board_width * mcts.agent.board_width) * 0.5
             )
 
             # z += territory_bonus if not was_white else -territory_bonus
@@ -421,9 +379,7 @@ async def main() -> None:
         max_train_steps = 40  # Maximum number of training steps
 
         # Calculate training steps - scales with game length
-        train_steps = min(
-            max_train_steps, max(min_train_steps, int(game_length * 0.75))
-        )
+        train_steps = min(max_train_steps, max(min_train_steps, int(game_length * 0.75)))
         print(f"Game length: {game_length}, performing {train_steps} training steps")
         for _ in range(train_steps):
             mcts.agent.train_step()
@@ -458,9 +414,7 @@ async def main_eval():
             print(f"make move: {action}")
 
             # outcome is: 1 if black won, -1 is white won
-            next_state, outcome, done = await server.make_move_eval(
-                action, best_move, is_white
-            )
+            next_state, outcome, done = await server.make_move_eval(action, best_move, is_white)
             state = next_state
 
         assert outcome != 0, "outcome should not be 0 after a game ended"
