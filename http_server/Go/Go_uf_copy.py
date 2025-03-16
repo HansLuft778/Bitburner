@@ -142,7 +142,7 @@ class UnionFind:
         empty_nx = all_nx[empty_mask]
         empty_ny = all_ny[empty_mask]
 
-        lib_positions = empty_nx * 3 + empty_ny
+        lib_positions = empty_nx * self.board_height + empty_ny
         self.liberties[new_root][lib_positions] = 1
 
     @staticmethod
@@ -364,8 +364,8 @@ class Go_uf:
 
         # debug_state = state.copy()
 
-        # x, y = self.decode_action(action)
-        # new_state_original = self.simulate_move_original(state, x, y, color, additional_history)
+        x, y = self.decode_action(action)
+        _ = self.simulate_move_original(state, x, y, color, additional_history)
 
         # is_consitent = self.verify_uf_consistency(state, uf)
         # assert is_consitent, "state and uf do not match"
@@ -551,6 +551,7 @@ class Go_uf:
         # color = 1 => enemy = 2; color = 2 => ememy = 1
         enemy = 3 - color
 
+        start = time.time()
         # check for capture
         for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
             nx, ny = x + dx, y + dy
@@ -561,6 +562,9 @@ class Go_uf:
                     if len(liberties) == 0:
                         for tx, ty in territory:
                             sim_state[tx][ty] = 0
+
+        end = time.time()
+        print(f"SIMULATE MOVE: Time: {end - start}")
 
         # check if placed router has liberties
         libs, _ = self.get_liberties(sim_state, x, y, set())
@@ -617,9 +621,10 @@ class Go_uf:
         uf.stones[action][action] = 1
         uf.liberties[action].fill(0)
         uf.rank[action] = 0  # new single nodes start with rank 0
-
         # is_consitent = self.verify_uf_consistency(state, uf)
         # assert is_consitent, "state and uf do not match"
+
+        start = time.time()
 
         action_root = action
         for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
@@ -631,7 +636,7 @@ class Go_uf:
                     old_liberties = uf.liberties[action_root].copy()
                     undo_stack.append(UndoAction(UndoActionType.SET_LIBERTIES, action_root, old_liberties))
 
-                    uf.liberties[action_root].add(nidx)
+                    uf.liberties[action_root][nidx] = 1
                 # neighbor is same color
                 elif uf.colors[nidx] == color:
                     root_nidx = uf.find_no_compression(nidx)
@@ -742,6 +747,9 @@ class Go_uf:
                                                 )
                                             )
                                         uf.liberties[neighbor_root][stone] = 1
+
+        end = time.time()
+        print(f"UNION FIND: Time: {end - start}")
 
         # is_consitent = self.verify_uf_consistency(state, uf)
         # assert is_consitent, "state and uf do not match"
