@@ -339,7 +339,7 @@ class Go_uf:
           'O' -> 2 (white)
           '#' -> 3 (disabled)
         """
-        transformed = np.zeros([5, 5], dtype=np.int8)
+        transformed = np.zeros([self.board_width, self.board_width], dtype=np.int8)
         for i, row_str in enumerate(state):
             for j, char in enumerate(row_str):
                 if char == ".":
@@ -387,16 +387,16 @@ class Go_uf:
 
         # debug_state = state.copy()
 
-        x, y = self.decode_action(action)
-        start = time.time()
-        _ = self.simulate_move_original(state, x, y, color, additional_history)
-        end = time.time()
-        print(f"FLOOD FILL: Time: {end - start}")
+        # x, y = self.decode_action(action)
+        # start = time.time()
+        # _ = self.simulate_move_original(state, x, y, color, additional_history)
+        # end = time.time()
+        # print(f"FLOOD FILL: Time: {end - start}")
 
         # is_consitent = self.verify_uf_consistency(state, uf)
         # assert is_consitent, "state and uf do not match"
 
-        start = time.time()
+        # start = time.time()
         is_legal, undo = self.simulate_move(
             state,
             uf,
@@ -404,8 +404,8 @@ class Go_uf:
             color,
             additional_history,
         )
-        end = time.time()
-        print(f"UNION FIND: Time: {end - start}")
+        # end = time.time()
+        # print(f"UNION FIND: Time: {end - start}")
 
         new_state = state.copy()
         new_uf = uf.copy()
@@ -580,7 +580,7 @@ class Go_uf:
         # color = 1 => enemy = 2; color = 2 => ememy = 1
         enemy = 3 - color
 
-        start = time.time()
+        # start = time.time()
         # check for capture
         for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
             nx, ny = x + dx, y + dy
@@ -592,8 +592,8 @@ class Go_uf:
                         for tx, ty in territory:
                             sim_state[tx][ty] = 0
 
-        end = time.time()
-        print(f"FLOOD_FILL_CORE: Time: {end - start}")
+        # end = time.time()
+        # print(f"FLOOD_FILL_CORE: Time: {end - start}")
 
         # check if placed router has liberties
         libs, _ = self.get_liberties(sim_state, x, y, set())

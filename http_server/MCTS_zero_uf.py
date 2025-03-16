@@ -298,20 +298,20 @@ class MCTS:
 
 
 async def main() -> None:
-    server = GameServerGo(5)
+    server = GameServerGo(7)
     await server.wait()
     print("GameServer ready and client connected")
 
     plotter = Plotter()
-    agent = AlphaZeroAgent(5, plotter)
+    agent = AlphaZeroAgent(7, plotter)
     # agent.load_checkpoint("checkpoint_69.pth")
     mcts = MCTS(server, plotter, agent, search_iterations=1000)
 
     NUM_EPISODES = 1000
     outcome = 0
     for iter in range(NUM_EPISODES):
-        state, komi = await server.reset_game("No AI")
-        server.go = Go_uf(5, state, komi)
+        state, komi = await server.reset_game("No AI", 7)
+        server.go = Go_uf(7, state, komi)
 
         buffer: list[tuple[State, bool, torch.Tensor, list[State], dict[str, dict[str, Any]]]] = []
         is_white = False
@@ -392,15 +392,15 @@ async def main_eval():
     print("GameServer ready and client connected")
 
     plotter = Plotter()
-    agent = AlphaZeroAgent(5, plotter, batch_size=128)
+    agent = AlphaZeroAgent(7, plotter, batch_size=128)
     agent.load_checkpoint("checkpoint_56.pth")
     mcts = MCTS(server, plotter, agent, search_iterations=1000)
 
     NUM_EPISODES = 100
     outcome = 0
     for _ in range(NUM_EPISODES):
-        state, komi = await server.reset_game("Netburners")
-        server.go = Go_uf(5, state, komi)
+        state, komi = await server.reset_game("Netburners", 5)
+        server.go = Go_uf(7, state, komi)
 
         is_white = False
         done = False

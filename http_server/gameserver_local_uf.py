@@ -40,8 +40,8 @@ class GameServerGo:
             print(f"Error waiting for response: {e}")
             raise e
 
-    async def reset_game(self, opponent: str) -> tuple[State, float]:
-        res = await self.send_request({"command": "reset_game", "opponent": opponent})
+    async def reset_game(self, opponent: str, board_size: int) -> tuple[State, float]:
+        res = await self.send_request({"command": "reset_game", "opponent": opponent, "board_size": board_size})
         enc_s = self.go.encode_state(res["board"])
         return enc_s, res["komi"]
 
