@@ -145,6 +145,37 @@ class UnionFind:
         lib_positions = empty_nx * self.board_height + empty_ny
         self.liberties[new_root][lib_positions] = 1
 
+    def undo_move_changes(self, sim_state: State, undo_stack: list[UndoAction]) -> None:
+        """Apply the undo stack to revert changes to both state and UF"""
+        for action in reversed(undo_stack):
+            if action.action_type == UndoActionType.SET_STATE:
+                x, y = (
+                    action.position // self.board_height,
+                    action.position % self.board_height,
+                )
+                sim_state[x][y] = action.value
+            else:
+                # Let the UF handle other undo actions
+                if action.action_type == UndoActionType.SET_PARENT:
+                    self.parent[action.position] = action.value
+                elif action.action_type == UndoActionType.SET_RANK:
+                    self.rank[action.position] = action.value
+                elif action.action_type == UndoActionType.SET_STONES:
+                    self.stones[action.position] = action.value
+                elif action.action_type == UndoActionType.SET_LIBERTIES:
+                    self.liberties[action.position] = action.value
+                elif action.action_type == UndoActionType.SET_COLOR:
+                    self.colors[action.position] = action.value
+
+    def add_stone_to_group(self, stone, group_idx, x, y):
+        pass
+    
+    def remove_stone_from_group(self, stone, group_idx, x, y):
+        pass
+    
+    def group_union(self, group_a, group_b):
+        pass
+
     @staticmethod
     def get_uf_from_state(state: State) -> "UnionFind":
 
@@ -200,28 +231,6 @@ class UnionFind:
                             uf.liberties[enemy_group][idx] = 0
 
         return uf
-
-    def undo_move_changes(self, sim_state: State, undo_stack: list[UndoAction]) -> None:
-        """Apply the undo stack to revert changes to both state and UF"""
-        for action in reversed(undo_stack):
-            if action.action_type == UndoActionType.SET_STATE:
-                x, y = (
-                    action.position // self.board_height,
-                    action.position % self.board_height,
-                )
-                sim_state[x][y] = action.value
-            else:
-                # Let the UF handle other undo actions
-                if action.action_type == UndoActionType.SET_PARENT:
-                    self.parent[action.position] = action.value
-                elif action.action_type == UndoActionType.SET_RANK:
-                    self.rank[action.position] = action.value
-                elif action.action_type == UndoActionType.SET_STONES:
-                    self.stones[action.position] = action.value
-                elif action.action_type == UndoActionType.SET_LIBERTIES:
-                    self.liberties[action.position] = action.value
-                elif action.action_type == UndoActionType.SET_COLOR:
-                    self.colors[action.position] = action.value
 
     def copy(self):
         return UnionFind(
