@@ -2,7 +2,7 @@ import time  # pyright: ignore
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 
@@ -31,8 +31,8 @@ class UnionFind:
         parent: np.ndarray[Any, np.dtype[np.int8]],
         colors: np.ndarray[Any, np.dtype[np.int8]],
         rank: np.ndarray[Any, np.dtype[np.int8]],
-        stones: list[set[int]],
-        liberties: list[set[int]],
+        stones: np.ndarray[Any, np.dtype[np.int8]],  # list[set[int]],
+        liberties: np.ndarray[Any, np.dtype[np.int8]],  # list[set[int]],
         board_size: int,
     ):
         self.parent = parent
@@ -49,15 +49,17 @@ class UnionFind:
             (self.parent == other.parent).all()
             and (self.colors == other.colors).all()
             and (self.rank == other.rank).all()
-            and self.stones == other.stones
-            and self.liberties == other.liberties
+            and (self.stones == other.stones).all()
+            and (self.liberties == other.liberties).all()
         )
 
     def __str__(self):
         parent_str = ", ".join(map(str, self.parent))
         colors_str = ", ".join(map(str, self.colors))
         rank_str = ", ".join(map(str, self.rank))
-        return f"parent: [{parent_str}],\ncolors: [{colors_str}],\nrank: [{rank_str}],\nstones: {self.stones},\nliberties: {self.liberties}"
+        stone_str = ", ".join(map(str, self.stones))
+        liberties_str = ", ".join(map(str, self.liberties))
+        return f"parent: [{parent_str}],\ncolors: [{colors_str}],\nrank: [{rank_str}],\nstones: {stone_str},\nliberties: {liberties_str}"
 
     def find(self, i: int) -> int:
         """
@@ -100,34 +102,48 @@ class UnionFind:
         if self.rank[root_a] > self.rank[root_b]:
             # No rank change needed when attaching smaller to larger
             self.parent[root_b] = root_a
-            self.stones[root_a].update(self.stones[root_b])
-            self.stones[root_b].clear()
-            self.liberties[root_a].update(self.liberties[root_b])
-            self.liberties[root_b].clear()
+            self.stones[root_a] |= self.stones[root_b]
+            self.stones[root_b].fill(0)
+            self.liberties[root_a] |= self.liberties[root_b]
+            self.liberties[root_b].fill(0)
             self.rank[root_b] = -1
         else:
             self.parent[root_a] = root_b
-            self.stones[root_b].update(self.stones[root_a])
-            self.stones[root_a].clear()
-            self.liberties[root_b].update(self.liberties[root_a])
-            self.liberties[root_a].clear()
+            self.stones[root_b] |= self.stones[root_a]
+            self.stones[root_a].fill(0)
+            self.liberties[root_b] |= self.liberties[root_a]
+            self.liberties[root_a].fill(0)
             # Increment rank of root_b only if ranks were equal
             if self.rank[root_a] == self.rank[root_b]:
                 self.rank[root_b] += 1
             self.rank[root_a] = -1
 
         new_root = self.find_no_compression(a)
-        self.liberties[new_root].clear()
+        self.liberties[new_root].fill(0)
 
-        for stone in self.stones[new_root]:
-            sx, sy = stone // self.board_height, stone % self.board_height
-            # Check all four adjacent positions
-            for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                nx, ny = sx + dx, sy + dy
-                if 0 <= nx < self.board_height and 0 <= ny < self.board_height:
-                    if state[nx][ny] == 0:  # Empty = liberty
-                        liberty_pos = nx * self.board_height + ny
-                        self.liberties[new_root].add(liberty_pos)
+        # recalculate liberties
+        stone_indices = np.where(self.stones[new_root] == 1)[0]
+        sx = stone_indices // self.board_height
+        sy = stone_indices % self.board_height
+
+        neighbors: list[tuple[np.ndarray[Any, np.dtype[np.int8]], np.ndarray[Any, np.dtype[np.int8]]]] = []
+        for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+            nx = sx + dx
+            ny = sy + dy
+            valid = (nx >= 0) & (nx < self.board_height) & (ny >= 0) & (ny < self.board_height)
+            nx, ny = nx[valid], ny[valid]
+            neighbors.append((nx, ny))
+
+        # concat all neighbors
+        all_nx = np.concatenate([n[0] for n in neighbors])
+        all_ny = np.concatenate([n[1] for n in neighbors])
+
+        empty_mask = state[all_nx, all_ny] == 0
+        empty_nx = all_nx[empty_mask]
+        empty_ny = all_ny[empty_mask]
+
+        lib_positions = empty_nx * 3 + empty_ny
+        self.liberties[new_root][lib_positions] = 1
 
     @staticmethod
     def get_uf_from_state(state: State) -> "UnionFind":
@@ -137,8 +153,8 @@ class UnionFind:
         parent = np.full(width * width, -1, dtype=np.int8)
         colors = np.full(width * width, -1, dtype=np.int8)
         rank = np.full(width * width, -1, dtype=np.int8)
-        stones: list[set[int]] = [set() for _ in range(width * width)]
-        liberties: list[set[int]] = [set() for _ in range(width * width)]
+        stones = np.zeros((width * width, width * width), dtype=np.int8)
+        liberties = np.zeros((width * width, width * width), dtype=np.int8)
         uf = UnionFind(parent, colors, rank, stones, liberties, width)
 
         for x in range(width):
@@ -154,13 +170,14 @@ class UnionFind:
                             nidx = nx * width + ny
                             if state[nx][ny] in (1, 2):
                                 n_root = uf.find(nidx)
-                                liberties[n_root].add(idx)
+                                liberties[n_root][idx] = 1
                     continue
 
                 parent[idx] = idx
                 colors[idx] = state[x][y]
-                stones[idx] = set([idx])
-                liberties[idx] = set()
+                stones[idx].fill(0)
+                stones[idx][idx] = 1
+                liberties[idx].fill(0)
                 rank[idx] = 0
 
                 color = state[x][y]
@@ -172,7 +189,7 @@ class UnionFind:
                         nidx = nx * width + ny
                         # neighbor is empty
                         if state[nx][ny] == 0:
-                            liberties[idx_root].add(nidx)
+                            liberties[idx_root][nidx] = 1
                         # neighbor is same color
                         elif colors[nidx] == color:
                             uf.union(idx, nidx, state)
@@ -180,7 +197,7 @@ class UnionFind:
                         # neighbor is enemy
                         elif uf.colors[nidx] == enemy:
                             enemy_group = uf.find(nidx)
-                            uf.liberties[enemy_group].discard(idx)
+                            uf.liberties[enemy_group][idx] = 0
 
         return uf
 
@@ -211,17 +228,10 @@ class UnionFind:
             self.parent.copy(),
             self.colors.copy(),
             self.rank.copy(),
-            [s.copy() for s in self.stones],
-            [s.copy() for s in self.liberties],
+            self.stones.copy(),
+            self.liberties.copy(),
             self.board_height,
         )
-
-    def print(self):
-        print("parent: ", ", ".join(map(str, self.parent)))
-        print("colors: ", ", ".join(map(str, self.colors)))
-        print("rank: ", ", ".join(map(str, self.rank)))
-        print("stones: ", [s if s else cast(set[int], set()) for s in self.stones])
-        print("liberties: ", [l if l else cast(set[int], set()) for l in self.liberties])
 
 
 def rotate_state(state: list[str]) -> list[str]:
@@ -267,8 +277,9 @@ class Go_uf:
         parent = np.full(self.board_width * self.board_height, -1, dtype=np.int8)
         colors = np.full(self.board_width * self.board_height, -1, dtype=np.int8)
         rank = np.full(self.board_width * self.board_height, -1, dtype=np.int8)
-        stones: list[set[int]] = [set() for _ in range(5 * 5)]  # set of which stones are in the same group of a root
-        liberties: list[set[int]] = [set() for _ in range(self.board_width * self.board_width)]
+        stones = np.zeros((board_width * board_width, board_width * board_width), dtype=np.int8)
+        liberties = np.zeros((board_width * board_width, board_width * board_width), dtype=np.int8)
+
         self.uf = UnionFind(parent, colors, rank, stones, liberties, self.board_width)
 
     def __str__(self):
@@ -596,26 +607,15 @@ class Go_uf:
         undo_stack.append(UndoAction(UndoActionType.SET_PARENT, action, uf.parent[action]))
         undo_stack.append(UndoAction(UndoActionType.SET_COLOR, action, uf.colors[action]))
         undo_stack.append(UndoAction(UndoActionType.SET_RANK, action, uf.rank[action]))
-        undo_stack.append(
-            UndoAction(
-                UndoActionType.SET_STONES,
-                action,
-                uf.stones[action].copy() if action < len(uf.stones) else set(),
-            )
-        )
-        undo_stack.append(
-            UndoAction(
-                UndoActionType.SET_LIBERTIES,
-                action,
-                uf.liberties[action].copy() if action < len(uf.liberties) else set(),
-            )
-        )
+        undo_stack.append(UndoAction(UndoActionType.SET_STONES, action, uf.stones[action]))
+        undo_stack.append(UndoAction(UndoActionType.SET_LIBERTIES, action, uf.liberties[action]))
 
         # Initialize the new stone's data
         uf.parent[action] = action  # stone is its own root initially
         uf.colors[action] = color
-        uf.stones[action] = set([action])
-        uf.liberties[action] = set()
+        uf.stones[action].fill(0)
+        uf.stones[action][action] = 1
+        uf.liberties[action].fill(0)
         uf.rank[action] = 0  # new single nodes start with rank 0
 
         # is_consitent = self.verify_uf_consistency(state, uf)
@@ -687,11 +687,12 @@ class Go_uf:
                     old_liberties = uf.liberties[enemy_group].copy()
                     undo_stack.append(UndoAction(UndoActionType.SET_LIBERTIES, enemy_group, old_liberties))
 
-                    uf.liberties[enemy_group].discard(action)
+                    uf.liberties[enemy_group][action] = 0
 
                     # capture enemy group if no liberties
-                    if len(uf.liberties[enemy_group]) == 0:
-                        enemy_group_stones = list(uf.stones[enemy_group])
+                    # if len(uf.liberties[enemy_group]) == 0:
+                    if np.count_nonzero(uf.liberties[enemy_group]) == 0:
+                        stone_indices = np.where(uf.stones[enemy_group] == 1)[0]
                         # Record original state for the enemy group
                         undo_stack.append(
                             UndoAction(
@@ -701,7 +702,7 @@ class Go_uf:
                             )
                         )
 
-                        for stone in enemy_group_stones:
+                        for stone in stone_indices:
                             sx, sy = self.decode_action(stone)
                             # Record original state value
                             undo_stack.append(UndoAction(UndoActionType.SET_STATE, stone, state[sx][sy]))
@@ -715,11 +716,11 @@ class Go_uf:
                             uf.colors[stone] = -1
                             uf.parent[stone] = -1
                             uf.rank[stone] = -1
-                        uf.stones[enemy_group].clear()
-                        uf.liberties[enemy_group].clear()
+                        uf.stones[enemy_group].fill(0)
+                        uf.liberties[enemy_group].fill(0)
 
                         # update liberties of neighboring groups
-                        for stone in enemy_group_stones:
+                        for stone in stone_indices:
                             sx, sy = self.decode_action(stone)
                             for ddx, ddy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
                                 snx, sny = sx + ddx, sy + ddy
@@ -740,12 +741,13 @@ class Go_uf:
                                                     uf.liberties[neighbor_root].copy(),
                                                 )
                                             )
-                                        uf.liberties[neighbor_root].add(stone)
+                                        uf.liberties[neighbor_root][stone] = 1
 
         # is_consitent = self.verify_uf_consistency(state, uf)
         # assert is_consitent, "state and uf do not match"
         # check if placed stone has liberties
-        if len(uf.liberties[action_root]) == 0:
+        # if len(uf.liberties[action_root]) == 0:
+        if np.count_nonzero(uf.liberties[action_root]) == 0:
             # move was actually a suicide
             # is_consitent = self.verify_uf_consistency(state, uf)
             # assert is_consitent, "state and uf do not match"
@@ -780,7 +782,7 @@ class Go_uf:
                         return False
                     elif uf.rank[root] == -1:
                         return False
-                    elif len(uf.stones[root]) == 0:
+                    elif np.count_nonzero(uf.stones[root]) == 0:
                         return False
                 else:  # Empty or disabled
                     if uf.colors[idx] != -1:
