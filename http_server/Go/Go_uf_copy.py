@@ -26,15 +26,15 @@ class UndoAction:
 
 
 def get_bit_indices(mask: int) -> np.ndarray[Any, np.dtype[np.int32]]:
-    indices = [i for i in range(256) if (mask >> i) & 1]
+    indices = [i for i in range(64) if (mask >> i) & 1]
     return np.array(indices, dtype=np.int32)
 
 
-def add_stone_to_group(array: np.ndarray[Any, np.dtype[np.int256]], group_idx: int, pos: int):
+def add_stone_to_group(array: np.ndarray[Any, np.dtype[np.int64]], group_idx: int, pos: int):
     array[group_idx] |= 1 << pos
 
 
-def remove_stone_from_group(array: np.ndarray[Any, np.dtype[np.int256]], group_idx: int, pos: int):
+def remove_stone_from_group(array: np.ndarray[Any, np.dtype[np.int64]], group_idx: int, pos: int):
     array[group_idx] &= ~(1 << pos)
 
 
@@ -44,8 +44,8 @@ class UnionFind:
         parent: np.ndarray[Any, np.dtype[np.int8]],
         colors: np.ndarray[Any, np.dtype[np.int8]],
         rank: np.ndarray[Any, np.dtype[np.int8]],
-        stones: np.ndarray[Any, np.dtype[np.int256]],  # list[set[int]],
-        liberties: np.ndarray[Any, np.dtype[np.int256]],  # list[set[int]],
+        stones: np.ndarray[Any, np.dtype[np.int64]],  # list[set[int]],
+        liberties: np.ndarray[Any, np.dtype[np.int64]],  # list[set[int]],
         board_size: int,
     ):
         self.parent = parent
@@ -160,9 +160,9 @@ class UnionFind:
         # self.liberties[new_root][lib_positions] = 1
         # for lib_pos in lib_positions:
         #     add_stone_to_group(self.liberties, new_root, lib_pos)
-        bit_positions = lib_positions.astype(np.uint256)
-        bit_masks = np.left_shift(np.uint256(1), bit_positions)
-        mask = np.bitwise_or.reduce(bit_masks, initial=np.uint256(0))
+        bit_positions = lib_positions.astype(np.int64)
+        bit_masks = np.left_shift(np.int64(1), bit_positions)
+        mask = np.bitwise_or.reduce(bit_masks, initial=np.int64(0))
         self.liberties[new_root] |= mask
 
     def undo_move_changes(self, sim_state: State, undo_stack: list[UndoAction]) -> None:
@@ -195,8 +195,8 @@ class UnionFind:
         parent = np.full(width * width, -1, dtype=np.int8)
         colors = np.full(width * width, -1, dtype=np.int8)
         rank = np.full(width * width, -1, dtype=np.int8)
-        stones = np.zeros(width * width, dtype=np.int256)
-        liberties = np.zeros(width * width, dtype=np.int256)
+        stones = np.zeros(width * width, dtype=np.int64)
+        liberties = np.zeros(width * width, dtype=np.int64)
         uf = UnionFind(parent, colors, rank, stones, liberties, width)
 
         for x in range(width):
@@ -300,8 +300,8 @@ class Go_uf:
         parent = np.full(self.board_width * self.board_height, -1, dtype=np.int8)
         colors = np.full(self.board_width * self.board_height, -1, dtype=np.int8)
         rank = np.full(self.board_width * self.board_height, -1, dtype=np.int8)
-        stones = np.zeros(board_width * board_width, dtype=np.int256)
-        liberties = np.zeros(board_width * board_width, dtype=np.int256)
+        stones = np.zeros(board_width * board_width, dtype=np.int64)
+        liberties = np.zeros(board_width * board_width, dtype=np.int64)
 
         self.uf = UnionFind(parent, colors, rank, stones, liberties, self.board_width)
 
@@ -388,11 +388,15 @@ class Go_uf:
         # debug_state = state.copy()
 
         x, y = self.decode_action(action)
+        start = time.time()
         _ = self.simulate_move_original(state, x, y, color, additional_history)
+        end = time.time()
+        print(f"FLOOD FILL: Time: {end - start}")
 
         # is_consitent = self.verify_uf_consistency(state, uf)
         # assert is_consitent, "state and uf do not match"
 
+        start = time.time()
         is_legal, undo = self.simulate_move(
             state,
             uf,
@@ -400,6 +404,8 @@ class Go_uf:
             color,
             additional_history,
         )
+        end = time.time()
+        print(f"UNION FIND: Time: {end - start}")
 
         new_state = state.copy()
         new_uf = uf.copy()
@@ -587,7 +593,7 @@ class Go_uf:
                             sim_state[tx][ty] = 0
 
         end = time.time()
-        print(f"SIMULATE MOVE: Time: {end - start}")
+        print(f"FLOOD_FILL_CORE: Time: {end - start}")
 
         # check if placed router has liberties
         libs, _ = self.get_liberties(sim_state, x, y, set())
@@ -648,7 +654,7 @@ class Go_uf:
         # is_consitent = self.verify_uf_consistency(state, uf)
         # assert is_consitent, "state and uf do not match"
 
-        start = time.time()
+        # start = time.time()
 
         action_root = action
         for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
@@ -744,8 +750,8 @@ class Go_uf:
                                         # uf.liberties[neighbor_root][stone] = 1
                                         add_stone_to_group(uf.liberties, neighbor_root, stone)
 
-        end = time.time()
-        print(f"UNION FIND: Time: {end - start}")
+        # end = time.time()
+        # print(f"UNION FIND: Time: {end - start}")
 
         # is_consitent = self.verify_uf_consistency(state, uf)
         # assert is_consitent, "state and uf do not match"
