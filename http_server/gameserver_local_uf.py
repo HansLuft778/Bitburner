@@ -18,9 +18,8 @@ class GameServerGo:
         self.message_queue: asyncio.Queue[str] = asyncio.Queue()
         self.server = None  # Reference to the server task
 
-        self.go = Go_uf(
-            board_size, np.zeros((board_size, board_size), dtype=np.int8), 0
-        )
+        self.go = Go_uf(board_size, np.zeros((board_size, board_size), dtype=np.int8), 0)
+
     async def handle_client(self, websocket: Any):
         self.websocket = websocket
         self.client_connected.set()
@@ -40,8 +39,10 @@ class GameServerGo:
             print(f"Error waiting for response: {e}")
             raise e
 
-    async def reset_game(self, opponent: str, board_size: int) -> tuple[State, float]:
-        res = await self.send_request({"command": "reset_game", "opponent": opponent, "board_size": board_size})
+    async def reset_game(self, opponent: str) -> tuple[State, float]:
+        res = await self.send_request(
+            {"command": "reset_game", "opponent": opponent, "boardSize": self.go.board_height}
+        )
         enc_s = self.go.encode_state(res["board"])
         return enc_s, res["komi"]
 
@@ -56,27 +57,18 @@ class GameServerGo:
             self.go.board_height,
             self.go.board_height,
         ), f"Array must be 5x5: {state}"
-        assert np.all(
-            np.isin(state, [0, 1, 2, 3])
-        ), f"Array must only contain values 0, 1, 2, or 3: {state}"
+        assert np.all(np.isin(state, [0, 1, 2, 3])), f"Array must only contain values 0, 1, 2, or 3: {state}"
 
         v = self.go.get_valid_moves(state, uf, is_white, history)
         return np.append(v, True)
-    
 
-    async def make_move(
-        self, action: tuple[int, int], action_idx: int, is_white: bool
-    ) -> tuple[State, int, bool]:
+    async def make_move(self, action: tuple[int, int], action_idx: int, is_white: bool) -> tuple[State, int, bool]:
         # make move in bitburner
         if action == (-1, -1):  # pass
-            res = await self.send_request(
-                {"command": "pass_turn", "playAsWhite": is_white}
-            )
+            res = await self.send_request({"command": "pass_turn", "playAsWhite": is_white})
         else:
             x, y = action
-            res = await self.send_request(
-                {"command": "make_move", "x": x, "y": y, "playAsWhite": is_white}
-            )
+            res = await self.send_request({"command": "make_move", "x": x, "y": y, "playAsWhite": is_white})
 
         # make same move locally
         s, r, d = self.go.make_move(action_idx, is_white)
@@ -99,14 +91,10 @@ class GameServerGo:
     ) -> tuple[State, float, bool]:
         # make move in bitburner
         if action == (-1, -1):  # pass
-            res = await self.send_request(
-                {"command": "pass_turn", "playAsWhite": is_white}
-            )
+            res = await self.send_request({"command": "pass_turn", "playAsWhite": is_white})
         else:
             x, y = action
-            res = await self.send_request(
-                {"command": "make_move", "x": x, "y": y, "playAsWhite": is_white}
-            )
+            res = await self.send_request({"command": "make_move", "x": x, "y": y, "playAsWhite": is_white})
 
         # make same move locally
         self.go.make_move(action_idx, is_white)
@@ -136,16 +124,12 @@ class GameServerGo:
         uf: UnionFind,
         additional_history: list[State] = [],
     ) -> tuple[State, UnionFind]:
-        res = self.go.state_after_action(
-            action, is_white, state, uf, additional_history
-        )
+        res = self.go.state_after_action(action, is_white, state, uf, additional_history)
         assert res[0].shape == (
             self.go.board_height,
             self.go.board_height,
         ), f"Array must be 5x5: action: {action} state: {res[0]}"
-        assert np.all(
-            np.isin(res[0], [0, 1, 2, 3])
-        ), f"Array must only contain values 0, 1, 2, or 3: {res[0]}"
+        assert np.all(np.isin(res[0], [0, 1, 2, 3])), f"Array must only contain values 0, 1, 2, or 3: {res[0]}"
         return res
 
     def get_score(self) -> dict[str, dict[str, float]]:
