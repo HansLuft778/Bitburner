@@ -132,8 +132,8 @@ class GameServerGo:
         assert np.all(np.isin(res[0], [0, 1, 2, 3])), f"Array must only contain values 0, 1, 2, or 3: {res[0]}"
         return res
 
-    def get_score(self) -> dict[str, dict[str, float]]:
-        scores = self.go.get_score(self.go.komi)
+    def get_score(self, state: State, uf: UnionFind) -> dict[str, dict[str, float]]:
+        scores = self.go.get_score(state, uf, self.go.komi)
         return scores
 
     async def get_state(self) -> list[str]:

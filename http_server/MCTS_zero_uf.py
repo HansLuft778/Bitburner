@@ -15,47 +15,6 @@ from TreePlotter import TreePlot  # pyright: ignore
 State = np.ndarray[Any, np.dtype[np.int8]]
 
 
-# returns score based on current node
-# maybe should be based on root node (current player/who initiated the search)
-def get_score(server: GameServerGo, node: "Node") -> float:
-    score: dict[str, dict[str, float]] = server.get_score()
-    score_white = score["white"]["sum"]
-    score_black = score["black"]["sum"]
-    diff = score_white - score_black
-
-    # normalize score, so
-    max_score = node.agent.board_width * node.agent.board_height
-    normalized = diff / max_score
-
-    return normalized if node.is_white else -normalized
-
-
-def has_game_ended(server: GameServerGo, node: "Node") -> tuple[bool, float]:
-    # both pass back-to-back
-    if (
-        node.action
-        and node.parent
-        and node.parent.action
-        and node.action == server.go.board_height * server.go.board_height
-        and node.parent.action == server.go.board_height * server.go.board_height
-    ):
-        return (True, get_score(server, node))
-
-    # one pass, next player has no valid moves
-    if node.parent:
-        valid_moves = np.sum(node.get_valid_moves())
-        if node.parent.action == server.go.board_height * server.go.board_height and valid_moves == 0:
-            print(f"node.parent.action: {node.parent.action}, valid_moves: {valid_moves}")
-            return (True, get_score(server, node))
-
-    # # board full
-    space_available = np.any(node.state == 0)
-    if not space_available:
-        return (True, get_score(server, node))
-
-    return (False, 0)
-
-
 def get_ucb_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) -> float:
     """
     child.win_sum is from the childs perspective, so from the parent's perspective we must negate it
@@ -117,6 +76,46 @@ class Node:
                 self.valid_moves = self.server.request_valid_moves(self.is_white, self.state, self.uf)
         return self.valid_moves
 
+    # returns score based on current node
+    # maybe should be based on root node (current player/who initiated the search)
+    def get_score(self) -> float:
+        score: dict[str, dict[str, float]] = self.server.get_score(self.state, self.uf)
+        score_white = score["white"]["sum"]
+        score_black = score["black"]["sum"]
+        diff = score_white - score_black
+
+        # normalize score, so
+        max_score = self.agent.board_width * self.agent.board_height
+        normalized = diff / max_score
+
+        return normalized if self.is_white else -normalized
+
+    def has_game_ended(self) -> tuple[bool, float]:
+        board_size = self.agent.board_width * self.agent.board_height
+        # both pass back-to-back
+        if (
+            self.action
+            and self.parent
+            and self.parent.action
+            and self.action == board_size
+            and self.parent.action == board_size
+        ):
+            return (True, self.get_score())
+
+        # one pass, next player has no valid moves
+        if self.parent:
+            valid_moves = np.sum(self.get_valid_moves())
+            if self.parent.action == board_size and valid_moves == 0:
+                print(f"node.parent.action: {self.parent.action}, valid_moves: {valid_moves}")
+                return (True, self.get_score())
+
+        # board full
+        space_available = np.any(self.state == 0)
+        if not space_available:
+            return (True, self.get_score())
+
+        return (False, 0)
+
     def get_history(self) -> list[np.ndarray[Any, np.dtype[np.int8]]]:
         history: list[State] = []
         current = self
@@ -157,7 +156,6 @@ class Node:
 
                 next_state = self.state.copy()
                 next_uf = self.uf.copy()
-
                 self.uf.undo_move_changes(self.state, undo)
 
             child = Node(
@@ -219,7 +217,7 @@ class MCTS:
 
             # expansion
             end_check_start = time.time()
-            done, value = has_game_ended(self.server, node)
+            done, value = node.has_game_ended()
             self.timing_stats["end_check"] += time.time() - end_check_start
 
             if not done:
@@ -298,6 +296,9 @@ def choose_action(pi: torch.Tensor, episode_length: int) -> int:
 
 
 async def main() -> None:
+    torch.manual_seed(0)  # pyright: ignore
+    np.random.seed(0)
+
     board_size = 5
     server = GameServerGo(board_size)
     await server.wait()
@@ -314,7 +315,7 @@ async def main() -> None:
         state, komi = await server.reset_game("No AI")
         server.go = Go_uf(board_size, state, komi)
 
-        buffer: list[tuple[State, bool, torch.Tensor, list[State], dict[str, dict[str, Any]]]] = []
+        buffer: list[tuple[State, bool, torch.Tensor, list[State]]] = []  # score: dict[str, dict[str, Any]]]
         is_white = False
         done = False
         game_history = [state]
@@ -331,17 +332,8 @@ async def main() -> None:
             print(f"{best_move}, {pi_mcts[best_move]}")
             action = mcts.agent.decode_action(best_move)
             print(f"make move: {action}")
-            scores = server.get_score()
 
-            buffer.append(
-                (
-                    state,
-                    is_white,
-                    pi_mcts,
-                    game_history[: mcts.agent.num_past_steps],
-                    scores,
-                )
-            )
+            buffer.append((state, is_white, pi_mcts, game_history[: mcts.agent.num_past_steps]))
 
             # outcome is: 1 if black won, -1 is white won
             next_state, outcome, done = await server.make_move(action, best_move, is_white)
@@ -357,7 +349,7 @@ async def main() -> None:
         mcts.agent.plotter.update_wins_black(1 if outcome == 1 else -1)
 
         mcts.agent.policy_net.train()
-        for state, was_white, pi, history, scores in buffer:
+        for state, was_white, pi, history in buffer:
             # Flip if the buffer entry belongs to the opposite color
             #  - opposite of player who moves
 
@@ -375,7 +367,7 @@ async def main() -> None:
             mcts.agent.augment_state(state, pi, z, history, was_white)
             # mcts.agent.train_buffer.push(state, pi, z, history, was_white)
 
-        if iter < 5:
+        if iter < 2:
             print("Skipping training")
             continue
         game_length = len(game_history)
@@ -384,7 +376,7 @@ async def main() -> None:
 
         # Calculate training steps - scales with game length
         train_steps = min(max_train_steps, max(min_train_steps, int(game_length * 0.75)))
-        train_steps = 5
+        train_steps = 10
         print(f"Game length: {game_length}, performing {train_steps} training steps")
         for _ in range(train_steps):
             mcts.agent.train_step()

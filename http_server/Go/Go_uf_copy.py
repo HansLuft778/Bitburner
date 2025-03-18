@@ -402,7 +402,7 @@ class Go_uf:
             return np.array([]), new_uf
 
     def flood_fill_territory(
-        self, x: int, y: int, visited: set[tuple[int, int]]
+        self, state: State, x: int, y: int, visited: set[tuple[int, int]]
     ) -> tuple[int | None, set[tuple[int, int]]]:
         """
         A helper for territory detection, territory is how many empty nodes a color surrounds:
@@ -428,18 +428,18 @@ class Go_uf:
             visited.add((cx, cy))
 
             # If its empty -> part of the territory
-            if self.state[cx][cy] == 0:
+            if state[cx][cy] == 0:
                 territory.add((cx, cy))
                 # Check neighbors
                 for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
                     nx, ny = cx + dx, cy + dy
                     if 0 <= nx < self.board_width and 0 <= ny < self.board_height:
-                        if self.state[nx][ny] == 0:
+                        if state[nx][ny] == 0:
                             if (nx, ny) not in visited:
                                 queue.append((nx, ny))
                         # If it its a stone save its color
-                        elif self.state[nx][ny] in [1, 2]:
-                            adjacent_colors.add(self.state[nx][ny])
+                        elif state[nx][ny] in [1, 2]:
+                            adjacent_colors.add(state[nx][ny])
 
         # if territory is too large, its not valid
         if len(territory) > 2 * self.board_width:
@@ -451,7 +451,7 @@ class Go_uf:
         # Otherwise its disputed or belongs to no one
         return None, territory
 
-    def get_territory_scores(self) -> tuple[int, int]:
+    def get_territory_scores(self, state: State) -> tuple[int, int]:
         """
         Finds how many empty intersections belong to black or white via territory.
         Returns (white_territory, black_territory).
@@ -463,8 +463,8 @@ class Go_uf:
         for x in range(self.board_width):
             for y in range(self.board_height):
                 # 0 means node is empty
-                if (x, y) not in visited and self.state[x][y] == 0:
-                    color_owner, territory = self.flood_fill_territory(x, y, visited)
+                if (x, y) not in visited and state[x][y] == 0:
+                    color_owner, territory = self.flood_fill_territory(state, x, y, visited)
                     if color_owner == 1:  # black
                         black_territory += len(territory)
                     elif color_owner == 2:  # white
@@ -472,18 +472,18 @@ class Go_uf:
 
         return white_territory, black_territory
 
-    def get_score(self, komi: float) -> dict[str, dict[str, float]]:
+    def get_score(self, state: State, uf: UnionFind, komi: float) -> dict[str, dict[str, float]]:
         """
         Computes the score for white and black, including komi for white.
         - Each stone on the board counts as 1 point
         - Each empty node fully surrounded by one color also counts as territory
         """
         # Count stones directly
-        black_pieces = np.sum(self.state == 1)
-        white_pieces = np.sum(self.state == 2)
+        black_pieces = np.sum(state == 1)
+        white_pieces = np.sum(state == 2)
 
         # Get territory counts
-        white_territory, black_territory = self.get_territory_scores()
+        white_territory, black_territory = self.get_territory_scores(state)
 
         white_sum = white_pieces + white_territory + komi
         black_sum = black_pieces + black_territory
@@ -592,7 +592,6 @@ class Go_uf:
         color: int,
         additional_history: list[State] = [],
     ) -> tuple[bool, list[UndoAction]]:
-
         x, y = self.decode_action(action)
         if state[x][y] != 0:
             return False, []
@@ -806,7 +805,7 @@ class Go_uf:
         # outcome is 1 black won, -1 white won, 0 not ended
         outcome = 0
         if game_ended:
-            score = self.get_score(self.komi)
+            score = self.get_score(self.state, self.uf, self.komi)
             print(f"score: {score}")
             outcome = 1 if score["black"]["sum"] > score["white"]["sum"] else -1
 
