@@ -58,7 +58,7 @@ def has_game_ended(server: GameServerGo, node: "Node") -> tuple[bool, float]:
 
 def get_ucb_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) -> float:
     """
-    child.win_sum is from the parent's perspective.
+    child.win_sum is from the childs perspective, so from the parent's perspective we must negate it
       Q(s,a) = child.win_sum/child.visit_cnt
       U(s,a) = c_puct * P(s,a)* sqrt(parent.visit_cnt)/(1+child.visit_cnt)
     """
@@ -131,7 +131,7 @@ class Node:
     def next(self) -> "Node":
         best: tuple[Node | None, float] = (None, -999999999)
         for c in self.children:
-            score = get_ucb_value(c, self.visit_cnt, c_puct=1.5)
+            score = get_ucb_value(c, self.visit_cnt, c_puct=1.8)
             if score > best[1]:
                 best = (c, score)
 
@@ -250,10 +250,10 @@ class MCTS:
 
                 # Apply dirichlet noise
                 if node.parent is None:
-                    alpha = 0.15
+                    alpha = 0.2
                     dir_noise = np.random.dirichlet([alpha] * len(policy))
                     dir_noise_tensor = torch.tensor(dir_noise, device=policy.device, dtype=policy.dtype)
-                    epsilon = 0.15  # noise weight
+                    epsilon = 0.2  # noise weight
                     policy = (1 - epsilon) * policy + epsilon * dir_noise_tensor
 
                     # Renormalize
@@ -297,8 +297,14 @@ class MCTS:
         return props
 
 
+def choose_action(pi: torch.Tensor, episode_length: int) -> int:
+    if episode_length < 4:
+        return int(np.random.choice(torch.nonzero(pi[:-1]).flatten().cpu()))
+    return int(torch.argmax(pi).item())
+
+
 async def main() -> None:
-    board_size = 7
+    board_size = 5
     server = GameServerGo(board_size)
     await server.wait()
     print("GameServer ready and client connected")
@@ -306,9 +312,9 @@ async def main() -> None:
     plotter = Plotter()
     agent = AlphaZeroAgent(board_size, plotter)
     # agent.load_checkpoint("checkpoint_69.pth")
-    mcts = MCTS(server, plotter, agent, search_iterations=100)
+    mcts = MCTS(server, plotter, agent, search_iterations=800)
 
-    NUM_EPISODES = 1000
+    NUM_EPISODES = 600
     outcome = 0
     for iter in range(NUM_EPISODES):
         state, komi = await server.reset_game("No AI")
@@ -319,13 +325,15 @@ async def main() -> None:
         done = False
         game_history = [state]
         mcts.agent.policy_net.eval()
+        episode_length = 0
         while not done:
             before = time.time()
             pi_mcts = mcts.search(state, server.go.uf, is_white)
             after = time.time()
             print(f"TOOK: {after-before}s")
             print(pi_mcts)
-            best_move = int(torch.argmax(pi_mcts).item())
+            # best_move = int(torch.argmax(pi_mcts).item())
+            best_move = choose_action(pi_mcts, episode_length)
             print(f"{best_move}, {pi_mcts[best_move]}")
             action = mcts.agent.decode_action(best_move)
             print(f"make move: {action}")
@@ -347,6 +355,7 @@ async def main() -> None:
 
             is_white = not is_white
             state = next_state
+            episode_length += 1
 
         assert outcome != 0, "outcome should not be 0 after a game ended"
 
@@ -361,26 +370,27 @@ async def main() -> None:
             z = outcome if not was_white else -outcome
 
             # add bonus for territory + pieces, without komi
-            white_territory = scores["white"]["territory"] * 1.2 + scores["white"]["pieces"] * 0.8
-            black_territory = scores["black"]["territory"] * 1.2 + scores["black"]["pieces"] * 0.8
+            # white_territory = scores["white"]["territory"] * 1.2 + scores["white"]["pieces"] * 0.8
+            # black_territory = scores["black"]["territory"] * 1.2 + scores["black"]["pieces"] * 0.8
 
-            territory_bonus = (  # pyright: ignore
-                (black_territory - white_territory) / (mcts.agent.board_width * mcts.agent.board_width) * 0.5
-            )
-
+            # territory_bonus = (  # pyright: ignore
+            #     (black_territory - white_territory) / (mcts.agent.board_width * mcts.agent.board_width) * 0.5
+            # )
             # z += territory_bonus if not was_white else -territory_bonus
 
-            # move_count_bonus = min(len(game_history) / 15.0, 0.5)  # Cap at 0.5
-            # z += move_count_bonus if not was_white else -move_count_bonus
             mcts.agent.augment_state(state, pi, z, history, was_white)
             # mcts.agent.train_buffer.push(state, pi, z, history, was_white)
 
+        if iter < 5:
+            print("Skipping training")
+            continue
         game_length = len(game_history)
         min_train_steps = 10  # Minimum number of training steps
         max_train_steps = 40  # Maximum number of training steps
 
         # Calculate training steps - scales with game length
         train_steps = min(max_train_steps, max(min_train_steps, int(game_length * 0.75)))
+        train_steps = 5
         print(f"Game length: {game_length}, performing {train_steps} training steps")
         for _ in range(train_steps):
             mcts.agent.train_step()

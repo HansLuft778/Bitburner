@@ -38,9 +38,7 @@ class ResNet(nn.Module):
             nn.ReLU(),
         )
 
-        self.feature_extractor = nn.ModuleList(
-            [ResBlock(num_hiden) for _ in range(num_res_blocks)]
-        )
+        self.feature_extractor = nn.ModuleList([ResBlock(num_hiden) for _ in range(num_res_blocks)])
 
         self.policyHead = nn.Sequential(
             nn.Conv2d(num_hiden, 64, kernel_size=3, padding=1),
@@ -88,9 +86,7 @@ class ResBlock(nn.Module):
 
 class TrainingBuffer:
     def __init__(self, capacity: int = 10000):
-        self.buffer: deque[tuple[State, torch.Tensor, int, list[State], bool]] = deque(
-            maxlen=capacity
-        )
+        self.buffer: deque[tuple[State, torch.Tensor, int, list[State], bool]] = deque(maxlen=capacity)
 
     def push(
         self,
@@ -114,9 +110,10 @@ class AlphaZeroAgent:
         self,
         board_width: int,
         plotter: Plotter,
-        lr: float = 3e-4,
-        batch_size: int = 64,
-        num_past_steps: int = 2,
+        lr: float = 8e-5,
+        batch_size: int = 128,
+        num_past_steps: int = 3,
+        wheight_decay: float = 2e-4,
         checkpoint_dir: str = "models/checkpoints",
     ):
         self.board_width = board_width
@@ -128,18 +125,14 @@ class AlphaZeroAgent:
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        self.policy_net = ResNet(
-            board_width, board_width, 6, num_past_steps=num_past_steps, num_hiden=96
-        ).to(self.device)
+        self.policy_net = ResNet(board_width, board_width, 5, num_past_steps=num_past_steps, num_hiden=96).to(
+            self.device
+        )
         self.policy_net.eval()
 
-        self.optimizer = optim.Adam(
-            self.policy_net.parameters(), lr=lr, weight_decay=1e-4
-        )
+        self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr, weight_decay=wheight_decay)
 
-        self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
-            self.optimizer, T_max=10000, eta_min=1e-5
-        )
+        self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=2000, eta_min=5e-6)
 
         self.train_buffer = TrainingBuffer()
 
@@ -195,9 +188,7 @@ class AlphaZeroAgent:
 
         self.train_buffer.push(state, pi_mcts, outcome, history, was_white)
 
-        pi_board = pi_mcts[: self.board_width * self.board_height].reshape(
-            self.board_width, self.board_height
-        )
+        pi_board = pi_mcts[: self.board_width * self.board_height].reshape(self.board_width, self.board_height)
         pi_pass = pi_mcts[-1]
 
         # rotate state
@@ -208,9 +199,7 @@ class AlphaZeroAgent:
             rotated_pi_board = torch.rot90(pi_board, rot)
             rotated_pi = torch.cat([rotated_pi_board.flatten(), pi_pass.unsqueeze(0)])
 
-            self.train_buffer.push(
-                rotated_state, rotated_pi, outcome, rotated_history, was_white
-            )
+            self.train_buffer.push(rotated_state, rotated_pi, outcome, rotated_history, was_white)
 
         # mirror state
         mirrored_state = np.fliplr(state)
@@ -218,18 +207,14 @@ class AlphaZeroAgent:
         mirrored_pi_board = torch.fliplr(pi_board)
         mirrored_pi = torch.cat([mirrored_pi_board.flatten(), pi_pass.unsqueeze(0)])
 
-        self.train_buffer.push(
-            mirrored_state, mirrored_pi, outcome, mirrored_history, was_white
-        )
+        self.train_buffer.push(mirrored_state, mirrored_pi, outcome, mirrored_history, was_white)
 
         for rot in range(1, 4):
             mirrored_rotated_state = np.rot90(mirrored_state, rot)
             mirrored_rotated_history = [np.rot90(h, rot) for h in mirrored_history]
 
             mirrored_rotated_pi_board = torch.rot90(mirrored_pi_board, rot)
-            mirrored_rotated_pi = torch.cat(
-                [mirrored_rotated_pi_board.flatten(), pi_pass.unsqueeze(0)]
-            )
+            mirrored_rotated_pi = torch.cat([mirrored_rotated_pi_board.flatten(), pi_pass.unsqueeze(0)])
 
             self.train_buffer.push(
                 mirrored_rotated_state,
@@ -239,9 +224,7 @@ class AlphaZeroAgent:
                 was_white,
             )
 
-    def preprocess_state(
-        self, board_state: State, history: list[State], is_white: bool
-    ):
+    def preprocess_state(self, board_state: State, history: list[State], is_white: bool):
         """
         Convert the board (numpy array) into a float tensor of shape [1,8,w,h].
         1 -> 1.0  Black, Channel 1, 3, 5
@@ -255,11 +238,7 @@ class AlphaZeroAgent:
 
         # disabled channel
         disabled_channel = torch.zeros(w, h, device=self.device)
-        side_channel = (
-            torch.ones(w, h, device=self.device)
-            if is_white
-            else torch.zeros(w, h, device=self.device)
-        )
+        side_channel = torch.ones(w, h, device=self.device) if is_white else torch.zeros(w, h, device=self.device)
         current_black = torch.zeros(w, h, device=self.device)
         current_white = torch.zeros(w, h, device=self.device)
 
@@ -336,6 +315,9 @@ class AlphaZeroAgent:
         # 2. Convert Python data into PyTorch tensors
         state_tensor_list: list[torch.Tensor] = []
         for i in range(len(batch)):
+            # side_str = "White" if is_white_list[i] else "Black"
+            # outcome_str = "Win" if z_list[i] > 0 else "Loss"
+            # print(f"[DEBUG] Next to move: {side_str}, Label says: {outcome_str} (z={z_list[i]})")
             t = self.preprocess_state(states_list[i], history_list[i], is_white_list[i])
             state_tensor_list.append(t)
 
@@ -366,6 +348,4 @@ class AlphaZeroAgent:
         self.scheduler.step()
 
         current_lr = self.scheduler.get_last_lr()[0]
-        print(
-            f"Training step: loss={loss}, policy_loss={policy_loss}, value_loss={value_loss}, lr={current_lr}"
-        )
+        print(f"Training step: loss={loss}, policy_loss={policy_loss}, value_loss={value_loss}, lr={current_lr}")

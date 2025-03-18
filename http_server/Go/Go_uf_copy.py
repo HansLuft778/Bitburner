@@ -386,20 +386,23 @@ class Go_uf:
         color = 2 if is_white else 1
 
         # debug_state = state.copy()
+        # debug_uf = uf.copy()
 
-        # x, y = self.decode_action(action)
         # start = time.time()
-        # _ = self.simulate_move_original(state, x, y, color, additional_history)
+        # x, y = self.decode_action(action)
+        # new_state_original = self.simulate_move_original(state, x, y, color, additional_history)
         # end = time.time()
         # print(f"FLOOD FILL: Time: {end - start}")
 
         # is_consitent = self.verify_uf_consistency(state, uf)
         # assert is_consitent, "state and uf do not match"
+        new_state = state.copy()
+        new_uf = uf.copy()
 
         # start = time.time()
-        is_legal, undo = self.simulate_move(
-            state,
-            uf,
+        is_legal, _ = self.simulate_move(
+            new_state,
+            new_uf,
             action,
             color,
             additional_history,
@@ -407,18 +410,15 @@ class Go_uf:
         # end = time.time()
         # print(f"UNION FIND: Time: {end - start}")
 
-        new_state = state.copy()
-        new_uf = uf.copy()
-
         # if is_legal:
         #     assert new_state_original is not None, f"States must be equal: {new_state_original}"
         # if new_state_original is None:
         #     assert not is_legal, f"States must be equal: {state}"
         # if is_legal and new_state_original is not None:
-        #     assert np.array_equal(state, new_state_original), f"States must be equal: {state} {new_state_original}"
+        #     assert np.array_equal(new_state, new_state_original), f"States must be equal: {state} {new_state_original}"
 
-        if is_legal:
-            uf.undo_move_changes(state, undo)
+        # if is_legal:
+        #     uf.undo_move_changes(state, undo)
 
         if is_legal:
             return new_state, new_uf
@@ -672,13 +672,7 @@ class Go_uf:
                     root_nidx = uf.find_no_compression(nidx)
 
                     # Record original parent, rank, stones, liberties for both roots
-                    undo_stack.append(
-                        UndoAction(
-                            UndoActionType.SET_PARENT,
-                            action_root,
-                            uf.parent[action_root],
-                        )
-                    )
+                    undo_stack.append(UndoAction(UndoActionType.SET_PARENT, action_root, uf.parent[action_root]))
                     undo_stack.append(UndoAction(UndoActionType.SET_RANK, action_root, uf.rank[action_root]))
                     undo_stack.append(UndoAction(UndoActionType.SET_STONES, action_root, uf.stones[action_root]))
                     undo_stack.append(UndoAction(UndoActionType.SET_LIBERTIES, action_root, uf.liberties[action_root]))
@@ -699,6 +693,37 @@ class Go_uf:
 
                     # uf.liberties[enemy_group][action] = 0
                     remove_stone_from_group(uf.liberties, enemy_group, action)
+
+                    # Recompute liberties for the enemy group in case
+                    # TODO: capsule in a function for less code duplication
+                    uf.liberties[enemy_group] = 0
+                    stone_indices = get_bit_indices(uf.stones[enemy_group])
+                    sx_vec = stone_indices // self.board_height
+                    sy_vec = stone_indices % self.board_height
+
+                    all_neighbors_x: list[np.ndarray[Any, np.dtype[np.int64]]] = []
+                    all_neighbors_y: list[np.ndarray[Any, np.dtype[np.int64]]] = []
+                    for dx2, dy2 in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                        nx2 = sx_vec + dx2
+                        ny2 = sy_vec + dy2
+                        valid = (nx2 >= 0) & (nx2 < self.board_height) & (ny2 >= 0) & (ny2 < self.board_height)
+                        nx2, ny2 = nx2[valid], ny2[valid]
+                        all_neighbors_x.append(nx2)
+                        all_neighbors_y.append(ny2)
+
+                    all_nx = np.concatenate(all_neighbors_x)
+                    all_ny = np.concatenate(all_neighbors_y)
+
+                    empty_mask = state[all_nx, all_ny] == 0
+                    empty_nx = all_nx[empty_mask]
+                    empty_ny = all_ny[empty_mask]
+
+                    lib_positions = empty_nx * self.board_height + empty_ny
+                    # Combine them in a single bitmask:
+                    bit_positions = lib_positions.astype(np.int64)
+                    bit_masks = np.left_shift(np.int64(1), bit_positions)
+                    mask = np.bitwise_or.reduce(bit_masks, initial=np.int64(0))
+                    uf.liberties[enemy_group] |= mask
 
                     # capture enemy group if no liberties
                     # if len(uf.liberties[enemy_group]) == 0:
