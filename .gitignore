@@ -138,6 +138,7 @@ mirror/
 build/
 
 .vscode/*
+.vscode/
 !.vscode/launch.json
 
 checkpoints/
