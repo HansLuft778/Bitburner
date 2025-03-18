@@ -352,20 +352,8 @@ async def main() -> None:
         for state, was_white, pi, history in buffer:
             # Flip if the buffer entry belongs to the opposite color
             #  - opposite of player who moves
-
             z = outcome if not was_white else -outcome
-
-            # add bonus for territory + pieces, without komi
-            # white_territory = scores["white"]["territory"] * 1.2 + scores["white"]["pieces"] * 0.8
-            # black_territory = scores["black"]["territory"] * 1.2 + scores["black"]["pieces"] * 0.8
-
-            # territory_bonus = (  # pyright: ignore
-            #     (black_territory - white_territory) / (mcts.agent.board_width * mcts.agent.board_width) * 0.5
-            # )
-            # z += territory_bonus if not was_white else -territory_bonus
-
             mcts.agent.augment_state(state, pi, z, history, was_white)
-            # mcts.agent.train_buffer.push(state, pi, z, history, was_white)
 
         if iter < 2:
             print("Skipping training")
