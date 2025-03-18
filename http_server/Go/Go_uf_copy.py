@@ -385,21 +385,9 @@ class Go_uf:
 
         color = 2 if is_white else 1
 
-        # debug_state = state.copy()
-        # debug_uf = uf.copy()
-
-        # start = time.time()
-        # x, y = self.decode_action(action)
-        # new_state_original = self.simulate_move_original(state, x, y, color, additional_history)
-        # end = time.time()
-        # print(f"FLOOD FILL: Time: {end - start}")
-
-        # is_consitent = self.verify_uf_consistency(state, uf)
-        # assert is_consitent, "state and uf do not match"
         new_state = state.copy()
         new_uf = uf.copy()
 
-        # start = time.time()
         is_legal, _ = self.simulate_move(
             new_state,
             new_uf,
@@ -407,18 +395,6 @@ class Go_uf:
             color,
             additional_history,
         )
-        # end = time.time()
-        # print(f"UNION FIND: Time: {end - start}")
-
-        # if is_legal:
-        #     assert new_state_original is not None, f"States must be equal: {new_state_original}"
-        # if new_state_original is None:
-        #     assert not is_legal, f"States must be equal: {state}"
-        # if is_legal and new_state_original is not None:
-        #     assert np.array_equal(new_state, new_state_original), f"States must be equal: {state} {new_state_original}"
-
-        # if is_legal:
-        #     uf.undo_move_changes(state, undo)
 
         if is_legal:
             return new_state, new_uf
@@ -614,20 +590,13 @@ class Go_uf:
         uf: UnionFind,
         action: int,
         color: int,
-        # i_know_its_legal: bool,
         additional_history: list[State] = [],
     ) -> tuple[bool, list[UndoAction]]:
 
-        # is_consitent = self.verify_uf_consistency(state, uf)
-        # assert is_consitent, "state and uf do not match"
-
         x, y = self.decode_action(action)
         if state[x][y] != 0:
-            # is_consitent = self.verify_uf_consistency(state, uf)
-            # assert is_consitent, "state and uf do not match"
             return False, []
 
-        # state_before = state.copy()
         undo_stack: list[UndoAction] = []
 
         undo_stack.append(UndoAction(UndoActionType.SET_STATE, action, state[x][y]))
@@ -648,13 +617,8 @@ class Go_uf:
         uf.colors[action] = color
         uf.stones[action] = 0
         add_stone_to_group(uf.stones, action, action)
-        # uf.stones[action][action] = 1
         uf.liberties[action] = 0  # liberties are bitmask, 0 (empty) initially
         uf.rank[action] = 0  # new single nodes start with rank 0
-        # is_consitent = self.verify_uf_consistency(state, uf)
-        # assert is_consitent, "state and uf do not match"
-
-        # start = time.time()
 
         action_root = action
         for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
@@ -664,8 +628,6 @@ class Go_uf:
                 # neighbor is empty
                 if state[nx][ny] == 0:
                     undo_stack.append(UndoAction(UndoActionType.SET_LIBERTIES, action_root, uf.liberties[action_root]))
-
-                    # uf.liberties[action_root][nidx] = 1
                     add_stone_to_group(uf.liberties, action_root, nidx)
                 # neighbor is same color
                 elif uf.colors[nidx] == color:
@@ -690,8 +652,6 @@ class Go_uf:
 
                     # Record original liberties for the enemy group
                     undo_stack.append(UndoAction(UndoActionType.SET_LIBERTIES, enemy_group, uf.liberties[enemy_group]))
-
-                    # uf.liberties[enemy_group][action] = 0
                     remove_stone_from_group(uf.liberties, enemy_group, action)
 
                     # Recompute liberties for the enemy group in case
@@ -726,9 +686,7 @@ class Go_uf:
                     uf.liberties[enemy_group] |= mask
 
                     # capture enemy group if no liberties
-                    # if len(uf.liberties[enemy_group]) == 0:
                     if uf.liberties[enemy_group] == 0:
-                        # stone_indices = np.where(uf.stones[enemy_group] == 1)[0]
                         stone_indices = get_bit_indices(uf.stones[enemy_group])
                         # Record original state for the enemy group
                         undo_stack.append(UndoAction(UndoActionType.SET_STONES, enemy_group, uf.stones[enemy_group]))
@@ -772,36 +730,21 @@ class Go_uf:
                                                     uf.liberties[neighbor_root],
                                                 )
                                             )
-                                        # uf.liberties[neighbor_root][stone] = 1
                                         add_stone_to_group(uf.liberties, neighbor_root, stone)
 
-        # end = time.time()
-        # print(f"UNION FIND: Time: {end - start}")
-
-        # is_consitent = self.verify_uf_consistency(state, uf)
-        # assert is_consitent, "state and uf do not match"
         # check if placed stone has liberties
-        # if len(uf.liberties[action_root]) == 0:
         if uf.liberties[action_root] == 0:
             # move was actually a suicide
-            # is_consitent = self.verify_uf_consistency(state, uf)
-            # assert is_consitent, "state and uf do not match"
             uf.undo_move_changes(state, undo_stack)
-            # assert np.array_equal(state, state_before)
             return False, undo_stack
 
         # check for repeat
         is_repeat = self.check_state_is_repeat(state, additional_history)
         if is_repeat:
             # move was actually a repeat
-            # is_consitent = self.verify_uf_consistency(state, uf)
-            # assert is_consitent, "state and uf do not match"
             uf.undo_move_changes(state, undo_stack)
-            # assert np.array_equal(state_before, state)
             return False, undo_stack
 
-        # is_consitent = self.verify_uf_consistency(state, uf)
-        # assert is_consitent, f"UF is not consistent with the board state"
         return True, undo_stack
 
     def verify_uf_consistency(self, state: State, uf: UnionFind) -> bool:
