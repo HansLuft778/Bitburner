@@ -139,32 +139,26 @@ class Node:
         return best[0]
 
     def expand(self, q_values: torch.Tensor) -> None:
-        valid_moves = self.get_valid_moves().flatten()
-        empty_cells = np.sum(self.state == 0)
         board_size = self.agent.board_width * self.agent.board_height
-        # Penalize passing if board is mostly empty
-        empty_percentage = empty_cells / board_size
-        if empty_percentage > 0.5:
-            q_values[self.agent.board_width * self.agent.board_width] *= (1.0 - empty_percentage) * 0.5
-
-        for action, q_value in enumerate(q_values):
-            if not valid_moves[action]:
-                continue
-            if action != self.agent.board_width * self.agent.board_width:
-                next_state, next_uf = self.server.get_state_after_move(
-                    action, self.state, self.is_white, self.uf, self.get_history()
-                )
-
-                assert next_state.shape == (
-                    self.agent.board_width,
-                    self.agent.board_width,
-                ), f"Array must be 5x5: action:{action} state: {next_state}"
-                assert np.all(
-                    np.isin(next_state, [0, 1, 2, 3])
-                ), f"Array must only contain values 0, 1, 2, or 3: {next_state}"
-            else:
+        for action in range(board_size + 1):
+            if action == board_size:
                 next_state = self.state.copy()
                 next_uf = self.uf.copy()
+                # Penalize passing if board is mostly empty
+                empty_cells = np.sum(self.state == 0)
+                empty_percentage = empty_cells / board_size
+                if empty_percentage > 0.5:
+                    q_values[action] *= (1.0 - empty_percentage) * 0.5
+            else:
+                color = 2 if self.is_white else 1
+                is_legal, undo = self.server.go.simulate_move(self.state, self.uf, action, color, self.get_history())
+                if not is_legal:
+                    continue
+
+                next_state = self.state.copy()
+                next_uf = self.uf.copy()
+
+                self.uf.undo_move_changes(self.state, undo)
 
             child = Node(
                 next_state,
@@ -174,7 +168,7 @@ class Node:
                 self.agent,
                 self,
                 action,
-                q_value.item(),
+                q_values[action].item(),
             )
             self.children.append(child)
 
@@ -312,7 +306,7 @@ async def main() -> None:
     plotter = Plotter()
     agent = AlphaZeroAgent(board_size, plotter)
     # agent.load_checkpoint("checkpoint_69.pth")
-    mcts = MCTS(server, plotter, agent, search_iterations=800)
+    mcts = MCTS(server, plotter, agent, search_iterations=1000)
 
     NUM_EPISODES = 600
     outcome = 0
