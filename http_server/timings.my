@@ -56,3 +56,40 @@ expansion: 1.507s (31.6%)
 backprop: 0.001s (0.0%)
 final_policy: 0.001s (0.0%)
 TOOK: 4.768s
+
+
+Union find with no undo stack:
+Total search time: 7.152s
+selection: 0.023s (0.3%) - Avg: 0.02ms
+end_check: 0.332s (4.6%) - Avg: 0.33ms
+move_prep: 0.002s (0.0%) - Avg: 0.00ms
+nn_inference: 3.220s (45.0%) - Avg: 3.22ms
+policy_compute: 0.112s (1.6%) - Avg: 0.11ms
+expansion: 3.459s (48.4%) - Avg: 3.46ms
+backprop: 0.001s (0.0%) - Avg: 0.00ms
+final_policy: 0.001s (0.0%) - Avg: 0.00ms
+TOOK: 7.153305292129517s
+
+Union find with undo stack:
+Total search time: 7.501s
+selection: 0.018s (0.2%) - Avg: 0.02ms
+end_check: 0.225s (3.0%) - Avg: 0.23ms
+move_prep: 0.003s (0.0%) - Avg: 0.00ms
+nn_inference: 3.597s (48.0%) - Avg: 3.60ms
+policy_compute: 0.150s (2.0%) - Avg: 0.15ms
+expansion: 3.504s (46.7%) - Avg: 3.50ms
+backprop: 0.002s (0.0%) - Avg: 0.00ms
+final_policy: 0.001s (0.0%) - Avg: 0.00ms
+TOOK: 7.502154111862183s
+
+Union find with undo stack and numpy vectorization:
+Total search time: 6.488s
+selection: 0.018s (0.3%) - Avg: 0.02ms
+end_check: 0.376s (5.8%) - Avg: 0.38ms
+move_prep: 0.003s (0.0%) - Avg: 0.00ms
+nn_inference: 3.168s (48.8%) - Avg: 3.17ms
+policy_compute: 0.125s (1.9%) - Avg: 0.12ms
+expansion: 2.795s (43.1%) - Avg: 2.80ms
+backprop: 0.001s (0.0%) - Avg: 0.00ms
+final_policy: 0.001s (0.0%) - Avg: 0.00ms
+TOOK: 6.4895219802856445s

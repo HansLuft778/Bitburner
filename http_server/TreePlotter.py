@@ -1,6 +1,5 @@
-import igraph  # type: ignore
 import plotly.graph_objects as go  # type: ignore
-from igraph import EdgeSeq, Graph
+from igraph import EdgeSeq, Graph  # type: ignore
 
 # from MCTS_zero import Node
 
@@ -11,20 +10,24 @@ def rotate_state(state: list[str]) -> list[str]:
     for i in range(len(state)):
         tmp = ""
         for j in range(len(state)):
-            tmp += state[j][i]
+            tmp += str(state[j][i])
 
         rotated_state.append(tmp)
     rotated_state.reverse()
     return rotated_state
 
 
-def beatify_state(state: list[str]) -> str:
+def beatify_state(state: list[str], delim="<br>") -> str:
     beautified_state: str = ""
     for i in range(len(state)):
         for j in range(len(state)):
             beautified_state += f"{state[i][j]} "
-        beautified_state += "<br>"
+        beautified_state += delim
     return beautified_state
+
+
+def rotate_and_beatify(state: list[str], delim: str = "<br>") -> str:
+    return beatify_state(rotate_state(state), delim)
 
 
 class TreePlot:
@@ -39,7 +42,7 @@ class TreePlot:
             idx = len(self.nodes)
             self.nodes.append(node)
             self.labels.append(
-                f"win: {node.win_sum}<br>visit: {node.visit_cnt}<br>white: {node.is_white}<br>{beatify_state(rotate_state(node.state))}"
+                f"win: {node.win_sum}<br>visit: {node.visit_cnt}<br>white: {node.is_white}<br>{rotate_and_beatify(node.state)}"
             )
             if parent_idx is not None:
                 self.edges.append((parent_idx, idx))
@@ -57,7 +60,7 @@ class TreePlot:
         for i, pos in enumerate(lay):
             Xn.append(pos[0])
             Yn.append(pos[1])
-            
+
         for e in G.es:
             Xe += [lay[e.source][0], lay[e.target][0], None]
             Ye += [lay[e.source][1], lay[e.target][1], None]

@@ -1,0 +1,3 @@
+ - union find for game state management
+ - merging mcts nodes to save memory and improve performance (making a DAG esentially)
+ - prallel mcts and virtual loss
