@@ -305,8 +305,8 @@ def choose_action(pi: torch.Tensor, episode_length: int) -> int:
 
 
 async def main() -> None:
-    torch.manual_seed(0)  # pyright: ignore
-    np.random.seed(0)
+    # torch.manual_seed(0)  # pyright: ignore
+    # np.random.seed(0)
 
     board_size = 5
     server = GameServerGo(board_size)
@@ -321,7 +321,7 @@ async def main() -> None:
     NUM_EPISODES = 600
     outcome = 0
     for iter in range(NUM_EPISODES):
-        state, komi = await server.reset_game("Debug")
+        state, komi = await server.reset_game("No AI")
         server.go = Go_uf(board_size, state, komi)
 
         buffer: list[tuple[State, bool, torch.Tensor, list[State]]] = []  # score: dict[str, dict[str, Any]]]
@@ -364,16 +364,16 @@ async def main() -> None:
             z = outcome if not was_white else -outcome
             mcts.agent.augment_state(state, pi, z, history, was_white)
 
-        if iter < 2:
-            print("Skipping training")
-            continue
+        # if iter < 2:
+        #     print("Skipping training")
+        #     continue
         game_length = len(game_history)
         min_train_steps = 10  # Minimum number of training steps
         max_train_steps = 40  # Maximum number of training steps
 
         # Calculate training steps - scales with game length
         train_steps = min(max_train_steps, max(min_train_steps, int(game_length * 0.75)))
-        train_steps = 5
+        train_steps = 20
         print(f"Game length: {game_length}, performing {train_steps} training steps")
         for _ in range(train_steps):
             mcts.agent.train_step()

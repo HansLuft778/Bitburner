@@ -395,10 +395,10 @@ class Go_uf:
         additional_history: list[np.uint64] = [],
     ) -> UnionFind | None:
         if action == self.board_size:  # Pass move
+            uf.hash = self.zobrist.flip_player(uf.hash)
             return uf
 
         color = 2 if is_white else 1
-
         new_uf = uf.copy()
 
         is_legal, _ = self.simulate_move(
@@ -755,14 +755,14 @@ class Go_uf:
             return False, undo_stack
 
         # check for repeat
+        undo_stack.append(UndoAction(UndoActionType.FLIP_HASH_PLAYER, 0, 0))
+        uf.hash = self.zobrist.flip_player(uf.hash)
         is_repeat = self.check_state_is_repeat(uf.hash, additional_history)
         if is_repeat:
             # move was actually a repeat
             uf.undo_move_changes(undo_stack, self.zobrist)
             return False, undo_stack
 
-        undo_stack.append(UndoAction(UndoActionType.FLIP_HASH_PLAYER, 0, 0))
-        uf.hash = self.zobrist.flip_player(uf.hash)
         return True, undo_stack
 
     def verify_uf_consistency(self, state: State, uf: UnionFind) -> bool:
