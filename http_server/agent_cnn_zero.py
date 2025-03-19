@@ -283,7 +283,7 @@ class AlphaZeroAgent:
         """
         state_tensor = self.preprocess_state(board, game_history, color_is_white)
 
-        # Get Q-values
+        # Get logits
         policy, value = self.policy_net(state_tensor)
 
         # Select the action with highest Q-value

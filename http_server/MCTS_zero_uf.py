@@ -32,31 +32,29 @@ def get_ucb_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) -
 class Node:
     def __init__(
         self,
-        state: State,
+        # state: State,
         uf: UnionFind,
         server: GameServerGo,
         is_white: bool,
         agent: AlphaZeroAgent,
-        hash: int,
         parent: Union["Node", None] = None,
         action: int | None = None,
         selected_policy: float = 0,
         visit_count: int = 0,
     ):
-        assert state.shape == (
+        assert uf.state.shape == (
             agent.board_width,
             agent.board_width,
-        ), f"Array must be 5x5: {state}"
-        assert np.all(np.isin(state, [0, 1, 2, 3])), f"Array must only contain values 0, 1, 2, or 3: {state}"
+        ), f"Array must be 5x5: {uf.state}"
+        assert np.all(np.isin(uf.state, [0, 1, 2, 3])), f"Array must only contain values 0, 1, 2, or 3: {uf.state}"
 
-        self.state = state
-        self.uf = uf
+        # self.state = state
+        self.uf: UnionFind = uf
         self.parent = parent
         self.action = action
         self.server = server
         self.is_white = is_white
         self.agent = agent
-        self.hash = hash
         self.selected_policy = selected_policy
         self.valid_moves: np.ndarray[Any, np.dtype[np.bool_]] | None = None
 
@@ -73,15 +71,15 @@ class Node:
         if self.valid_moves is None:
             if self.parent is not None:
                 history = self.get_hash_history()
-                self.valid_moves = self.server.request_valid_moves(self.is_white, self.state, self.uf, history)
+                self.valid_moves = self.server.request_valid_moves(self.is_white, self.uf, history)
             else:
-                self.valid_moves = self.server.request_valid_moves(self.is_white, self.state, self.uf)
+                self.valid_moves = self.server.request_valid_moves(self.is_white, self.uf)
         return self.valid_moves
 
     # returns score based on current node
     # maybe should be based on root node (current player/who initiated the search)
     def get_score(self) -> float:
-        score: dict[str, dict[str, float]] = self.server.get_score(self.state, self.uf)
+        score: dict[str, dict[str, float]] = self.server.get_score(self.uf)
         score_white = score["white"]["sum"]
         score_black = score["black"]["sum"]
         diff = score_white - score_black
@@ -112,7 +110,7 @@ class Node:
                 return (True, self.get_score())
 
         # board full
-        space_available = np.any(self.state == 0)
+        space_available = np.any(self.uf.state == 0)
         if not space_available:
             return (True, self.get_score())
 
@@ -122,18 +120,18 @@ class Node:
         history: list[State] = []
         current = self
         while self:
-            history.append(self.state)
+            history.append(self.uf.state)
             if current.parent is not None:
                 current = current.parent
             else:
                 break
         return history[::-1]  # Reverse for chronological order
 
-    def get_hash_history(self) -> list[int]:
-        history: list[int] = []
+    def get_hash_history(self) -> list[np.uint64]:
+        history: list[np.uint64] = []
         current = self
         while self:
-            history.append(self.hash)
+            history.append(self.uf.hash)
             if current.parent is not None:
                 current = current.parent
             else:
@@ -154,36 +152,30 @@ class Node:
         board_size = self.agent.board_width * self.agent.board_height
         for action in range(board_size + 1):
             if action == board_size:
-                next_state = self.state.copy()
                 next_uf = self.uf.copy()
                 # Penalize passing if board is mostly empty
-                empty_cells = np.sum(self.state == 0)
+                empty_cells = np.sum(self.uf.state == 0)
                 empty_percentage = empty_cells / board_size
                 if empty_percentage > 0.5:
                     q_values[action] *= (1.0 - empty_percentage) * 0.5
                 # same hash, but different player to move
-                next_hash = self.server.go.zobrist.update_hash(
-                    self.hash, action, 0, 0, self.is_white, not self.is_white
+                next_uf.hash = self.server.go.zobrist.update_hash(
+                    self.uf.hash, action, 0, 0, self.is_white, not self.is_white
                 )
             else:
                 color = 2 if self.is_white else 1
-                is_legal, undo, next_hash = self.server.go.simulate_move(self.state, self.uf, action, color, self.get_hash_history())
+                is_legal, undo = self.server.go.simulate_move(self.uf, action, color, self.get_hash_history())
                 if not is_legal:
                     continue
 
-                next_state = self.state.copy()
                 next_uf = self.uf.copy()
-                self.uf.undo_move_changes(self.state, undo)
-
-                # next_hash = self.server.go.zobrist.compute_hash(next_state, not self.is_white)
+                self.uf.undo_move_changes(undo, self.server.go.zobrist)
 
             child = Node(
-                next_state,
                 next_uf,
                 self.server,
                 not self.is_white,
                 self.agent,
-                next_hash,
                 self,
                 action,
                 q_values[action].item(),
@@ -215,9 +207,9 @@ class MCTS:
         self.iterations_stats: defaultdict[str, int] = defaultdict(int)
 
     @torch.no_grad()  # pyright: ignore
-    def search(self, state: State, uf: UnionFind, is_white: bool):
-        hash = self.server.go.zobrist.compute_hash(state, is_white)
-        root: Node = Node(state, uf, self.server, is_white, self.agent, hash)
+    def search(self, uf: UnionFind, is_white: bool):
+        uf.hash = self.server.go.zobrist.compute_hash(uf.state, is_white)
+        root: Node = Node(uf, self.server, is_white, self.agent)
 
         self.timing_stats.clear()
         self.iterations_stats.clear()
@@ -245,7 +237,7 @@ class MCTS:
                 self.timing_stats["move_prep"] += time.time() - prep_start
 
                 inference_start = time.time()
-                logits, value = self.agent.get_actions_eval(node.state, valid_moves, history, node.is_white)
+                logits, value = self.agent.get_actions_eval(node.uf.state, valid_moves, history, node.is_white)
                 if node.parent is None:
                     print(f"Value estimate: {value:.3f} (from {'white' if node.is_white else 'black'}'s perspective)")
 
@@ -340,7 +332,7 @@ async def main() -> None:
         episode_length = 0
         while not done:
             before = time.time()
-            pi_mcts = mcts.search(state, server.go.uf, is_white)
+            pi_mcts = mcts.search(server.go.uf, is_white)
             after = time.time()
             print(f"TOOK: {after-before}s")
             print(pi_mcts)
@@ -408,7 +400,7 @@ async def main_eval():
         done = False
         mcts.agent.policy_net.eval()
         while not done:
-            pi_mcts = mcts.search(state, server.go.uf, is_white)
+            pi_mcts = mcts.search(server.go.uf, is_white)
             print(pi_mcts)
             best_move = int(torch.argmax(pi_mcts).item())
             print(f"{best_move}, {pi_mcts[best_move]}")

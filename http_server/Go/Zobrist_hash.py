@@ -10,13 +10,13 @@ class ZobristHash:
         random.seed(0)
         self.board_size = board_size
         self.table = np.array(
-            [[random.getrandbits(64) for _ in range(2)] for _ in range(board_size * board_size)], dtype=np.uint64
+            [[np.random.randint(0, 2**64, dtype=np.uint64) for _ in range(2)] for _ in range(board_size * board_size)], dtype=np.uint64
         )
-        self.player_hash = random.getrandbits(64)
+        self.player_hash = np.random.randint(0, 2**64, dtype=np.uint64)
 
-    def compute_hash(self, state: State, player_to_move: int) -> int:
+    def compute_hash(self, state: State, player_to_move: int) -> np.uint64:
         """Compute the Zobrist hash for the entire board state"""
-        h = 0
+        h: np.uint64 = np.uint64(0)
         for i in range(self.board_size):
             for j in range(self.board_size):
                 pos = i * self.board_size + j
@@ -32,8 +32,8 @@ class ZobristHash:
         return h
 
     def update_hash(
-        self, hash: int, pos: int, old_value: int, new_value: int, player_to_move: int, next_player: int
-    ) -> int:
+        self, hash: np.uint64, pos: int, old_value: int, new_value: int, player_to_move: int, next_player: int
+    ) -> np.uint64:
         """Update the hash incrementally after a move"""
         # Remove old piece if any
         if old_value == 1:
@@ -53,11 +53,21 @@ class ZobristHash:
 
         return hash
 
-    def remove_stone(self, hash: int, pos: int, removed_stone: int) -> int:
-        """Update the hash incrementally after a capture"""
+    def remove_stone(self, hash: np.uint64, pos: int, removed_stone: int) -> np.uint64:
         if removed_stone == 1:
             hash ^= self.table[pos][0]
         elif removed_stone == 2:
             hash ^= self.table[pos][1]
 
         return hash
+    
+    def add_stone(self, hash: np.uint64, pos: int, new_value: int) -> np.uint64:
+        if new_value == 1:
+            hash ^= self.table[pos][0]
+        elif new_value == 2:
+            hash ^= self.table[pos][1]
+            
+        return hash
+    
+    def flip_player(self, hash: np.uint64) -> np.uint64:
+        return hash ^ self.player_hash
