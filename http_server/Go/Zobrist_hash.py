@@ -1,5 +1,4 @@
 import numpy as np
-import random
 from typing import Any
 
 State = np.ndarray[Any, np.dtype[np.int8]]
@@ -7,10 +6,10 @@ State = np.ndarray[Any, np.dtype[np.int8]]
 
 class ZobristHash:
     def __init__(self, board_size: int):
-        random.seed(0)
         self.board_size = board_size
         self.table = np.array(
-            [[np.random.randint(0, 2**64, dtype=np.uint64) for _ in range(2)] for _ in range(board_size * board_size)], dtype=np.uint64
+            [[np.random.randint(0, 2**64, dtype=np.uint64) for _ in range(2)] for _ in range(board_size * board_size)],
+            dtype=np.uint64,
         )
         self.player_hash = np.random.randint(0, 2**64, dtype=np.uint64)
 
@@ -60,14 +59,14 @@ class ZobristHash:
             hash ^= self.table[pos][1]
 
         return hash
-    
+
     def add_stone(self, hash: np.uint64, pos: int, new_value: int) -> np.uint64:
         if new_value == 1:
             hash ^= self.table[pos][0]
         elif new_value == 2:
             hash ^= self.table[pos][1]
-            
+
         return hash
-    
+
     def flip_player(self, hash: np.uint64) -> np.uint64:
         return hash ^ self.player_hash
