@@ -8,7 +8,7 @@ import torch
 
 from agent_cnn_zero import AlphaZeroAgent
 from gameserver_local_uf import GameServerGo
-from Go.Go_uf_copy import Go_uf, UnionFind
+from Go.Go_uf import Go_uf, UnionFind
 from plotter import Plotter
 from TreePlotter import TreePlot  # pyright: ignore
 
@@ -37,6 +37,7 @@ class Node:
         server: GameServerGo,
         is_white: bool,
         agent: AlphaZeroAgent,
+        hash: int,
         parent: Union["Node", None] = None,
         action: int | None = None,
         selected_policy: float = 0,
@@ -55,6 +56,7 @@ class Node:
         self.server = server
         self.is_white = is_white
         self.agent = agent
+        self.hash = hash
         self.selected_policy = selected_policy
         self.valid_moves: np.ndarray[Any, np.dtype[np.bool_]] | None = None
 
@@ -70,7 +72,7 @@ class Node:
     def get_valid_moves(self) -> np.ndarray[Any, np.dtype[np.bool_]]:
         if self.valid_moves is None:
             if self.parent is not None:
-                history = self.get_history()
+                history = self.get_hash_history()
                 self.valid_moves = self.server.request_valid_moves(self.is_white, self.state, self.uf, history)
             else:
                 self.valid_moves = self.server.request_valid_moves(self.is_white, self.state, self.uf)
@@ -116,11 +118,22 @@ class Node:
 
         return (False, 0)
 
-    def get_history(self) -> list[np.ndarray[Any, np.dtype[np.int8]]]:
+    def get_history_ref(self) -> list[State]:
         history: list[State] = []
         current = self
         while self:
-            history.append(self.state.copy())
+            history.append(self.state)
+            if current.parent is not None:
+                current = current.parent
+            else:
+                break
+        return history[::-1]  # Reverse for chronological order
+
+    def get_hash_history(self) -> list[int]:
+        history: list[int] = []
+        current = self
+        while self:
+            history.append(self.hash)
             if current.parent is not None:
                 current = current.parent
             else:
@@ -148,9 +161,13 @@ class Node:
                 empty_percentage = empty_cells / board_size
                 if empty_percentage > 0.5:
                     q_values[action] *= (1.0 - empty_percentage) * 0.5
+                # same hash, but different player to move
+                next_hash = self.server.go.zobrist.update_hash(
+                    self.hash, action, 0, 0, self.is_white, not self.is_white
+                )
             else:
                 color = 2 if self.is_white else 1
-                is_legal, undo = self.server.go.simulate_move(self.state, self.uf, action, color, self.get_history())
+                is_legal, undo, next_hash = self.server.go.simulate_move(self.state, self.uf, action, color, self.get_hash_history())
                 if not is_legal:
                     continue
 
@@ -158,12 +175,15 @@ class Node:
                 next_uf = self.uf.copy()
                 self.uf.undo_move_changes(self.state, undo)
 
+                # next_hash = self.server.go.zobrist.compute_hash(next_state, not self.is_white)
+
             child = Node(
                 next_state,
                 next_uf,
                 self.server,
                 not self.is_white,
                 self.agent,
+                next_hash,
                 self,
                 action,
                 q_values[action].item(),
@@ -196,11 +216,8 @@ class MCTS:
 
     @torch.no_grad()  # pyright: ignore
     def search(self, state: State, uf: UnionFind, is_white: bool):
-
-        # assert state.shape == (5, 5), f"Array must be 5x5: {state}"
-        assert np.all(np.isin(state, [0, 1, 2, 3])), f"Array must only contain values 0, 1, 2, or 3: {state}"
-
-        root: Node = Node(state, uf, self.server, is_white, self.agent)
+        hash = self.server.go.zobrist.compute_hash(state, is_white)
+        root: Node = Node(state, uf, self.server, is_white, self.agent, hash)
 
         self.timing_stats.clear()
         self.iterations_stats.clear()
@@ -223,7 +240,7 @@ class MCTS:
             if not done:
                 prep_start = time.time()
                 valid_moves = node.get_valid_moves()
-                history = node.get_history()
+                history = node.get_history_ref()
                 history.extend(self.server.get_game_history())
                 self.timing_stats["move_prep"] += time.time() - prep_start
 
@@ -312,7 +329,7 @@ async def main() -> None:
     NUM_EPISODES = 600
     outcome = 0
     for iter in range(NUM_EPISODES):
-        state, komi = await server.reset_game("No AI")
+        state, komi = await server.reset_game("Debug")
         server.go = Go_uf(board_size, state, komi)
 
         buffer: list[tuple[State, bool, torch.Tensor, list[State]]] = []  # score: dict[str, dict[str, Any]]]
@@ -364,7 +381,7 @@ async def main() -> None:
 
         # Calculate training steps - scales with game length
         train_steps = min(max_train_steps, max(min_train_steps, int(game_length * 0.75)))
-        train_steps = 10
+        train_steps = 5
         print(f"Game length: {game_length}, performing {train_steps} training steps")
         for _ in range(train_steps):
             mcts.agent.train_step()

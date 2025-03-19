@@ -6,7 +6,7 @@ import numpy as np
 import websockets
 
 # from Go.Go import Go
-from Go.Go_uf_copy import Go_uf, UnionFind
+from Go.Go_uf import Go_uf, UnionFind
 
 State = np.ndarray[Any, np.dtype[np.int8]]
 
@@ -51,7 +51,7 @@ class GameServerGo:
         is_white: bool,
         state: State,
         uf: UnionFind,
-        history: list[State] = [],
+        history: list[int] = [],
     ) -> np.ndarray[Any, np.dtype[np.bool_]]:
         assert state.shape == (
             self.go.board_height,
@@ -115,6 +115,10 @@ class GameServerGo:
     def get_game_history(self) -> list[State]:
         history = self.go.get_history()
         return history
+    
+    def get_hash_history(self) -> list[int]:
+        hash_history = self.go.get_hash_history()
+        return hash_history
 
     def get_state_after_move(
         self,
@@ -122,8 +126,8 @@ class GameServerGo:
         state: State,
         is_white: bool,
         uf: UnionFind,
-        additional_history: list[State] = [],
-    ) -> tuple[State, UnionFind]:
+        additional_history: list[int] = [],
+    ) -> tuple[State, UnionFind, int]:
         res = self.go.state_after_action(action, is_white, state, uf, additional_history)
         assert res[0].shape == (
             self.go.board_height,

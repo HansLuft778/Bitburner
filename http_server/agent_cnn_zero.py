@@ -19,8 +19,8 @@ class ResNet(nn.Module):
         self,
         board_width: int,
         board_height: int,
-        num_res_blocks: int = 4,
-        num_hiden: int = 64,
+        num_res_blocks: int = 2,
+        num_hiden: int = 32,
         num_past_steps: int = 2,
     ) -> None:
         super().__init__()  # pyright: ignore
@@ -41,14 +41,14 @@ class ResNet(nn.Module):
         self.feature_extractor = nn.ModuleList([ResBlock(num_hiden) for _ in range(num_res_blocks)])
 
         self.policyHead = nn.Sequential(
-            nn.Conv2d(num_hiden, 64, kernel_size=3, padding=1),
-            nn.BatchNorm2d(64),
+            nn.Conv2d(num_hiden, 16, kernel_size=3, padding=1),
+            nn.BatchNorm2d(16),
             nn.ReLU(),
-            nn.Conv2d(64, 32, kernel_size=3, padding=1),
-            nn.BatchNorm2d(32),
+            nn.Conv2d(16, 8, kernel_size=3, padding=1),
+            nn.BatchNorm2d(8),
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(32 * board_width * board_height, board_width * board_height + 1),
+            nn.Linear(8 * board_width * board_height, board_width * board_height + 1),
         )
 
         self.valueHead = nn.Sequential(
@@ -125,7 +125,7 @@ class AlphaZeroAgent:
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        self.policy_net = ResNet(board_width, board_width, 5, num_past_steps=num_past_steps, num_hiden=96).to(
+        self.policy_net = ResNet(board_width, board_width, 2, num_past_steps=num_past_steps).to(
             self.device
         )
         self.policy_net.eval()

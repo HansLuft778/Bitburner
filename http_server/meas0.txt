@@ -1,0 +1,283 @@
+Deterministic timings:
+copy history, new small net:
+MCTS Timing Statistics:
+Total search time: 4.657s
+selection: 0.017s (0.4%) - Avg: 0.02ms
+end_check: 0.539s (11.6%) - Avg: 0.54ms
+move_prep: 0.003s (0.1%) - Avg: 0.00ms
+nn_inference: 2.027s (43.5%) - Avg: 2.03ms
+policy_compute: 0.130s (2.8%) - Avg: 0.13ms
+expansion: 1.937s (41.6%) - Avg: 1.94ms
+backprop: 0.001s (0.0%) - Avg: 0.00ms
+final_policy: 0.001s (0.0%) - Avg: 0.00ms
+TOOK: 4.6579132080078125s
+tensor([0.0000, 0.0420, 0.0000, 0.0410, 0.0771, 0.0480, 0.0410, 0.0410, 0.0400,
+        0.0440, 0.0931, 0.0420, 0.0410, 0.0410, 0.0420, 0.0410, 0.0430, 0.0390,
+        0.0440, 0.0661, 0.0000, 0.0470, 0.0430, 0.0000, 0.0420, 0.0010],
+       device='cuda:0')
+6, 0.041041042655706406
+make move: (1, 1)
+{'board': ['#.#..', '.X...', '.....', '.....', '#..#.'], 'outcome': 0, 'done': False}
+Value estimate: 0.048 (from white's perspective)
+
+MCTS Timing Statistics:
+Total search time: 4.798s
+selection: 0.016s (0.3%) - Avg: 0.02ms
+end_check: 0.615s (12.8%) - Avg: 0.62ms
+move_prep: 0.003s (0.1%) - Avg: 0.00ms
+nn_inference: 1.893s (39.4%) - Avg: 1.89ms
+policy_compute: 0.128s (2.7%) - Avg: 0.13ms
+expansion: 2.140s (44.6%) - Avg: 2.14ms
+backprop: 0.001s (0.0%) - Avg: 0.00ms
+final_policy: 0.000s (0.0%) - Avg: 0.00ms
+TOOK: 4.799400329589844s
+tensor([0.0000, 0.0000, 0.0000, 0.0450, 0.0771, 0.0450, 0.0000, 0.0611, 0.0430,
+        0.0440, 0.0480, 0.0591, 0.0480, 0.0581, 0.0631, 0.0460, 0.0460, 0.0450,
+        0.0490, 0.0490, 0.0000, 0.0470, 0.0440, 0.0000, 0.0601, 0.0220],
+       device='cuda:0')
+3, 0.045045044273138046
+make move: (0, 3)
+{'board': ['#.#O.', '.X...', '.....', '.....', '#..#.'], 'outcome': 0, 'done': False}
+Value estimate: 0.032 (from black's perspective)
+
+MCTS Timing Statistics:
+Total search time: 5.500s
+selection: 0.017s (0.3%) - Avg: 0.02ms
+end_check: 0.767s (13.9%) - Avg: 0.77ms
+move_prep: 0.004s (0.1%) - Avg: 0.00ms
+nn_inference: 2.178s (39.6%) - Avg: 2.18ms
+policy_compute: 0.151s (2.7%) - Avg: 0.15ms
+expansion: 2.379s (43.3%) - Avg: 2.38ms
+backprop: 0.001s (0.0%) - Avg: 0.00ms
+final_policy: 0.001s (0.0%) - Avg: 0.00ms
+TOOK: 5.500211954116821s
+tensor([0.0000, 0.0460, 0.0000, 0.0000, 0.0521, 0.0470, 0.0000, 0.0450, 0.0460,
+        0.0430, 0.0450, 0.0501, 0.0470, 0.0470, 0.0440, 0.0671, 0.0751, 0.0641,
+        0.0511, 0.0651, 0.0000, 0.0480, 0.0490, 0.0000, 0.0470, 0.0210],
+       device='cuda:0')
+4, 0.052052050828933716
+make move: (0, 4)
+{'board': ['#.#OX', '.X...', '.....', '.....', '#..#.'], 'outcome': 0, 'done': False}
+Value estimate: 0.042 (from white's perspective)
+
+MCTS Timing Statistics:
+Total search time: 6.243s
+selection: 0.017s (0.3%) - Avg: 0.02ms
+end_check: 0.806s (12.9%) - Avg: 0.81ms
+move_prep: 0.004s (0.1%) - Avg: 0.00ms
+nn_inference: 2.657s (42.6%) - Avg: 2.66ms
+policy_compute: 0.189s (3.0%) - Avg: 0.19ms
+expansion: 2.566s (41.1%) - Avg: 2.57ms
+backprop: 0.001s (0.0%) - Avg: 0.00ms
+final_policy: 0.000s (0.0%) - Avg: 0.00ms
+TOOK: 6.24386191368103s
+tensor([0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0470, 0.0000, 0.0571, 0.0480,
+        0.0480, 0.0521, 0.0911, 0.0561, 0.0511, 0.1011, 0.0480, 0.0511, 0.0480,
+        0.0601, 0.0521, 0.0000, 0.0581, 0.0541, 0.0000, 0.0571, 0.0200],
+       device='cuda:0')
+10, 0.052052050828933716
+make move: (2, 0)
+{'board': ['#.#OX', '.X...', 'O....', '.....', '#..#.'], 'outcome': 0, 'done': False}
+Value estimate: 0.028 (from black's perspective)
+
+MCTS Timing Statistics:
+Total search time: 6.032s
+selection: 0.017s (0.3%) - Avg: 0.02ms
+end_check: 0.912s (15.1%) - Avg: 0.91ms
+move_prep: 0.004s (0.1%) - Avg: 0.00ms
+nn_inference: 2.425s (40.2%) - Avg: 2.42ms
+policy_compute: 0.191s (3.2%) - Avg: 0.19ms
+expansion: 2.479s (41.1%) - Avg: 2.48ms
+backprop: 0.001s (0.0%) - Avg: 0.00ms
+final_policy: 0.000s (0.0%) - Avg: 0.00ms
+TOOK: 6.033415079116821s
+tensor([0.0000, 0.0511, 0.0000, 0.0000, 0.0000, 0.0490, 0.0000, 0.0511, 0.0460,
+        0.0450, 0.0000, 0.0701, 0.0460, 0.0881, 0.0470, 0.0470, 0.0501, 0.0501,
+        0.0521, 0.1071, 0.0000, 0.0551, 0.0741, 0.0000, 0.0511, 0.0200],
+       device='cuda:0')
+19, 0.10710711032152176
+make move: (3, 4)
+{'board': ['#.#OX', '.X...', 'O....', '....X', '#..#.'], 'outcome': 0, 'done': False}
+Value estimate: 0.033 (from white's perspective)
+
+MCTS Timing Statistics:
+Total search time: 5.883s
+selection: 0.016s (0.3%) - Avg: 0.02ms
+end_check: 0.955s (16.2%) - Avg: 0.96ms
+move_prep: 0.004s (0.1%) - Avg: 0.00ms
+nn_inference: 2.325s (39.5%) - Avg: 2.33ms
+policy_compute: 0.178s (3.0%) - Avg: 0.18ms
+expansion: 2.401s (40.8%) - Avg: 2.40ms
+backprop: 0.001s (0.0%) - Avg: 0.00ms
+final_policy: 0.000s (0.0%) - Avg: 0.00ms
+TOOK: 5.883764743804932s
+tensor([0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0851, 0.0000, 0.0731, 0.0571,
+        0.0621, 0.0000, 0.0701, 0.0901, 0.0701, 0.0631, 0.0641, 0.0621, 0.0611,
+        0.0801, 0.0000, 0.0000, 0.0581, 0.0801, 0.0000, 0.0000, 0.0240],
+       device='cuda:0')
+12, 0.09009008854627609
+make move: (2, 2)
+{'board': ['#.#OX', '.X...', 'O.O..', '....X', '#..#.'], 'outcome': 0, 'done': False}
+Value estimate: 0.032 (from black's perspective)
+
+MCTS Timing Statistics:
+Total search time: 6.343s
+selection: 0.016s (0.3%) - Avg: 0.02ms
+end_check: 1.355s (21.4%) - Avg: 1.35ms
+move_prep: 0.004s (0.1%) - Avg: 0.00ms
+nn_inference: 2.471s (39.0%) - Avg: 2.47ms
+policy_compute: 0.161s (2.5%) - Avg: 0.16ms
+expansion: 2.332s (36.8%) - Avg: 2.33ms
+backprop: 0.001s (0.0%) - Avg: 0.00ms
+final_policy: 0.001s (0.0%) - Avg: 0.00ms
+TOOK: 6.3445188999176025s
+tensor([0.0000, 0.0551, 0.0000, 0.0000, 0.0000, 0.0531, 0.0000, 0.0761, 0.0581,
+        0.0721, 0.0000, 0.0691, 0.0000, 0.0681, 0.0521, 0.0681, 0.1001, 0.0681,
+        0.0621, 0.0000, 0.0000, 0.0601, 0.0601, 0.0000, 0.0591, 0.0190],
+       device='cuda:0')
+16, 0.10010010004043579
+make move: (3, 1)
+{'board': ['#.#OX', '.X...', 'O.O..', '.X..X', '#..#.'], 'outcome': 0, 'done': False}
+Value estimate: 0.043 (from white's perspective)
+
+MCTS Timing Statistics:
+Total search time: 6.323s
+selection: 0.015s (0.2%) - Avg: 0.01ms
+end_check: 1.148s (18.2%) - Avg: 1.15ms
+move_prep: 0.005s (0.1%) - Avg: 0.00ms
+nn_inference: 2.646s (41.8%) - Avg: 2.65ms
+policy_compute: 0.161s (2.5%) - Avg: 0.16ms
+expansion: 2.344s (37.1%) - Avg: 2.34ms
+backprop: 0.001s (0.0%) - Avg: 0.00ms
+final_policy: 0.001s (0.0%) - Avg: 0.00ms
+TOOK: 6.324459552764893s
+tensor([0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0601, 0.0000, 0.1351, 0.0631,
+        0.0681, 0.0000, 0.0721, 0.0000, 0.0781, 0.0741, 0.0751, 0.0000, 0.1011,
+        0.0851, 0.0000, 0.0000, 0.0651, 0.0951, 0.0000, 0.0000, 0.0280],
+       device='cuda:0')
+7, 0.13513512909412384
+make move: (1, 2)
+{'board': ['#.#OX', '.XO..', 'O.O..', '.X..X', '#..#.'], 'outcome': 0, 'done': False}
+Value estimate: 0.024 (from black's perspective)
+
+MCTS Timing Statistics:
+Total search time: 5.551s
+selection: 0.015s (0.3%) - Avg: 0.01ms
+end_check: 1.030s (18.6%) - Avg: 1.03ms
+move_prep: 0.005s (0.1%) - Avg: 0.00ms
+nn_inference: 2.410s (43.4%) - Avg: 2.44ms
+policy_compute: 0.135s (2.4%) - Avg: 0.13ms
+expansion: 1.952s (35.2%) - Avg: 1.95ms
+backprop: 0.001s (0.0%) - Avg: 0.00ms
+final_policy: 0.001s (0.0%) - Avg: 0.00ms
+TOOK: 5.552069187164307s
+tensor([0.0000, 0.0711, 0.0000, 0.0000, 0.0000, 0.0721, 0.0000, 0.0000, 0.0661,
+        0.0631, 0.0000, 0.0781, 0.0000, 0.0811, 0.0951, 0.0701, 0.0000, 0.0671,
+        0.0781, 0.0000, 0.0000, 0.0771, 0.0741, 0.0000, 0.0831, 0.0240],
+       device='cuda:0')
+14, 0.09509509801864624
+make move: (2, 4)
+{'board': ['#.#OX', '.XO..', 'O.O.X', '.X..X', '#..#.'], 'outcome': 0, 'done': False}
+Value estimate: 0.036 (from white's perspective)
+
+MCTS Timing Statistics:
+Total search time: 5.853s
+selection: 0.015s (0.3%) - Avg: 0.01ms
+end_check: 1.073s (18.3%) - Avg: 1.07ms
+move_prep: 0.005s (0.1%) - Avg: 0.00ms
+nn_inference: 2.509s (42.9%) - Avg: 2.55ms
+policy_compute: 0.147s (2.5%) - Avg: 0.15ms
+expansion: 2.100s (35.9%) - Avg: 2.10ms
+backprop: 0.002s (0.0%) - Avg: 0.00ms
+final_policy: 0.000s (0.0%) - Avg: 0.00ms
+TOOK: 5.8546223640441895s
+tensor([0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0711, 0.0000, 0.0000, 0.0781,
+        0.0791, 0.0000, 0.0801, 0.0000, 0.0951, 0.0000, 0.0831, 0.0000, 0.0891,
+        0.1041, 0.0000, 0.0000, 0.0791, 0.1121, 0.0000, 0.0000, 0.1291],
+       device='cuda:0')
+25, 0.12912912666797638
+make move: (-1, -1)
+{'board': ['#.#OX', '.XO..', 'O.O.X', '.X..X', '#..#.'], 'outcome': 0, 'done': False}
+Value estimate: 0.026 (from black's perspective)
+
+MCTS Timing Statistics:
+Total search time: 5.227s
+selection: 0.015s (0.3%) - Avg: 0.01ms
+end_check: 1.001s (19.2%) - Avg: 1.00ms
+move_prep: 0.005s (0.1%) - Avg: 0.00ms
+nn_inference: 2.229s (42.6%) - Avg: 2.26ms
+policy_compute: 0.135s (2.6%) - Avg: 0.13ms
+expansion: 1.839s (35.2%) - Avg: 1.84ms
+backprop: 0.002s (0.0%) - Avg: 0.00ms
+final_policy: 0.001s (0.0%) - Avg: 0.00ms
+TOOK: 5.228736877441406s
+tensor([0.0000, 0.0621, 0.0000, 0.0000, 0.0000, 0.0581, 0.0000, 0.0000, 0.0621,
+        0.0531, 0.0000, 0.0671, 0.0000, 0.0661, 0.0000, 0.0611, 0.0000, 0.0591,
+        0.0681, 0.0000, 0.0000, 0.0701, 0.2553, 0.0000, 0.0651, 0.0531],
+       device='cuda:0')
+22, 0.25525525212287903
+make move: (4, 2)
+{'board': ['#.#OX', '.XO..', 'O.O.X', '.X..X', '#.X#.'], 'outcome': 0, 'done': False}
+Value estimate: 0.036 (from white's perspective)
+
+MCTS Timing Statistics:
+Total search time: 5.202s
+selection: 0.013s (0.2%) - Avg: 0.01ms
+end_check: 0.944s (18.2%) - Avg: 0.94ms
+move_prep: 0.004s (0.1%) - Avg: 0.00ms
+nn_inference: 2.330s (44.8%) - Avg: 2.38ms
+policy_compute: 0.161s (3.1%) - Avg: 0.16ms
+expansion: 1.745s (33.5%) - Avg: 1.74ms
+backprop: 0.002s (0.0%) - Avg: 0.00ms
+final_policy: 0.000s (0.0%) - Avg: 0.00ms
+TOOK: 5.203539609909058s
+tensor([0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0821, 0.0000, 0.0000, 0.0901,
+        0.0921, 0.0000, 0.0881, 0.0000, 0.1141, 0.0000, 0.1241, 0.0000, 0.1512,
+        0.1552, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.1031],
+       device='cuda:0')
+18, 0.15515515208244324
+make move: (3, 3)
+{'board': ['#.#OX', '.XO..', 'O.O.X', '.X.OX', '#.X#.'], 'outcome': 0, 'done': False}
+Value estimate: 0.012 (from black's perspective)
+
+MCTS Timing Statistics:
+Total search time: 5.173s
+selection: 0.013s (0.3%) - Avg: 0.01ms
+end_check: 0.919s (17.8%) - Avg: 0.92ms
+move_prep: 0.005s (0.1%) - Avg: 0.00ms
+nn_inference: 2.506s (48.5%) - Avg: 2.63ms
+policy_compute: 0.147s (2.8%) - Avg: 0.15ms
+expansion: 1.579s (30.5%) - Avg: 1.58ms
+backprop: 0.002s (0.0%) - Avg: 0.00ms
+final_policy: 0.001s (0.0%) - Avg: 0.00ms
+TOOK: 5.174456596374512s
+tensor([0.0000, 0.0771, 0.0000, 0.0000, 0.0000, 0.0701, 0.0000, 0.0000, 0.0961,
+        0.0621, 0.0000, 0.0851, 0.0000, 0.0811, 0.0000, 0.0831, 0.0000, 0.0711,
+        0.0000, 0.0000, 0.0000, 0.0821, 0.0000, 0.0000, 0.1121, 0.1802],
+       device='cuda:0')
+25, 0.18018017709255219
+make move: (-1, -1)
+{'board': ['#.#OX', '.XO..', 'O.O.X', '.X.OX', '#.X#.'], 'outcome': 0, 'done': False}
+Value estimate: 0.024 (from white's perspective)
+
+MCTS Timing Statistics:
+Total search time: 5.039s
+selection: 0.013s (0.3%) - Avg: 0.01ms
+end_check: 0.903s (17.9%) - Avg: 0.90ms
+move_prep: 0.004s (0.1%) - Avg: 0.00ms
+nn_inference: 2.386s (47.4%) - Avg: 2.45ms
+policy_compute: 0.154s (3.1%) - Avg: 0.15ms
+expansion: 1.573s (31.2%) - Avg: 1.57ms
+backprop: 0.002s (0.0%) - Avg: 0.00ms
+final_policy: 0.000s (0.0%) - Avg: 0.00ms
+TOOK: 5.040379762649536s
+tensor([0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.1101, 0.0000, 0.0000, 0.1211,
+        0.1181, 0.0000, 0.1381, 0.0000, 0.1291, 0.0000, 0.1181, 0.0000, 0.1211,
+        0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.1441],
+       device='cuda:0')
+25, 0.14414414763450623
+make move: (-1, -1)
+score: {'white': {'pieces': np.int64(5), 'territory': 0, 'komi': 5.5, 'sum': np.float64(10.5)}, 'black': {'pieces': np.int64(6), 'territory': 3, 'komi': 0, 'sum': np.int64(9)}}
+{'board': ['#.#OX', '.XO..', 'O.O.X', '.X.OX', '#.X#.'], 'outcome': -1, 'done': True}
+Skipping training
+Value estimate: 0.037 (from black's perspective)
