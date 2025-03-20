@@ -6,7 +6,7 @@ import numpy as np
 import websockets
 
 # from Go.Go import Go
-from Go.Go_uf_copy import Go_uf, UnionFind
+from Go.Go_uf import Go_uf, UnionFind
 
 State = np.ndarray[Any, np.dtype[np.int8]]
 
@@ -49,17 +49,16 @@ class GameServerGo:
     def request_valid_moves(
         self,
         is_white: bool,
-        state: State,
         uf: UnionFind,
-        history: list[State] = [],
+        history: list[np.uint64] = [],
     ) -> np.ndarray[Any, np.dtype[np.bool_]]:
-        assert state.shape == (
+        assert uf.state.shape == (
             self.go.board_height,
             self.go.board_height,
-        ), f"Array must be 5x5: {state}"
-        assert np.all(np.isin(state, [0, 1, 2, 3])), f"Array must only contain values 0, 1, 2, or 3: {state}"
+        ), f"Array must be 5x5: {uf.state}"
+        assert np.all(np.isin(uf.state, [0, 1, 2, 3])), f"Array must only contain values 0, 1, 2, or 3: {uf.state}"
 
-        v = self.go.get_valid_moves(state, uf, is_white, history)
+        v = self.go.get_valid_moves(uf, is_white, history)
         return np.append(v, True)
 
     async def make_move(self, action: tuple[int, int], action_idx: int, is_white: bool) -> tuple[State, int, bool]:
@@ -105,9 +104,9 @@ class GameServerGo:
         done = res["done"]
 
         enc_state = self.go.encode_state(next_state)
-        self.go.state = enc_state
+        self.go.uf.state = enc_state
 
-        self.go.history.append(self.go.state)
+        self.go.history.append(self.go.uf.state)
 
         print(f"state: {enc_state} reward: {outcome} done: {done}")
         return enc_state, outcome, done
@@ -116,24 +115,12 @@ class GameServerGo:
         history = self.go.get_history()
         return history
 
-    def get_state_after_move(
-        self,
-        action: int,
-        state: State,
-        is_white: bool,
-        uf: UnionFind,
-        additional_history: list[State] = [],
-    ) -> tuple[State, UnionFind]:
-        res = self.go.state_after_action(action, is_white, state, uf, additional_history)
-        assert res[0].shape == (
-            self.go.board_height,
-            self.go.board_height,
-        ), f"Array must be 5x5: action: {action} state: {res[0]}"
-        assert np.all(np.isin(res[0], [0, 1, 2, 3])), f"Array must only contain values 0, 1, 2, or 3: {res[0]}"
-        return res
+    def get_hash_history(self) -> list[np.uint64]:
+        hash_history = self.go.get_hash_history()
+        return hash_history
 
-    def get_score(self) -> dict[str, dict[str, float]]:
-        scores = self.go.get_score(self.go.komi)
+    def get_score(self, uf: UnionFind) -> dict[str, dict[str, float]]:
+        scores = self.go.get_score(uf, self.go.komi)
         return scores
 
     async def get_state(self) -> list[str]:

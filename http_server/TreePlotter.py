@@ -38,7 +38,9 @@ class TreePlot:
         self.labels = []
 
     def create_tree(self):
+        num_nodes = 1
         def traverse(node, parent_idx=None):
+            nonlocal num_nodes
             idx = len(self.nodes)
             self.nodes.append(node)
             self.labels.append(
@@ -47,9 +49,11 @@ class TreePlot:
             if parent_idx is not None:
                 self.edges.append((parent_idx, idx))
             for c in node.children:
+                num_nodes += 1
                 traverse(c, idx)
 
         traverse(self.root)
+        print("num_nodes: ", num_nodes)
         self.create_plot()
 
     def create_plot(self):

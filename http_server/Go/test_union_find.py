@@ -1,5 +1,5 @@
 import unittest
-from Go_uf_copy import UnionFind
+from Go.Go_uf import UnionFind
 import numpy as np
 
 
