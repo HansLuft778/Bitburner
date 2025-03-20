@@ -294,7 +294,7 @@ class UnionFind:
         return uf
 
     def copy(self):
-        return UnionFind(
+        uf = UnionFind(
             self.state.copy(),
             self.parent.copy(),
             self.colors.copy(),
@@ -303,6 +303,8 @@ class UnionFind:
             self.liberties.copy(),
             self.board_size,
         )
+        uf.hash = self.hash
+        return uf
 
 
 def rotate_state(state: list[str]) -> list[str]:
