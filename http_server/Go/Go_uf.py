@@ -3,6 +3,7 @@ from collections import deque
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
+import numba  # type: ignore
 
 import numpy as np
 
@@ -18,7 +19,6 @@ class UndoActionType(Enum):
     SET_STONES = 4
     SET_LIBERTIES = 5
     SET_COLOR = 6
-    FLIP_HASH_PLAYER = 7
 
 
 @dataclass
@@ -28,9 +28,45 @@ class UndoAction:
     value: Any  # The value before change
 
 
-def get_bit_indices(mask: int) -> np.ndarray[Any, np.dtype[np.int32]]:
-    indices = [i for i in range(64) if (mask >> i) & 1]
-    return np.array(indices, dtype=np.int32)
+# def get_bit_indices(mask: np.uint64) -> np.ndarray[Any, np.dtype[np.int32]]:
+#     indices = [i for i in range(64) if (mask >> i) & 1]
+#     return np.array(indices, dtype=np.int32)
+
+
+@numba.njit()  # type: ignore
+def get_bit_indices(mask: np.uint64) -> np.ndarray[Any, np.dtype[np.int32]]:
+    indices = np.empty(64, np.int32)
+    count = 0
+    for i in range(64):
+        if (mask >> i) & 1:
+            indices[count] = i
+            count += 1
+    return indices[:count]
+
+
+@numba.njit()  # type: ignore
+def calculate_group_liberties(stones_mask: np.int64, state: State, board_size: int) -> np.int64:
+    """Calculate liberties for a group of stones with fast bit manipulation"""
+    liberties_mask = np.int64(0)
+
+    # Process each stone in the group
+    for pos in range(64):  # Assuming 64-bit integer
+        if not (stones_mask & (np.int64(1) << pos)):
+            continue
+
+        x = pos // board_size
+        y = pos % board_size
+
+        # Check each neighbor
+        for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+            nx, ny = x + dx, y + dy
+
+            # If neighbor is within bounds and empty, it's a liberty
+            if 0 <= nx < board_size and 0 <= ny < board_size and state[nx, ny] == 0:
+                lib_pos = nx * board_size + ny
+                liberties_mask |= np.int64(1) << lib_pos
+
+    return liberties_mask
 
 
 def add_stone_to_group(array: np.ndarray[Any, np.dtype[np.int64]], group_idx: int, pos: int):
@@ -60,7 +96,7 @@ class UnionFind:
         self.rank = rank
         self.stones = stones
         self.liberties = liberties
-        self.board_height = board_size
+        self.board_size = board_size
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, UnionFind):
@@ -95,7 +131,7 @@ class UnionFind:
 
     def find_no_compression(self, i: int) -> int:
         """Find without path compression, for simulations"""
-        if i < 0 or i >= len(self.parent):
+        if i < 0 or i >= self.board_size * self.board_size:
             return -1
         if self.parent[i] == i:
             return i
@@ -139,50 +175,51 @@ class UnionFind:
             self.rank[root_a] = -1
 
         new_root = self.find_no_compression(a)
-        self.liberties[new_root] = 0
+        self.liberties[new_root] = calculate_group_liberties(self.stones[new_root], self.state, self.board_size)
 
         # recalculate liberties
+        # self.liberties[new_root] = 0
         # stone_indices = np.where(self.stones[new_root] == 1)[0]
-        stone_indices = get_bit_indices(self.stones[new_root])
-        sx = stone_indices // self.board_height
-        sy = stone_indices % self.board_height
+        # stone_indices = get_bit_indices(self.stones[new_root])
+        # sx = stone_indices // self.board_size
+        # sy = stone_indices % self.board_size
 
-        neighbors: list[tuple[np.ndarray[Any, np.dtype[np.int8]], np.ndarray[Any, np.dtype[np.int8]]]] = []
-        for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-            nx = sx + dx
-            ny = sy + dy
-            valid = (nx >= 0) & (nx < self.board_height) & (ny >= 0) & (ny < self.board_height)
-            nx, ny = nx[valid], ny[valid]
-            neighbors.append((nx, ny))
+        # neighbors: list[tuple[np.ndarray[Any, np.dtype[np.int8]], np.ndarray[Any, np.dtype[np.int8]]]] = []
+        # for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+        #     nx = sx + dx
+        #     ny = sy + dy
+        #     valid = (nx >= 0) & (nx < self.board_size) & (ny >= 0) & (ny < self.board_size)
+        #     nx, ny = nx[valid], ny[valid]
+        #     neighbors.append((nx, ny))
 
-        # concat all neighbors
-        all_nx = np.concatenate([n[0] for n in neighbors])
-        all_ny = np.concatenate([n[1] for n in neighbors])
+        # # concat all neighbors
+        # all_nx = np.concatenate([n[0] for n in neighbors])
+        # all_ny = np.concatenate([n[1] for n in neighbors])
 
-        empty_mask = self.state[all_nx, all_ny] == 0
-        empty_nx = all_nx[empty_mask]
-        empty_ny = all_ny[empty_mask]
+        # empty_mask = self.state[all_nx, all_ny] == 0
+        # empty_nx = all_nx[empty_mask]
+        # empty_ny = all_ny[empty_mask]
 
-        lib_positions = empty_nx * self.board_height + empty_ny
-        # self.liberties[new_root][lib_positions] = 1
-        # for lib_pos in lib_positions:
-        #     add_stone_to_group(self.liberties, new_root, lib_pos)
-        bit_positions = lib_positions.astype(np.int64)
-        bit_masks = np.left_shift(np.int64(1), bit_positions)
-        mask = np.bitwise_or.reduce(bit_masks, initial=np.int64(0))
-        self.liberties[new_root] |= mask
+        # lib_positions = empty_nx * self.board_size + empty_ny
+        # # self.liberties[new_root][lib_positions] = 1
+        # # for lib_pos in lib_positions:
+        # #     add_stone_to_group(self.liberties, new_root, lib_pos)
+        # bit_positions = lib_positions.astype(np.int64)
+        # bit_masks = np.left_shift(np.int64(1), bit_positions)
+        # mask = np.bitwise_or.reduce(bit_masks, initial=np.int64(0))
+        # self.liberties[new_root] |= mask
 
     def undo_move_changes(self, undo_stack: list[UndoAction], zobrist: ZobristHash) -> None:
         """Apply the undo stack to revert changes to both state and UF"""
         for action in reversed(undo_stack):
             if action.action_type == UndoActionType.SET_STATE:
                 x, y = (
-                    action.position // self.board_height,
-                    action.position % self.board_height,
+                    action.position // self.board_size,
+                    action.position % self.board_size,
                 )
                 # place: 0 -> 1, revert means, remove 1
                 # capture: 1 -> 0, revert means, add 1
-                self.hash = zobrist.update_hash(self.hash, action.position, self.state[x][y], action.value, 0, 0)
+                self.hash = zobrist.update_hash(self.hash, action.position, self.state[x][y], action.value)
                 self.state[x][y] = action.value
             else:
                 # Let the UF handle other undo actions
@@ -196,8 +233,6 @@ class UnionFind:
                     self.liberties[action.position] = action.value
                 elif action.action_type == UndoActionType.SET_COLOR:
                     self.colors[action.position] = action.value
-                elif action.action_type == UndoActionType.FLIP_HASH_PLAYER:
-                    self.hash = zobrist.flip_player(self.hash)
 
     @staticmethod
     def get_uf_from_state(state: State) -> "UnionFind":
@@ -266,7 +301,7 @@ class UnionFind:
             self.rank.copy(),
             self.stones.copy(),
             self.liberties.copy(),
-            self.board_height,
+            self.board_size,
         )
 
 
@@ -395,7 +430,6 @@ class Go_uf:
         additional_history: list[np.uint64] = [],
     ) -> UnionFind | None:
         if action == self.board_size:  # Pass move
-            uf.hash = self.zobrist.flip_player(uf.hash)
             return uf
 
         color = 2 if is_white else 1
@@ -671,34 +705,37 @@ class Go_uf:
 
                     # Recompute liberties for the enemy group in case
                     # TODO: capsule in a function for less code duplication
-                    uf.liberties[enemy_group] = 0
-                    stone_indices = get_bit_indices(uf.stones[enemy_group])
-                    sx_vec = stone_indices // self.board_height
-                    sy_vec = stone_indices % self.board_height
+                    uf.liberties[enemy_group] = calculate_group_liberties(
+                        uf.stones[enemy_group], uf.state, self.board_width
+                    )
+                    # uf.liberties[enemy_group] = 0
+                    # stone_indices = get_bit_indices(uf.stones[enemy_group])
+                    # sx_vec = stone_indices // self.board_height
+                    # sy_vec = stone_indices % self.board_height
 
-                    all_neighbors_x: list[np.ndarray[Any, np.dtype[np.int64]]] = []
-                    all_neighbors_y: list[np.ndarray[Any, np.dtype[np.int64]]] = []
-                    for dx2, dy2 in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                        nx2 = sx_vec + dx2
-                        ny2 = sy_vec + dy2
-                        valid = (nx2 >= 0) & (nx2 < self.board_height) & (ny2 >= 0) & (ny2 < self.board_height)
-                        nx2, ny2 = nx2[valid], ny2[valid]
-                        all_neighbors_x.append(nx2)
-                        all_neighbors_y.append(ny2)
+                    # all_neighbors_x: list[np.ndarray[Any, np.dtype[np.int64]]] = []
+                    # all_neighbors_y: list[np.ndarray[Any, np.dtype[np.int64]]] = []
+                    # for dx2, dy2 in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                    #     nx2 = sx_vec + dx2
+                    #     ny2 = sy_vec + dy2
+                    #     valid = (nx2 >= 0) & (nx2 < self.board_height) & (ny2 >= 0) & (ny2 < self.board_height)
+                    #     nx2, ny2 = nx2[valid], ny2[valid]
+                    #     all_neighbors_x.append(nx2)
+                    #     all_neighbors_y.append(ny2)
 
-                    all_nx = np.concatenate(all_neighbors_x)
-                    all_ny = np.concatenate(all_neighbors_y)
+                    # all_nx = np.concatenate(all_neighbors_x)
+                    # all_ny = np.concatenate(all_neighbors_y)
 
-                    empty_mask = uf.state[all_nx, all_ny] == 0
-                    empty_nx = all_nx[empty_mask]
-                    empty_ny = all_ny[empty_mask]
+                    # empty_mask = uf.state[all_nx, all_ny] == 0
+                    # empty_nx = all_nx[empty_mask]
+                    # empty_ny = all_ny[empty_mask]
 
-                    lib_positions = empty_nx * self.board_height + empty_ny
-                    # Combine them in a single bitmask:
-                    bit_positions = lib_positions.astype(np.int64)
-                    bit_masks = np.left_shift(np.int64(1), bit_positions)
-                    mask = np.bitwise_or.reduce(bit_masks, initial=np.int64(0))
-                    uf.liberties[enemy_group] |= mask
+                    # lib_positions = empty_nx * self.board_height + empty_ny
+                    # # Combine them in a single bitmask:
+                    # bit_positions = lib_positions.astype(np.int64)
+                    # bit_masks = np.left_shift(np.int64(1), bit_positions)
+                    # mask = np.bitwise_or.reduce(bit_masks, initial=np.int64(0))
+                    # uf.liberties[enemy_group] |= mask
 
                     # capture enemy group if no liberties
                     if uf.liberties[enemy_group] == 0:
@@ -755,8 +792,6 @@ class Go_uf:
             return False, undo_stack
 
         # check for repeat
-        undo_stack.append(UndoAction(UndoActionType.FLIP_HASH_PLAYER, 0, 0))
-        uf.hash = self.zobrist.flip_player(uf.hash)
         is_repeat = self.check_state_is_repeat(uf.hash, additional_history)
         if is_repeat:
             # move was actually a repeat
@@ -843,20 +878,16 @@ class Go_uf:
         empty_positions = np.where(empty_mask)
         for x, y in zip(empty_positions[0], empty_positions[1]):
             action = self.encode_action(int(x), int(y))
-            # is_consitent = self.verify_uf_consistency(state, uf)
-            # assert is_consitent, "state and uf do not match"
             is_legal, undo = self.simulate_move(
                 uf,
                 action,
                 player,
                 history,
             )
-
             if is_legal:  # only needs to undo if legal, since illegal moves are not persisted
                 uf.undo_move_changes(undo, self.zobrist)
                 legal_moves[x][y] = True
-            # is_consitent = self.verify_uf_consistency(state, uf)
-            # assert is_consitent, "state and uf do not match"
+
         return legal_moves
 
     def has_game_ended(

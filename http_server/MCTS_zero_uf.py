@@ -42,12 +42,6 @@ class Node:
         selected_policy: float = 0,
         visit_count: int = 0,
     ):
-        assert uf.state.shape == (
-            agent.board_width,
-            agent.board_width,
-        ), f"Array must be 5x5: {uf.state}"
-        assert np.all(np.isin(uf.state, [0, 1, 2, 3])), f"Array must only contain values 0, 1, 2, or 3: {uf.state}"
-
         # self.state = state
         self.uf: UnionFind = uf
         self.parent = parent
@@ -158,10 +152,6 @@ class Node:
                 empty_percentage = empty_cells / board_size
                 if empty_percentage > 0.5:
                     q_values[action] *= (1.0 - empty_percentage) * 0.5
-                # same hash, but different player to move
-                next_uf.hash = self.server.go.zobrist.update_hash(
-                    self.uf.hash, action, 0, 0, self.is_white, not self.is_white
-                )
             else:
                 color = 2 if self.is_white else 1
                 is_legal, undo = self.server.go.simulate_move(self.uf, action, color, self.get_hash_history())
@@ -305,8 +295,8 @@ def choose_action(pi: torch.Tensor, episode_length: int) -> int:
 
 
 async def main() -> None:
-    # torch.manual_seed(0)  # pyright: ignore
-    # np.random.seed(0)
+    torch.manual_seed(0)  # pyright: ignore
+    np.random.seed(0)
 
     board_size = 5
     server = GameServerGo(board_size)
@@ -321,7 +311,7 @@ async def main() -> None:
     NUM_EPISODES = 600
     outcome = 0
     for iter in range(NUM_EPISODES):
-        state, komi = await server.reset_game("No AI")
+        state, komi = await server.reset_game("Debug")
         server.go = Go_uf(board_size, state, komi)
 
         buffer: list[tuple[State, bool, torch.Tensor, list[State]]] = []  # score: dict[str, dict[str, Any]]]
@@ -351,7 +341,10 @@ async def main() -> None:
             is_white = not is_white
             state = next_state
             episode_length += 1
+        #     if episode_length > 2:
+        #         break
 
+        # break
         assert outcome != 0, "outcome should not be 0 after a game ended"
 
         mcts.agent.plotter.update_wins_white(1 if outcome == -1 else -1)

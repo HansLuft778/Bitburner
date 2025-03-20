@@ -125,9 +125,7 @@ class AlphaZeroAgent:
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        self.policy_net = ResNet(board_width, board_width, 2, num_past_steps=num_past_steps).to(
-            self.device
-        )
+        self.policy_net = ResNet(board_width, board_width, 2, num_past_steps=num_past_steps).to(self.device)
         self.policy_net.eval()
 
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr, weight_decay=wheight_decay)

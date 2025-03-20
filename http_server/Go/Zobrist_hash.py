@@ -11,7 +11,6 @@ class ZobristHash:
             [[np.random.randint(0, 2**64, dtype=np.uint64) for _ in range(2)] for _ in range(board_size * board_size)],
             dtype=np.uint64,
         )
-        self.player_hash = np.random.randint(0, 2**64, dtype=np.uint64)
 
     def compute_hash(self, state: State, player_to_move: int) -> np.uint64:
         """Compute the Zobrist hash for the entire board state"""
@@ -24,15 +23,9 @@ class ZobristHash:
                 elif state[i, j] == 2:  # White stone
                     h ^= self.table[pos][1]
 
-        # Add player to move in the hash
-        if player_to_move == 2:  # If white to move
-            h ^= self.player_hash
-
         return h
 
-    def update_hash(
-        self, hash: np.uint64, pos: int, old_value: int, new_value: int, player_to_move: int, next_player: int
-    ) -> np.uint64:
+    def update_hash(self, hash: np.uint64, pos: int, old_value: int, new_value: int) -> np.uint64:
         """Update the hash incrementally after a move"""
         # Remove old piece if any
         if old_value == 1:
@@ -45,10 +38,6 @@ class ZobristHash:
             hash ^= self.table[pos][0]
         elif new_value == 2:
             hash ^= self.table[pos][1]
-
-        # Update player to move
-        if player_to_move != next_player:
-            hash ^= self.player_hash
 
         return hash
 
@@ -67,6 +56,3 @@ class ZobristHash:
             hash ^= self.table[pos][1]
 
         return hash
-
-    def flip_player(self, hash: np.uint64) -> np.uint64:
-        return hash ^ self.player_hash
