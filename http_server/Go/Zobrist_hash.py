@@ -12,7 +12,7 @@ class ZobristHash:
             dtype=np.uint64,
         )
 
-    def compute_hash(self, state: State, player_to_move: int) -> np.uint64:
+    def compute_hash(self, state: State) -> np.uint64:
         """Compute the Zobrist hash for the entire board state"""
         h: np.uint64 = np.uint64(0)
         for i in range(self.board_size):

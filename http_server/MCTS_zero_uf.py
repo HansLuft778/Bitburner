@@ -198,7 +198,7 @@ class MCTS:
 
     @torch.no_grad()  # pyright: ignore
     def search(self, uf: UnionFind, is_white: bool):
-        uf.hash = self.server.go.zobrist.compute_hash(uf.state, is_white)
+        uf.hash = self.server.go.zobrist.compute_hash(uf.state)
         root: Node = Node(uf, self.server, is_white, self.agent)
 
         self.timing_stats.clear()

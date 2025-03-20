@@ -624,7 +624,7 @@ class Go_uf:
             return None
 
         # check for repeat
-        next_hash = self.zobrist.compute_hash(sim_state, enemy)
+        next_hash = self.zobrist.compute_hash(sim_state)
         is_repeat = self.check_state_is_repeat(next_hash, additional_history)
         if is_repeat:
             return None
