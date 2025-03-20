@@ -191,8 +191,8 @@ class AlphaZeroAgent:
 
         # rotate state
         for rot in range(1, 4):
-            rotated_state = np.rot90(state, rot)
-            rotated_history = [np.rot90(h, rot) for h in history]
+            rotated_state = np.rot90(state, rot).copy()
+            rotated_history = [np.rot90(h, rot).copy() for h in history]
 
             rotated_pi_board = torch.rot90(pi_board, rot)
             rotated_pi = torch.cat([rotated_pi_board.flatten(), pi_pass.unsqueeze(0)])
@@ -200,16 +200,16 @@ class AlphaZeroAgent:
             self.train_buffer.push(rotated_state, rotated_pi, outcome, rotated_history, was_white)
 
         # mirror state
-        mirrored_state = np.fliplr(state)
-        mirrored_history = [np.fliplr(h) for h in history]
+        mirrored_state = np.fliplr(state).copy()
+        mirrored_history = [np.fliplr(h).copy() for h in history]
         mirrored_pi_board = torch.fliplr(pi_board)
         mirrored_pi = torch.cat([mirrored_pi_board.flatten(), pi_pass.unsqueeze(0)])
 
         self.train_buffer.push(mirrored_state, mirrored_pi, outcome, mirrored_history, was_white)
 
         for rot in range(1, 4):
-            mirrored_rotated_state = np.rot90(mirrored_state, rot)
-            mirrored_rotated_history = [np.rot90(h, rot) for h in mirrored_history]
+            mirrored_rotated_state = np.rot90(mirrored_state, rot).copy()
+            mirrored_rotated_history = [np.rot90(h, rot).copy() for h in mirrored_history]
 
             mirrored_rotated_pi_board = torch.rot90(mirrored_pi_board, rot)
             mirrored_rotated_pi = torch.cat([mirrored_rotated_pi_board.flatten(), pi_pass.unsqueeze(0)])
@@ -222,7 +222,7 @@ class AlphaZeroAgent:
                 was_white,
             )
 
-    def preprocess_state(self, board_state: State, history: list[State], is_white: bool):
+    def preprocess_state(self, state: State, history: list[State], is_white: bool):
         """
         Convert the board (numpy array) into a float tensor of shape [1,8,w,h].
         1 -> 1.0  Black, Channel 1, 3, 5
@@ -230,43 +230,22 @@ class AlphaZeroAgent:
         3 -> 1.0  Channel 0
         0 -> 0.0  (Empty)
         """
-        w, h = self.board_width, self.board_height
+        num_channels = 4 + 2 * self.num_past_steps
+        result = torch.zeros((1, num_channels, self.board_width, self.board_width), device=self.device)
+        board_tensor = torch.as_tensor(state, device=self.device)
 
-        channels: list[torch.Tensor] = []
+        result[0, 0] = (board_tensor == 3).float()  # disabled
+        result[0, 1].fill_(is_white)  # side
+        result[0, 2] = (board_tensor == 1).float()  # black
+        result[0, 3] = (board_tensor == 2).float()  # white
 
-        # disabled channel
-        disabled_channel = torch.zeros(w, h, device=self.device)
-        side_channel = torch.ones(w, h, device=self.device) if is_white else torch.zeros(w, h, device=self.device)
-        current_black = torch.zeros(w, h, device=self.device)
-        current_white = torch.zeros(w, h, device=self.device)
+        # process history
+        for past_idx in range(min(self.num_past_steps, len(history))):
+            past_step = torch.as_tensor(history[past_idx], device=self.device)
+            result[0, 4 + past_idx * 2] = (past_step == 1).float()  # black
+            result[0, 5 + past_idx * 2] = (past_step == 2).float()  # white
 
-        mask_black = torch.as_tensor(board_state == 1, device=self.device)
-        mask_white = torch.as_tensor(board_state == 2, device=self.device)
-        mask_disabled = torch.as_tensor(board_state == 3, device=self.device)
-        current_black[mask_black] = 1.0
-        current_white[mask_white] = 1.0
-        disabled_channel[mask_disabled] = 1.0
-
-        channels.extend([disabled_channel, side_channel, current_black, current_white])
-
-        # parse history and append to channels
-        for past_idx in range(self.num_past_steps):
-
-            history_black = torch.zeros(w, h, device=self.device)
-            history_white = torch.zeros(w, h, device=self.device)
-            if len(history) > past_idx:
-                past_step = history[past_idx]
-
-                mask_black = torch.as_tensor(past_step == 1, device=self.device)
-                mask_white = torch.as_tensor(past_step == 2, device=self.device)
-                history_black[mask_black] = 1.0
-                history_white[mask_white] = 1.0
-
-            channels.extend([history_black, history_white])
-
-        board_tensor = torch.stack(channels).unsqueeze(0)
-
-        return board_tensor
+        return result
 
     @torch.no_grad()  # pyright: ignore
     def get_actions_eval(
