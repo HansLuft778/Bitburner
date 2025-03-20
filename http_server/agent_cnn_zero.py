@@ -110,9 +110,9 @@ class AlphaZeroAgent:
         self,
         board_width: int,
         plotter: Plotter,
-        lr: float = 8e-5,
-        batch_size: int = 128,
-        num_past_steps: int = 3,
+        lr: float = 3e-4,
+        batch_size: int = 256,
+        num_past_steps: int = 2,
         wheight_decay: float = 2e-4,
         checkpoint_dir: str = "models/checkpoints",
     ):
@@ -125,7 +125,7 @@ class AlphaZeroAgent:
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        self.policy_net = ResNet(board_width, board_width, 2, num_past_steps=num_past_steps).to(self.device)
+        self.policy_net = ResNet(board_width, board_width, 4,num_hiden=64, num_past_steps=num_past_steps).to(self.device)
         self.policy_net.eval()
 
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr, weight_decay=wheight_decay)

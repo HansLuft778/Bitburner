@@ -308,7 +308,7 @@ async def main() -> None:
     # agent.load_checkpoint("checkpoint_69.pth")
     mcts = MCTS(server, plotter, agent, search_iterations=1000)
 
-    NUM_EPISODES = 600
+    NUM_EPISODES = 1000
     outcome = 0
     for iter in range(NUM_EPISODES):
         state, komi = await server.reset_game("Debug")
