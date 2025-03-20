@@ -28,11 +28,6 @@ class UndoAction:
     value: Any  # The value before change
 
 
-# def get_bit_indices(mask: np.uint64) -> np.ndarray[Any, np.dtype[np.int32]]:
-#     indices = [i for i in range(64) if (mask >> i) & 1]
-#     return np.array(indices, dtype=np.int32)
-
-
 @numba.njit()  # type: ignore
 def get_bit_indices(mask: np.uint64) -> np.ndarray[Any, np.dtype[np.int32]]:
     indices = np.empty(64, np.int32)
@@ -176,38 +171,6 @@ class UnionFind:
 
         new_root = self.find_no_compression(a)
         self.liberties[new_root] = calculate_group_liberties(self.stones[new_root], self.state, self.board_size)
-
-        # recalculate liberties
-        # self.liberties[new_root] = 0
-        # stone_indices = np.where(self.stones[new_root] == 1)[0]
-        # stone_indices = get_bit_indices(self.stones[new_root])
-        # sx = stone_indices // self.board_size
-        # sy = stone_indices % self.board_size
-
-        # neighbors: list[tuple[np.ndarray[Any, np.dtype[np.int8]], np.ndarray[Any, np.dtype[np.int8]]]] = []
-        # for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-        #     nx = sx + dx
-        #     ny = sy + dy
-        #     valid = (nx >= 0) & (nx < self.board_size) & (ny >= 0) & (ny < self.board_size)
-        #     nx, ny = nx[valid], ny[valid]
-        #     neighbors.append((nx, ny))
-
-        # # concat all neighbors
-        # all_nx = np.concatenate([n[0] for n in neighbors])
-        # all_ny = np.concatenate([n[1] for n in neighbors])
-
-        # empty_mask = self.state[all_nx, all_ny] == 0
-        # empty_nx = all_nx[empty_mask]
-        # empty_ny = all_ny[empty_mask]
-
-        # lib_positions = empty_nx * self.board_size + empty_ny
-        # # self.liberties[new_root][lib_positions] = 1
-        # # for lib_pos in lib_positions:
-        # #     add_stone_to_group(self.liberties, new_root, lib_pos)
-        # bit_positions = lib_positions.astype(np.int64)
-        # bit_masks = np.left_shift(np.int64(1), bit_positions)
-        # mask = np.bitwise_or.reduce(bit_masks, initial=np.int64(0))
-        # self.liberties[new_root] |= mask
 
     def undo_move_changes(self, undo_stack: list[UndoAction], zobrist: ZobristHash) -> None:
         """Apply the undo stack to revert changes to both state and UF"""
@@ -710,34 +673,6 @@ class Go_uf:
                     uf.liberties[enemy_group] = calculate_group_liberties(
                         uf.stones[enemy_group], uf.state, self.board_width
                     )
-                    # uf.liberties[enemy_group] = 0
-                    # stone_indices = get_bit_indices(uf.stones[enemy_group])
-                    # sx_vec = stone_indices // self.board_height
-                    # sy_vec = stone_indices % self.board_height
-
-                    # all_neighbors_x: list[np.ndarray[Any, np.dtype[np.int64]]] = []
-                    # all_neighbors_y: list[np.ndarray[Any, np.dtype[np.int64]]] = []
-                    # for dx2, dy2 in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                    #     nx2 = sx_vec + dx2
-                    #     ny2 = sy_vec + dy2
-                    #     valid = (nx2 >= 0) & (nx2 < self.board_height) & (ny2 >= 0) & (ny2 < self.board_height)
-                    #     nx2, ny2 = nx2[valid], ny2[valid]
-                    #     all_neighbors_x.append(nx2)
-                    #     all_neighbors_y.append(ny2)
-
-                    # all_nx = np.concatenate(all_neighbors_x)
-                    # all_ny = np.concatenate(all_neighbors_y)
-
-                    # empty_mask = uf.state[all_nx, all_ny] == 0
-                    # empty_nx = all_nx[empty_mask]
-                    # empty_ny = all_ny[empty_mask]
-
-                    # lib_positions = empty_nx * self.board_height + empty_ny
-                    # # Combine them in a single bitmask:
-                    # bit_positions = lib_positions.astype(np.int64)
-                    # bit_masks = np.left_shift(np.int64(1), bit_positions)
-                    # mask = np.bitwise_or.reduce(bit_masks, initial=np.int64(0))
-                    # uf.liberties[enemy_group] |= mask
 
                     # capture enemy group if no liberties
                     if uf.liberties[enemy_group] == 0:
