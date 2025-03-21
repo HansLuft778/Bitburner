@@ -159,7 +159,7 @@ class AlphaZeroAgent:
         self.policy_net.load_state_dict(checkpoint["model_state_dict"])
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
-        # self.train_buffer = pickle.loads(checkpoint["train_buffer"])
+        self.train_buffer = pickle.loads(checkpoint["train_buffer"])
         self.policy_net.eval()  # Set to eval mode after loading
         print(f"Checkpoint loaded from {checkpoint_path}")
 
