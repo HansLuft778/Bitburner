@@ -25,7 +25,7 @@ def get_ucb_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) -
         q_value = 0.0
     else:
         q_value = -(child.win_sum / child.visit_cnt)
-    u_value = c_puct * child.selected_policy * math.sqrt(parent_visit_count) / (1 + child.visit_cnt)
+    u_value = c_puct * child.selected_policy * parent_visit_count**0.5 / (1 + child.visit_cnt)
     return q_value + u_value
 
 
@@ -113,8 +113,8 @@ class Node:
     def get_history_ref(self) -> list[State]:
         history: list[State] = []
         current = self
-        while self:
-            history.append(self.uf.state)
+        while current:
+            history.append(current.uf.state)
             if current.parent is not None:
                 current = current.parent
             else:
@@ -124,8 +124,8 @@ class Node:
     def get_hash_history(self) -> list[np.uint64]:
         history: list[np.uint64] = []
         current = self
-        while self:
-            history.append(self.uf.hash)
+        while current:
+            history.append(current.uf.hash)
             if current.parent is not None:
                 current = current.parent
             else:
