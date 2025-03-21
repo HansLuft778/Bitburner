@@ -25,7 +25,7 @@ def get_ucb_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) -
         q_value = 0.0
     else:
         q_value = -(child.win_sum / child.visit_cnt)
-    u_value = c_puct * child.selected_policy * math.sqrt(parent_visit_count) / (1 + child.visit_cnt)
+    u_value = c_puct * child.selected_policy * parent_visit_count**0.5 / (1 + child.visit_cnt)
     return q_value + u_value
 
 
@@ -53,6 +53,7 @@ class Node:
         self.valid_moves: np.ndarray[Any, np.dtype[np.bool_]] | None = None
 
         self.children: list[Node] = []
+        self.pending_evaluation = False
 
         self.visit_cnt = visit_count
         self.win_sum = 0.0
@@ -97,15 +98,14 @@ class Node:
             return (True, self.get_score())
 
         # one pass, next player has no valid moves
-        if self.parent:
-            valid_moves = np.sum(self.get_valid_moves())
-            if self.parent.action == board_size and valid_moves == 0:
+        if self.parent and self.parent.action == board_size:
+            valid_moves = self.get_valid_moves()
+            if not valid_moves.any():
                 print(f"node.parent.action: {self.parent.action}, valid_moves: {valid_moves}")
                 return (True, self.get_score())
 
         # board full
-        space_available = np.any(self.uf.state == 0)
-        if not space_available:
+        if not (self.uf.state == 0).any():
             return (True, self.get_score())
 
         return (False, 0)
@@ -113,8 +113,8 @@ class Node:
     def get_history_ref(self) -> list[State]:
         history: list[State] = []
         current = self
-        while self:
-            history.append(self.uf.state)
+        while current:
+            history.append(current.uf.state)
             if current.parent is not None:
                 current = current.parent
             else:
@@ -124,8 +124,8 @@ class Node:
     def get_hash_history(self) -> list[np.uint64]:
         history: list[np.uint64] = []
         current = self
-        while self:
-            history.append(self.uf.hash)
+        while current:
+            history.append(current.uf.hash)
             if current.parent is not None:
                 current = current.parent
             else:
@@ -190,11 +190,40 @@ class MCTS:
     ):
         self.search_iterations = search_iterations
         self.server = server
+        self.batch_size = 32
 
         self.plotter = plotter
         self.agent = agent
         self.timing_stats: defaultdict[str, float] = defaultdict(float)
         self.iterations_stats: defaultdict[str, int] = defaultdict(int)
+
+
+    def select_leaf_for_batch(self, root: Node) -> Union[Node, None]:
+        """
+        Descend the tree from 'root' until we hit:
+          - a terminal node => backprop immediately, return None
+          - or an unexpanded node not in 'pending_nodes' => add to pending_nodes, return it
+          - or an unexpanded node already in 'pending_nodes' => skip, return None
+        """
+        node = root
+        while True:
+            done, value = node.has_game_ended()
+            if done:
+                # Terminal => immediate backprop
+                node.backprop(value)
+                return None
+
+            if node.is_fully_expanded():
+                # Keep going down
+                node = node.next()
+            else:
+                # Not expanded yet
+                # If this node is already waiting to be expanded this batch, skip it
+                if node.pending_evaluation:
+                    return None
+                # Mark it so we won't pick it again
+                node.pending_evaluation = True
+                return node
 
     @torch.no_grad()  # pyright: ignore
     def search(self, uf: UnionFind, is_white: bool):
@@ -205,42 +234,66 @@ class MCTS:
         self.iterations_stats.clear()
         search_start = time.time()
 
-        for _ in range(self.search_iterations):
-            node = root
-            # selection
-            select_start = time.time()
-            while node.is_fully_expanded():
-                node = node.next()
-            self.timing_stats["selection"] += time.time() - select_start
-            self.iterations_stats["selection"] += 1
 
-            # expansion
-            end_check_start = time.time()
-            done, value = node.has_game_ended()
-            self.timing_stats["end_check"] += time.time() - end_check_start
+        iteration = 0
+        while iteration < self.search_iterations:
 
-            if not done:
-                prep_start = time.time()
-                valid_moves = node.get_valid_moves()
+            
+            batch_nodes: list[Node] = []
+            batch_collect_start = time.time()
+            for _ in range(min(self.batch_size, self.search_iterations - iteration)):
+                leaf = self.select_leaf_for_batch(root)
+                if leaf is None:
+                    # terminal node or a node thats already pending
+                    break
+                batch_nodes.append(leaf)
+                iteration += 1
+
+                # If we've run out of total iterations, break
+                if iteration >= self.search_iterations:
+                    break
+
+            self.timing_stats["batch_collection"] += time.time() - batch_collect_start
+            self.iterations_stats["selection"] += len(batch_nodes)
+
+            # If no nodes to evaluate, continue
+            if not batch_nodes:
+                break
+
+            batch_prep_start = time.time()
+            batch_states: list[State] = []
+            batch_valid_moves: list[np.ndarray[Any, np.dtype[np.bool_]]] = []
+            batch_histories: list[list[State]] = []
+            batch_is_white: list[bool] = []
+            for node in batch_nodes:
+                batch_states.append(node.uf.state)
+                batch_valid_moves.append(node.get_valid_moves())
                 history = node.get_history_ref()
                 history.extend(self.server.get_game_history())
-                self.timing_stats["move_prep"] += time.time() - prep_start
+                batch_histories.append(history)
+                batch_is_white.append(node.is_white)
+            self.timing_stats["batch_prep"] += time.time() - batch_prep_start
 
-                inference_start = time.time()
-                logits, value = self.agent.get_actions_eval(node.uf.state, valid_moves, history, node.is_white)
-                if node.parent is None:
-                    print(f"Value estimate: {value:.3f} (from {'white' if node.is_white else 'black'}'s perspective)")
+            inference_start = time.time()
+            batch_logits, batch_values = self.agent.get_actions_eval_batch(
+                batch_states, batch_histories, batch_is_white
+            )
+            self.timing_stats["inference"] += time.time() - inference_start
+            self.iterations_stats["inference"] += len(batch_nodes)
 
-                self.timing_stats["nn_inference"] += time.time() - inference_start
-                self.iterations_stats["nn_inference"] += 1
+            batch_process_start = time.time()
+            for i, node in enumerate(batch_nodes):
+                logits = batch_logits[i]
+                value = batch_values[i]
 
-                policy_start = time.time()
-                valid_mask = torch.tensor(valid_moves, device=self.agent.device, dtype=torch.bool)
+                node.pending_evaluation = False
+                valid_mask = torch.tensor(batch_valid_moves[i], device=self.agent.device, dtype=torch.bool)
                 logits[~valid_mask] = -1e9
                 policy = torch.softmax(logits, dim=0)
 
                 # Apply dirichlet noise
                 if node.parent is None:
+                    print(f"Value estimate: {value:.3f} (from {'white' if node.is_white else 'black'}'s perspective)")
                     alpha = 0.2
                     dir_noise = np.random.dirichlet([alpha] * len(policy))
                     dir_noise_tensor = torch.tensor(dir_noise, device=policy.device, dtype=policy.dtype)
@@ -249,18 +302,15 @@ class MCTS:
 
                     # Renormalize
                     policy = policy / torch.sum(policy)
-                self.timing_stats["policy_compute"] += time.time() - policy_start
 
                 expand_start = time.time()
                 node.expand(policy)
                 self.timing_stats["expansion"] += time.time() - expand_start
 
-            # backpropagation
-            backprop_start = time.time()
-            node.backprop(value)
-            self.timing_stats["backprop"] += time.time() - backprop_start
-            # plot tree from root node for debugging
-            # if iter == 999:
+                node.backprop(value)
+
+            self.timing_stats["batch_process"] += time.time() - batch_process_start
+            # if iteration == 999:
             #     TreePlot(root).create_tree()
 
         final_policy_start = time.time()
@@ -295,8 +345,8 @@ def choose_action(pi: torch.Tensor, episode_length: int) -> int:
 
 
 async def main() -> None:
-    # torch.manual_seed(0)  # pyright: ignore
-    # np.random.seed(0)
+    torch.manual_seed(0)  # pyright: ignore
+    np.random.seed(0)
 
     board_size = 5
     server = GameServerGo(board_size)
@@ -305,13 +355,13 @@ async def main() -> None:
 
     plotter = Plotter()
     agent = AlphaZeroAgent(board_size, plotter)
-    agent.load_checkpoint("checkpoint_149.pth")
+    agent.load_checkpoint("checkpoint_69.pth")
     mcts = MCTS(server, plotter, agent, search_iterations=1000)
 
     NUM_EPISODES = 1000
     outcome = 0
     for iter in range(NUM_EPISODES):
-        state, komi = await server.reset_game("No AI")
+        state, komi = await server.reset_game("Debug")
         server.go = Go_uf(board_size, state, komi)
 
         buffer: list[tuple[State, bool, torch.Tensor, list[State]]] = []  # score: dict[str, dict[str, Any]]]
@@ -341,6 +391,9 @@ async def main() -> None:
             is_white = not is_white
             state = next_state
             episode_length += 1
+        #     if episode_length > 2:
+        #         break
+        # break
 
         assert outcome != 0, "outcome should not be 0 after a game ended"
 

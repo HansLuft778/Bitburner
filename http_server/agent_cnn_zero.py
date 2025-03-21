@@ -271,6 +271,50 @@ class AlphaZeroAgent:
         # Select the action with highest Q-value
         return policy.squeeze(0), value.item()
 
+    def get_actions_eval_batch(
+        self,
+        states: list[State],
+        histories: list[list[State]],
+        is_whites: list[bool],
+    ) -> tuple[list[torch.Tensor], list[float]]:
+        batch_size = len(states)
+        num_channels = 4 + 2 * self.num_past_steps
+        batch_tensor = torch.zeros((batch_size, num_channels, self.board_width, self.board_width), device=self.device)
+        
+        states_tensor = torch.tensor(np.stack(states), device=self.device)
+        
+        batch_tensor[:, 0] = (states_tensor == 3).float()  # disabled
+        batch_tensor[:, 2] = (states_tensor == 1).float()  # black
+        batch_tensor[:, 3] = (states_tensor == 2).float()  # white
+        
+        # Set player color for each board
+        for i, is_white in enumerate(is_whites):
+            batch_tensor[i, 1].fill_(float(is_white))
+        
+        # process history
+        for i in range(batch_size):
+            history = histories[i]
+            history_len = min(self.num_past_steps, len(history))
+            
+            if history_len > 0:
+                # Process all history for this sample at once
+                history_tensor = torch.tensor(np.stack(history[:history_len]), device=self.device)
+                
+                for j in range(history_len):
+                    batch_tensor[i, 4 + j*2] = (history_tensor[j] == 1).float()  # black
+                    batch_tensor[i, 5 + j*2] = (history_tensor[j] == 2).float()  # white
+        
+
+        logits, values = self.policy_net(batch_tensor)
+        
+        batch_logits: list[torch.Tensor] = []
+        batch_values: list[float] = []
+        for i in range(batch_size):
+            batch_logits.append(logits[i])
+            batch_values.append(values[i].item())
+
+        return batch_logits, batch_values
+
     def decode_action(self, action_idx: int) -> tuple[int, int]:
         """
         Convert the action index back to (x, y) or 'pass'.
