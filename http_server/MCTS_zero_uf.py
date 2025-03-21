@@ -1,4 +1,3 @@
-import math
 import time
 from collections import defaultdict
 from typing import Any, Union
@@ -190,7 +189,7 @@ class MCTS:
     ):
         self.search_iterations = search_iterations
         self.server = server
-        self.batch_size = 32
+        self.batch_size = 2
 
         self.plotter = plotter
         self.agent = agent
@@ -370,6 +369,8 @@ async def main() -> None:
         game_history = [state]
         mcts.agent.policy_net.eval()
         episode_length = 0
+        
+        start_time = time.time()
         while not done:
             before = time.time()
             pi_mcts = mcts.search(server.go.uf, is_white)
@@ -394,6 +395,8 @@ async def main() -> None:
         #     if episode_length > 2:
         #         break
         # break
+        print(f"Game length: {episode_length}, took {time.time()-start_time:.3f}s")
+        print("===============================================================================")
 
         assert outcome != 0, "outcome should not be 0 after a game ended"
 
