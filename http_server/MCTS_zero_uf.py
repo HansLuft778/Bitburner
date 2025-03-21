@@ -183,14 +183,12 @@ class MCTS:
     def __init__(
         self,
         server: GameServerGo,
-        plotter: Plotter,
         agent: AlphaZeroAgent,
         search_iterations: int,
     ):
         self.search_iterations = search_iterations
         self.server = server
 
-        self.plotter = plotter
         self.agent = agent
         self.timing_stats: defaultdict[str, float] = defaultdict(float)
         self.iterations_stats: defaultdict[str, int] = defaultdict(int)
@@ -305,7 +303,7 @@ async def main() -> None:
     plotter = Plotter()
     agent = AlphaZeroAgent(board_size, plotter)
     # agent.load_checkpoint("checkpoint_69.pth")
-    mcts = MCTS(server, plotter, agent, search_iterations=1000)
+    mcts = MCTS(server, agent, search_iterations=1000)
 
     NUM_EPISODES = 1000
     outcome = 0
@@ -381,7 +379,7 @@ async def main_eval():
     plotter = Plotter()
     agent = AlphaZeroAgent(board_size, plotter)
     agent.load_checkpoint("checkpoint_69.pth")
-    mcts = MCTS(server, plotter, agent, search_iterations=1000)
+    mcts = MCTS(server, agent, search_iterations=1000)
 
     NUM_EPISODES = 100
     outcome = 0
