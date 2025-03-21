@@ -10,7 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
-from plotter import Plotter
+from plotter import Plotter  # type: ignore
 
 State = np.ndarray[Any, np.dtype[np.int8]]
 
@@ -126,7 +126,7 @@ class AlphaZeroAgent:
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        self.policy_net = ResNet(board_width, board_width, 4, num_hiden=64, num_past_steps=num_past_steps).to(
+        self.policy_net = ResNet(board_width, board_width, 5, num_hiden=64, num_past_steps=num_past_steps).to(
             self.device
         )
         self.policy_net.eval()
