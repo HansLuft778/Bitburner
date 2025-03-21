@@ -94,22 +94,33 @@ class GameServerGo:
         else:
             x, y = action
             res = await self.send_request({"command": "make_move", "x": x, "y": y, "playAsWhite": is_white})
+        print(res)
 
         # make same move locally
         self.go.make_move(action_idx, is_white)
-        print(res)
 
         next_state = res["board"]
         outcome = res["outcome"]
         done = res["done"]
+        pos = res.get("pos", -1)
 
-        enc_state = self.go.encode_state(next_state)
-        self.go.uf.state = enc_state
+        if pos != -1:
+            s, r, d = self.go.make_move(pos, not is_white)
+        else:
+            s, r, d = self.go.make_move(self.go.board_size, not is_white)
+
+        assert np.array_equal(
+            s, self.go.encode_state(next_state)
+        ), f"State mismatch: left: {s}, right: {self.go.encode_state(next_state)}"
+        assert r == outcome, f"Reward mismatch: left: {r}, right: {outcome}"
+        assert d == done, f"Done flag mismatch: left: {d}, right: {done}"
+
+        # enc_state = self.go.encode_state(next_state)
+        # self.go.uf = UnionFind.get_uf_from_state(enc_state).copy()
 
         self.go.history.append(self.go.uf.state)
 
-        print(f"state: {enc_state} reward: {outcome} done: {done}")
-        return enc_state, outcome, done
+        return s, outcome, done
 
     def get_game_history(self) -> list[State]:
         history = self.go.get_history()

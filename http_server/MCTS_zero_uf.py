@@ -1,4 +1,3 @@
-import math
 import time
 from collections import defaultdict
 from typing import Any, Union
@@ -9,7 +8,7 @@ import torch
 from agent_cnn_zero import AlphaZeroAgent
 from gameserver_local_uf import GameServerGo
 from Go.Go_uf import Go_uf, UnionFind
-from plotter import Plotter
+from plotter import Plotter # type: ignore
 from TreePlotter import TreePlot  # pyright: ignore
 
 State = np.ndarray[Any, np.dtype[np.int8]]
@@ -197,7 +196,7 @@ class MCTS:
         self.iterations_stats: defaultdict[str, int] = defaultdict(int)
 
     @torch.no_grad()  # pyright: ignore
-    def search(self, uf: UnionFind, is_white: bool):
+    def search(self, uf: UnionFind, is_white: bool, eval_mode: bool = False) -> torch.Tensor:
         uf.hash = self.server.go.zobrist.compute_hash(uf.state)
         root: Node = Node(uf, self.server, is_white, self.agent)
 
@@ -240,7 +239,7 @@ class MCTS:
                 policy = torch.softmax(logits, dim=0)
 
                 # Apply dirichlet noise
-                if node.parent is None:
+                if node.parent is None and not eval_mode:
                     alpha = 0.2
                     dir_noise = np.random.dirichlet([alpha] * len(policy))
                     dir_noise_tensor = torch.tensor(dir_noise, device=policy.device, dtype=policy.dtype)
@@ -305,7 +304,7 @@ async def main() -> None:
 
     plotter = Plotter()
     agent = AlphaZeroAgent(board_size, plotter)
-    agent.load_checkpoint("checkpoint_149.pth")
+    # agent.load_checkpoint("checkpoint_69.pth")
     mcts = MCTS(server, plotter, agent, search_iterations=1000)
 
     NUM_EPISODES = 1000
@@ -320,6 +319,7 @@ async def main() -> None:
         game_history = [state]
         mcts.agent.policy_net.eval()
         episode_length = 0
+        start_time = time.time()
         while not done:
             before = time.time()
             pi_mcts = mcts.search(server.go.uf, is_white)
@@ -341,6 +341,8 @@ async def main() -> None:
             is_white = not is_white
             state = next_state
             episode_length += 1
+        print(f"Episode length: {episode_length}, took {time.time()-start_time:.3f}s")
+        print("================================================================================")
 
         assert outcome != 0, "outcome should not be 0 after a game ended"
 
@@ -371,26 +373,27 @@ async def main() -> None:
 
 
 async def main_eval():
-    server = GameServerGo(5)
+    board_size = 5
+    server = GameServerGo(board_size)
     await server.wait()
     print("GameServer ready and client connected")
 
     plotter = Plotter()
-    agent = AlphaZeroAgent(7, plotter, batch_size=128)
-    agent.load_checkpoint("checkpoint_56.pth")
+    agent = AlphaZeroAgent(board_size, plotter)
+    agent.load_checkpoint("checkpoint_69.pth")
     mcts = MCTS(server, plotter, agent, search_iterations=1000)
 
     NUM_EPISODES = 100
     outcome = 0
     for _ in range(NUM_EPISODES):
         state, komi = await server.reset_game("Netburners")
-        server.go = Go_uf(7, state, komi)
+        server.go = Go_uf(board_size, state, komi)
 
         is_white = False
         done = False
         mcts.agent.policy_net.eval()
         while not done:
-            pi_mcts = mcts.search(server.go.uf, is_white)
+            pi_mcts = mcts.search(server.go.uf, is_white, True)
             print(pi_mcts)
             best_move = int(torch.argmax(pi_mcts).item())
             print(f"{best_move}, {pi_mcts[best_move]}")

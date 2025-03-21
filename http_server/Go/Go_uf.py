@@ -222,7 +222,6 @@ class UnionFind:
                             nidx = nx * width + ny
                             if state[nx][ny] in (1, 2):
                                 n_root = uf.find(nidx)
-                                # liberties[n_root][idx] = 1
                                 add_stone_to_group(liberties, n_root, idx)
                     continue
 
@@ -242,7 +241,6 @@ class UnionFind:
                         nidx = nx * width + ny
                         # neighbor is empty
                         if state[nx][ny] == 0:
-                            # liberties[idx_root][nidx] = 1
                             add_stone_to_group(liberties, idx_root, nidx)
                         # neighbor is same color
                         elif colors[nidx] == color:
@@ -251,7 +249,6 @@ class UnionFind:
                         # neighbor is enemy
                         elif uf.colors[nidx] == enemy:
                             enemy_group = uf.find(nidx)
-                            # uf.liberties[enemy_group][idx] = 0
                             remove_stone_from_group(uf.liberties, enemy_group, idx)
 
         return uf
