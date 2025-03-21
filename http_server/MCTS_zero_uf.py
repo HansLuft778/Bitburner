@@ -295,8 +295,8 @@ def choose_action(pi: torch.Tensor, episode_length: int) -> int:
 
 
 async def main() -> None:
-    torch.manual_seed(0)  # pyright: ignore
-    np.random.seed(0)
+    # torch.manual_seed(0)  # pyright: ignore
+    # np.random.seed(0)
 
     board_size = 5
     server = GameServerGo(board_size)
@@ -305,13 +305,13 @@ async def main() -> None:
 
     plotter = Plotter()
     agent = AlphaZeroAgent(board_size, plotter)
-    # agent.load_checkpoint("checkpoint_69.pth")
+    agent.load_checkpoint("checkpoint_149.pth")
     mcts = MCTS(server, plotter, agent, search_iterations=1000)
 
     NUM_EPISODES = 1000
     outcome = 0
     for iter in range(NUM_EPISODES):
-        state, komi = await server.reset_game("Debug")
+        state, komi = await server.reset_game("No AI")
         server.go = Go_uf(board_size, state, komi)
 
         buffer: list[tuple[State, bool, torch.Tensor, list[State]]] = []  # score: dict[str, dict[str, Any]]]
@@ -341,10 +341,7 @@ async def main() -> None:
             is_white = not is_white
             state = next_state
             episode_length += 1
-        #     if episode_length > 2:
-        #         break
 
-        # break
         assert outcome != 0, "outcome should not be 0 after a game ended"
 
         mcts.agent.plotter.update_wins_white(1 if outcome == -1 else -1)
@@ -357,9 +354,9 @@ async def main() -> None:
             z = outcome if not was_white else -outcome
             mcts.agent.augment_state(state, pi, z, history, was_white)
 
-        # if iter < 2:
-        #     print("Skipping training")
-        #     continue
+        if iter < 8:
+            print("Skipping training")
+            continue
         game_length = len(game_history)
         min_train_steps = 10  # Minimum number of training steps
         max_train_steps = 40  # Maximum number of training steps
