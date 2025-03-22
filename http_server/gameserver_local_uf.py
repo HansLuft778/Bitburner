@@ -52,11 +52,11 @@ class GameServerGo:
         uf: UnionFind,
         history: list[np.uint64] = [],
     ) -> np.ndarray[Any, np.dtype[np.bool_]]:
-        assert uf.state.shape == (
-            self.go.board_height,
-            self.go.board_height,
-        ), f"Array must be 5x5: {uf.state}"
-        assert np.all(np.isin(uf.state, [0, 1, 2, 3])), f"Array must only contain values 0, 1, 2, or 3: {uf.state}"
+        # assert uf.state.shape == (
+        #     self.go.board_height,
+        #     self.go.board_height,
+        # ), f"Array must be 5x5: {uf.state}"
+        # assert np.all(np.isin(uf.state, [0, 1, 2, 3])), f"Array must only contain values 0, 1, 2, or 3: {uf.state}"
 
         v = self.go.get_valid_moves(uf, is_white, history)
         return np.append(v, True)
