@@ -8,7 +8,7 @@ import torch
 from agent_cnn_zero import AlphaZeroAgent
 from gameserver_local_uf import GameServerGo
 from Go.Go_uf import Go_uf, UnionFind
-from plotter import Plotter # type: ignore
+from plotter import Plotter  # type: ignore
 from TreePlotter import TreePlot  # pyright: ignore
 
 State = np.ndarray[Any, np.dtype[np.int8]]
@@ -52,6 +52,10 @@ class Node:
         self.valid_moves: np.ndarray[Any, np.dtype[np.bool_]] | None = None
 
         self.children: list[Node] = []
+        self.policy: torch.Tensor | None = None
+        self.value: float | None = None
+
+        self.done: bool | None = None
 
         self.visit_cnt = visit_count
         self.win_sum = 0.0
@@ -143,7 +147,7 @@ class Node:
 
     def expand(self, q_values: torch.Tensor) -> None:
         board_size = self.agent.board_width * self.agent.board_height
-        policy_cpu: np.ndarray[Any, np.dtype[np.float32]] = q_values.cpu().numpy() # type: ignore
+        policy_cpu: np.ndarray[Any, np.dtype[np.float32]] = q_values.cpu().numpy()  # type: ignore
         for action in range(board_size + 1):
             if action == board_size:
                 next_uf = self.uf.copy()
@@ -193,18 +197,23 @@ class MCTS:
         self.agent = agent
         self.timing_stats: defaultdict[str, float] = defaultdict(float)
         self.iterations_stats: defaultdict[str, int] = defaultdict(int)
+        self.root = Node(server.go.uf, server, True, agent)
 
     @torch.no_grad()  # pyright: ignore
-    def search(self, uf: UnionFind, is_white: bool, eval_mode: bool = False) -> torch.Tensor:
+    def search(self, uf: UnionFind, is_white: bool, selected_child: int, eval_mode: bool = False) -> torch.Tensor:
         uf.hash = self.server.go.zobrist.compute_hash(uf.state)
-        root: Node = Node(uf, self.server, is_white, self.agent)
+        if selected_child == -1:
+            self.root = Node(uf, self.server, is_white, self.agent)
+        else:
+            self.root = self.root.children[selected_child]
+            self.root.parent = None
 
         self.timing_stats.clear()
         self.iterations_stats.clear()
         search_start = time.time()
 
         for _ in range(self.search_iterations):
-            node = root
+            node = self.root
             # selection
             select_start = time.time()
             while node.is_fully_expanded():
@@ -214,7 +223,12 @@ class MCTS:
 
             # expansion
             end_check_start = time.time()
-            done, value = node.has_game_ended()
+            if node.done is None:
+                node.done, node.value = node.has_game_ended()
+            assert node.value is not None, "Value should not be None"
+            value = node.value
+            done = node.done
+
             self.timing_stats["end_check"] += time.time() - end_check_start
 
             if not done:
@@ -225,28 +239,39 @@ class MCTS:
                 self.timing_stats["move_prep"] += time.time() - prep_start
 
                 inference_start = time.time()
-                logits, value = self.agent.get_actions_eval(node.uf.state, valid_moves, history, node.is_white)
-                if node.parent is None:
-                    print(f"Value estimate: {value:.3f} (from {'white' if node.is_white else 'black'}'s perspective)")
+                if node.policy is None:
+                    raw_logits, raw_value = self.agent.get_actions_eval(
+                        node.uf.state, valid_moves, history, node.is_white
+                    )
+                    valid_mask = torch.tensor(valid_moves, device=self.agent.device, dtype=torch.bool)
+                    raw_logits[~valid_mask] = -1e9
+                    final_probs = torch.softmax(raw_logits, dim=0)
+
+                    # Apply dirichlet noise
+                    if node.parent is None and not eval_mode:
+                        alpha = 0.2
+                        dir_noise = np.random.dirichlet([alpha] * len(final_probs))
+                        dir_noise_tensor = torch.tensor(dir_noise, device=final_probs.device, dtype=final_probs.dtype)
+                        epsilon = 0.2  # noise weight
+                        final_probs = (1 - epsilon) * final_probs + epsilon * dir_noise_tensor
+
+                        # Renormalize
+                        final_probs = final_probs / torch.sum(final_probs)
+                    node.policy = final_probs
+                    node.value = raw_value
+
+                policy = node.policy
+                assert node.value is not None, "Value should not be None"
+                value = node.value
 
                 self.timing_stats["nn_inference"] += time.time() - inference_start
                 self.iterations_stats["nn_inference"] += 1
 
+                if node.parent is None:
+                    print(f"Value estimate: {value:.3f} (from {'white' if node.is_white else 'black'}'s perspective)")
+
                 policy_start = time.time()
-                valid_mask = torch.tensor(valid_moves, device=self.agent.device, dtype=torch.bool)
-                logits[~valid_mask] = -1e9
-                policy = torch.softmax(logits, dim=0)
 
-                # Apply dirichlet noise
-                if node.parent is None and not eval_mode:
-                    alpha = 0.2
-                    dir_noise = np.random.dirichlet([alpha] * len(policy))
-                    dir_noise_tensor = torch.tensor(dir_noise, device=policy.device, dtype=policy.dtype)
-                    epsilon = 0.2  # noise weight
-                    policy = (1 - epsilon) * policy + epsilon * dir_noise_tensor
-
-                    # Renormalize
-                    policy = policy / torch.sum(policy)
                 self.timing_stats["policy_compute"] += time.time() - policy_start
 
                 expand_start = time.time()
@@ -267,7 +292,7 @@ class MCTS:
             self.agent.board_height * self.agent.board_height + 1,
             device=self.agent.device,
         )
-        for c in root.children:
+        for c in self.root.children:
             props[c.action] = c.visit_cnt
         props /= props.sum()
         self.timing_stats["final_policy"] += time.time() - final_policy_start
@@ -292,9 +317,13 @@ def choose_action(pi: torch.Tensor, episode_length: int) -> int:
     return int(torch.argmax(pi).item())
 
 
+def get_child_idx(pi: torch.Tensor, action: int) -> int:
+    return int(torch.where(torch.nonzero(pi, as_tuple=True)[0] == action)[0].item())
+
+
 async def main() -> None:
-    # torch.manual_seed(0)  # pyright: ignore
-    # np.random.seed(0)
+    torch.manual_seed(0)  # pyright: ignore
+    np.random.seed(0)
 
     board_size = 5
     server = GameServerGo(board_size)
@@ -309,7 +338,7 @@ async def main() -> None:
     NUM_EPISODES = 1000
     outcome = 0
     for iter in range(NUM_EPISODES):
-        state, komi = await server.reset_game("No AI")
+        state, komi = await server.reset_game("Debug")
         server.go = Go_uf(board_size, state, komi)
 
         buffer: list[tuple[State, bool, torch.Tensor, list[State]]] = []  # score: dict[str, dict[str, Any]]]
@@ -318,15 +347,17 @@ async def main() -> None:
         game_history = [state]
         mcts.agent.policy_net.eval()
         episode_length = 0
+        previous_child = -1
         start_time = time.time()
         while not done:
             before = time.time()
-            pi_mcts = mcts.search(server.go.uf, is_white)
+            pi_mcts = mcts.search(server.go.uf, is_white, previous_child)
             after = time.time()
             print(f"TOOK: {after-before}s")
             print(pi_mcts)
             # best_move = int(torch.argmax(pi_mcts).item())
             best_move = choose_action(pi_mcts, episode_length)
+            child_idx = get_child_idx(pi_mcts, best_move)
             print(f"{best_move}, {pi_mcts[best_move]}")
             action = mcts.agent.decode_action(best_move)
             print(f"make move: {action}")
@@ -339,7 +370,12 @@ async def main() -> None:
 
             is_white = not is_white
             state = next_state
+            previous_child = child_idx
             episode_length += 1
+
+        #     if episode_length > 5:
+        #         break
+        # break
         print(f"Episode length: {episode_length}, took {time.time()-start_time:.3f}s")
         print("================================================================================")
 
