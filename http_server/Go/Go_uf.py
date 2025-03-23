@@ -198,7 +198,7 @@ class UnionFind:
                     self.colors[action.position] = action.value
 
     @staticmethod
-    def get_uf_from_state(state: State) -> "UnionFind":
+    def get_uf_from_state(state: State, zobrist: ZobristHash) -> "UnionFind":
 
         width: int = state.shape[0]
 
@@ -208,6 +208,7 @@ class UnionFind:
         stones = np.zeros(width * width, dtype=np.int64)
         liberties = np.zeros(width * width, dtype=np.int64)
         uf = UnionFind(state, parent, colors, rank, stones, liberties, width)
+        uf.hash = zobrist.compute_hash(state)
 
         for x in range(width):
             for y in range(width):
@@ -313,9 +314,10 @@ class Go_uf:
         stones = np.zeros(board_width * board_width, dtype=np.int64)
         liberties = np.zeros(board_width * board_width, dtype=np.int64)
 
-        self.uf: UnionFind = UnionFind(state, parent, colors, rank, stones, liberties, self.board_width)
         self.zobrist = ZobristHash(self.board_width)
-        self.hash_history: list[np.uint64] = []
+        self.uf: UnionFind = UnionFind(state, parent, colors, rank, stones, liberties, self.board_width)
+        self.uf.hash = self.zobrist.compute_hash(state)
+        self.hash_history: list[np.uint64] = [self.uf.hash]
 
     def __str__(self):
         board = self.decode_state(self.uf.state)
