@@ -68,10 +68,12 @@ class GameServerGo:
         else:
             x, y = action
             res = await self.send_request({"command": "make_move", "x": x, "y": y, "playAsWhite": is_white})
-
+            
         # make same move locally
         s, r, d = self.go.make_move(action_idx, is_white)
         print(res)
+        assert res != -2, f"This was an invalid move somehow: {res}"
+        
         next_state = res.get("board", [])
         reward = res.get("outcome", 0)
         done = res.get("done", False)
