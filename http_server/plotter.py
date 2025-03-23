@@ -34,37 +34,30 @@ class Plot:
 
 
 class Plotter:
-    def __init__(self):
+    def __init__(self, rows=2, cols=2):
         plt.ion()  # Enable interactive mode
-        self.fig, ((self.ax1, self.ax2), (self.ax3, self.ax4)) = plt.subplots(
-            2, 2, figsize=(12, 8)
-        )
+        
+        # Create a configurable subplot layout
+        self.fig, self.axes = plt.subplots(rows, cols, figsize=(12, 8))
+        # Convert to 2D array for consistent indexing
+        if rows == 1 and cols == 1:
+            self.axes = np.array([[self.axes]])
+        elif rows == 1:
+            self.axes = np.array([self.axes])
+        elif cols == 1:
+            self.axes = np.array([[ax] for ax in self.axes])
+            
+        # Flatten for easy access
+        self.axes_flat = self.axes.flatten()
         
         # Dictionary to store all plots
         self.plots = {}
         
-        # Initialize default plots
-        self.add_plot("cumulative_reward_black", self.ax1, "Cumulative Wins Over Time", 
-                     "Updates", "Cumulative Wins", label="Black")
-        self.add_plot("cumulative_reward_white", self.ax1, "Cumulative Wins Over Time", 
-                     "Updates", "Cumulative Wins", label="White")
-        self.add_plot("loss", self.ax2, "Training Loss Over Time",
-                     "Updates", "Loss")
-        self.add_plot("policy_loss", self.ax3, "Policy Loss Over Time", 
-                     "Updates", "Policy Loss")
-        self.add_plot("value_loss", self.ax4, "Value Loss Over Time",
-                     "Updates", "Value Loss")
-        
-        # Legacy attributes to maintain compatibility
-        self.cumulative_reward_black = self.plots["cumulative_reward_black"].data
-        self.cumulative_reward_white = self.plots["cumulative_reward_white"].data
-        self.loss = self.plots["loss"].data
-        self.policy_loss = self.plots["policy_loss"].data
-        self.value_loss = self.plots["value_loss"].data
-        
-        # Initialize winrate tracking
-        self.winrate = deque(maxlen=100)
-        self.winrate_data = []
+        # Legacy attributes for backward compatibility
+        self.ax1 = self.axes_flat[0] if len(self.axes_flat) > 0 else None
+        self.ax2 = self.axes_flat[1] if len(self.axes_flat) > 1 else None
+        self.ax3 = self.axes_flat[2] if len(self.axes_flat) > 2 else None
+        self.ax4 = self.axes_flat[3] if len(self.axes_flat) > 3 else None
         
         plt.tight_layout()
         
