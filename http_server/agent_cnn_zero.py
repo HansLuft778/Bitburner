@@ -2,7 +2,7 @@ import os
 import random
 from collections import deque
 from typing import Any
-import pickle
+# import pickle
 
 import numpy as np
 import torch
@@ -126,14 +126,14 @@ class AlphaZeroAgent:
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        self.policy_net = ResNet(board_width, board_width, 5, num_hiden=64, num_past_steps=num_past_steps).to(
+        self.policy_net = ResNet(board_width, board_width, 3, num_hiden=64, num_past_steps=num_past_steps).to(
             self.device
         )
         self.policy_net.eval()
 
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr, weight_decay=wheight_decay)
 
-        self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=2000, eta_min=5e-6)
+        self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=4000, eta_min=1e-5)
 
         self.train_buffer = TrainingBuffer()
 
@@ -145,7 +145,7 @@ class AlphaZeroAgent:
                 "model_state_dict": self.policy_net.state_dict(),
                 "optimizer_state_dict": self.optimizer.state_dict(),
                 "scheduler_state_dict": self.scheduler.state_dict(),
-                "train_buffer": pickle.dumps(self.train_buffer),
+                # "train_buffer": pickle.dumps(self.train_buffer),
             },
             checkpoint_path,
         )
@@ -159,7 +159,7 @@ class AlphaZeroAgent:
         self.policy_net.load_state_dict(checkpoint["model_state_dict"])
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
-        self.train_buffer = pickle.loads(checkpoint["train_buffer"])
+        # self.train_buffer = pickle.loads(checkpoint["train_buffer"])
         self.policy_net.eval()  # Set to eval mode after loading
         print(f"Checkpoint loaded from {checkpoint_path}")
 
