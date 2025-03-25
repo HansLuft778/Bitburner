@@ -350,10 +350,11 @@ async def main() -> None:
     plotter.add_plot("policy_loss", plotter.axes[1, 0], "Policy Loss Over Time", "Updates", "Policy Loss")  # type: ignore
     plotter.add_plot("value_loss", plotter.axes[1, 1], "Value Loss Over Time", "Updates", "Value Loss")  # type: ignore
     plotter.add_plot("depth", plotter.axes[0, 2], "MCTS Depth", "Iteration", "Depth")  # type: ignore
+    plotter.add_plot("episode_length", plotter.axes[1, 2], "Episode Length", "Iteration", "Length")  # type: ignore
 
     agent = AlphaZeroAgent(board_size, plotter)
     # agent.load_checkpoint("checkpoint_15.pth")
-    mcts = MCTS(server, agent, search_iterations=2000)
+    mcts = MCTS(server, agent, search_iterations=1000)
 
     NUM_EPISODES = 1000
     outcome = 0
@@ -394,6 +395,7 @@ async def main() -> None:
             episode_length += 1
 
         plotter.update_stat("depth", mcts.max_depth)  # type: ignore
+        plotter.update_stat("episode_length", episode_length)  # type: ignore
         mcts.max_depth = 0
         print(f"Episode length: {episode_length}, took {time.time()-start_time:.3f}s")
         print("================================================================================")
@@ -413,14 +415,9 @@ async def main() -> None:
         if iter < 16:
             print("Skipping training")
             continue
-        game_length = len(game_history)
-        min_train_steps = 10  # Minimum number of training steps
-        max_train_steps = 40  # Maximum number of training steps
 
-        # Calculate training steps - scales with game length
-        train_steps = min(max_train_steps, max(min_train_steps, int(game_length * 0.75)))
         train_steps = 10
-        print(f"Game length: {game_length}, performing {train_steps} training steps")
+        print(f"Game length: {episode_length}, performing {train_steps} training steps")
         for _ in range(train_steps):
             mcts.agent.train_step()
         mcts.agent.save_checkpoint(f"checkpoint_{iter}.pth")
@@ -464,112 +461,8 @@ async def main_eval():
         mcts.agent.plotter.update_wins_black(1 if outcome == 1 else -1)
 
 
-def debug_sign_flips():
-    """
-    Debug function: sets up a simple 5x5 board with a known final pattern of stones,
-    forcibly ends the game, prints out the internal final scoring and outcome from your code.
-    """
-    server = GameServerGo(5)
-
-    # 1) Reset the server to an empty board of size 5x5
-    board_size = 5
-    state, komi = server.go.encode_state(["#..O#", "#..X.", "#..OX", "#XXXX", "#.X.."]), 5.5
-    server.go = Go_uf(board_size, state, komi)
-
-    # 2) Force a few moves (or directly set board state)
-    # For example, let's place two black stones and one white stone in known positions.
-    # You can skip MCTS and do something like:
-    # black_stone_positions = [(0, 0), (2, 2)]  # black stones
-    # white_stone_positions = [(0, 4)]  # white stone
-
-    # # We'll pretend these moves were made so the board is partially filled:
-    # color_black = 1
-    # color_white = 2
-    # for x, y in black_stone_positions:
-    #     server.go.uf.state[x, y] = color_black
-    # for x, y in white_stone_positions:
-    #     server.go.uf.state[x, y] = color_white
-
-    # If needed, recalc Zobrist hash so the server's union-find is consistent:
-    server.go.uf = UnionFind.get_uf_from_state(state, server.go.zobrist)
-
-    # 3) Now forcibly end the game (simulate passes or you can directly check scoring).
-    #    The simplest way: call your "get_score" logic from MCTS or from the server:
-    score_dict = server.get_score(server.go.uf)
-    score_white = score_dict["white"]["sum"]
-    score_black = score_dict["black"]["sum"]
-    diff = score_white - score_black
-
-    print("DEBUG BOARD (Black=1, White=2):\n", server.go.uf.state)
-    print(f"Score black: {score_black}, score white: {score_white}, difference (white - black)={diff}")
-
-    # 4) Now ask: from black's perspective, is that a winning difference or not?
-    #    If you do normalized difference in your Node code, do that here as well:
-    max_score = board_size * board_size
-    normalized_diff = diff / max_score
-    print(f"Normalized difference: {normalized_diff}")
-
-    # 5) Suppose we interpret that if white leads, the raw outcome is -1 (meaning "white wins").
-    #    If black leads, raw outcome is +1. Let's see:
-    outcome_manual = +1 if (diff < 0) else -1 if (diff > 0) else 0  # depends if you do "white minus black"
-    # ^ Note that if diff = (white - black), then diff>0 => white is winning => outcome should be -1.
-    #   Adjust that logic to match your code exactly.
-
-    print(f"Manual outcome (based on 'white - black' diff): {outcome_manual}")
-
-    # 6) If you want to fully replicate your MCTS perspective logic, you can do:
-    is_white = False
-    perspective = "white" if is_white else "black"
-    node = Node(
-        uf=server.go.uf.copy(),
-        server=server,
-        is_white=is_white,  # let's say it's black's turn, for debugging
-        agent=AlphaZeroAgent(5, Plotter()),  # or pass a dummy agent
-    )
-    print(f"score: {node.get_score()} from {perspective}'s perspective")
-    done, value = node.has_game_ended()
-    print(f"has_game_ended says: done={done}, value={value} (from {perspective}'s perspective)")
-
-    # If done is True, 'value' should be:
-    #   +something if black is winning,
-    #   -something if white is winning.
-    # Then you see if that matches your manual logic above.
-
-    print("DONE. Compare these results with your manual expectation.")
-
-
-def debug_perspective_inversion():
-    agent = AlphaZeroAgent(5, Plotter())
-    server = GameServerGo(5)
-
-    state = server.go.encode_state(["#..#.", "#....", "#....", "#....", "#...."])
-    server.go = Go_uf(5, state, 5.5)
-
-    uf = UnionFind.get_uf_from_state(state, server.go.zobrist)
-    root = Node(uf, server, False, agent, None, None)
-
-    moves = [1, 2, 7, 6, 11, 4, 9, 8, 13, 14, 19, 21]
-    node = root
-    for move in moves:
-        # Simulate the move
-        uf_after = server.go.state_after_action(move, node.is_white, node.uf)
-        assert uf_after is not None
-
-        # node is: state was reached by move, next is is_white's turn
-        node.children.append(Node(uf_after, server, not node.is_white, agent, node, move))
-        node = node.children[-1]
-
-        value = node.get_score()
-        node.backprop(value)
-
-    # Suppose we pass some "score=+0.7" meaning White is quite happy.
-
-    print("Parent (black) win_sum :")
-
-
 # Run the main coroutine
 if __name__ == "__main__":
-    # import asyncio
+    import asyncio
 
-    # asyncio.run(main())
-    debug_perspective_inversion()
+    asyncio.run(main())
