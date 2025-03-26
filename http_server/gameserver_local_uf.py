@@ -61,7 +61,7 @@ class GameServerGo:
         v = self.go.get_valid_moves(uf, is_white, history)
         return np.append(v, True)
 
-    async def make_move(self, action: tuple[int, int], action_idx: int, is_white: bool) -> tuple[State, int, bool]:
+    async def make_move(self, action: tuple[int, int], action_idx: int, is_white: bool) -> tuple[UnionFind, int, bool]:
         # make move in bitburner
         if action == (-1, -1):  # pass
             res = await self.send_request({"command": "pass_turn", "playAsWhite": is_white})
@@ -70,7 +70,7 @@ class GameServerGo:
             res = await self.send_request({"command": "make_move", "x": x, "y": y, "playAsWhite": is_white})
             
         # make same move locally
-        s, r, d = self.go.make_move(action_idx, is_white)
+        uf, r, d = self.go.make_move(action_idx, is_white)
         print(res)
         assert res != -2, f"This was an invalid move somehow: {res}"
         
@@ -80,16 +80,16 @@ class GameServerGo:
 
         # DEBUGGING ONLY: check both are equal
         assert np.array_equal(
-            s, self.go.encode_state(next_state)
-        ), f"State mismatch: left: {s}, right: {self.go.encode_state(next_state)}"
+            uf.state, self.go.encode_state(next_state)
+        ), f"State mismatch: left: {uf}, right: {self.go.encode_state(next_state)}"
         assert r == reward, f"Reward mismatch: left: {r}, right: {reward}"
         assert d == done, f"Done flag mismatch: left: {d}, right: {done}"
 
-        return s, r, d
+        return uf, r, d
 
     async def make_move_eval(
         self, action: tuple[int, int], action_idx: int, is_white: bool
-    ) -> tuple[State, float, bool]:
+    ) -> tuple[UnionFind, float, bool]:
         # make move in bitburner
         if action == (-1, -1):  # pass
             res = await self.send_request({"command": "pass_turn", "playAsWhite": is_white})
@@ -107,13 +107,13 @@ class GameServerGo:
         pos = res.get("pos", -1)
 
         if pos != -1:
-            s, r, d = self.go.make_move(pos, not is_white)
+            uf, r, d = self.go.make_move(pos, not is_white)
         else:
-            s, r, d = self.go.make_move(self.go.board_size, not is_white)
+            uf, r, d = self.go.make_move(self.go.board_size, not is_white)
 
         assert np.array_equal(
-            s, self.go.encode_state(next_state)
-        ), f"State mismatch: left: {s}, right: {self.go.encode_state(next_state)}"
+            uf.state, self.go.encode_state(next_state)
+        ), f"State mismatch: left: {uf}, right: {self.go.encode_state(next_state)}"
         assert r == outcome, f"Reward mismatch: left: {r}, right: {outcome}"
         assert d == done, f"Done flag mismatch: left: {d}, right: {done}"
 
@@ -122,7 +122,7 @@ class GameServerGo:
 
         self.go.history.append(self.go.uf.state)
 
-        return s, outcome, done
+        return uf, outcome, done
 
     def get_game_history(self) -> list[State]:
         history = self.go.get_history()

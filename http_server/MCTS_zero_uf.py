@@ -24,7 +24,7 @@ def get_ucb_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) -
         q_value = 0.0
     else:
         q_value = -(child.win_sum / child.visit_cnt)
-    u_value = c_puct * child.selected_policy * parent_visit_count**0.5 / (1 + child.visit_cnt)
+    u_value = c_puct * child.prior * parent_visit_count**0.5 / (1 + child.visit_cnt)
     return q_value + u_value
 
 
@@ -38,7 +38,7 @@ class Node:
         agent: AlphaZeroAgent,
         parent: Union["Node", None] = None,
         action: int | None = None,
-        selected_policy: float = 0,
+        prior: float = 0,
         visit_count: int = 0,
     ):
         # self.state = state
@@ -48,7 +48,7 @@ class Node:
         self.server = server
         self.is_white = is_white
         self.agent = agent
-        self.selected_policy = selected_policy
+        self.prior = prior
         self.valid_moves: np.ndarray[Any, np.dtype[np.bool_]] | None = None
         self.depth: int = 0 if parent is None else parent.depth + 1
 
@@ -228,11 +228,10 @@ class MCTS:
                 node.done, node.value = node.has_game_ended()
             assert node.value is not None, "Value should not be None"
             value = node.value
-            done = node.done
 
             self.timing_stats["end_check"] += time.time() - end_check_start
 
-            if not done:
+            if not node.done:
                 prep_start = time.time()
                 valid_moves = node.get_valid_moves()
                 history = node.get_history_ref()
@@ -354,15 +353,16 @@ async def main() -> None:
 
     agent = AlphaZeroAgent(board_size, plotter)
     # agent.load_checkpoint("checkpoint_15.pth")
-    mcts = MCTS(server, agent, search_iterations=1000)
+    mcts = MCTS(server, agent, search_iterations=2)
 
     NUM_EPISODES = 1000
     outcome = 0
     for iter in range(NUM_EPISODES):
         state, komi = await server.reset_game("No AI")
+        uf = UnionFind.get_uf_from_state(state, server.go.zobrist)
         server.go = Go_uf(board_size, state, komi)
 
-        buffer: list[tuple[State, bool, torch.Tensor, list[State]]] = []  # score: dict[str, dict[str, Any]]]
+        buffer: list[tuple[UnionFind, bool, torch.Tensor, list[State]]] = []  # score: dict[str, dict[str, Any]]]
         is_white = False
         done = False
         game_history = [state]
@@ -383,14 +383,14 @@ async def main() -> None:
             action = mcts.agent.decode_action(best_move)
             print(f"make move: {action}")
 
-            buffer.append((state, is_white, pi_mcts, game_history[: mcts.agent.num_past_steps]))
+            buffer.append((uf, is_white, pi_mcts, game_history[: mcts.agent.num_past_steps]))
 
             # outcome is: 1 if black won, -1 is white won
-            next_state, outcome, done = await server.make_move(action, best_move, is_white)
-            game_history.insert(0, next_state)
+            next_uf, outcome, done = await server.make_move(action, best_move, is_white)
+            game_history.insert(0, next_uf.state)
 
             is_white = not is_white
-            state = next_state
+            uf = next_uf
             previous_move = best_move
             episode_length += 1
 
@@ -406,11 +406,11 @@ async def main() -> None:
         mcts.agent.plotter.update_wins_black(1 if outcome == 1 else -1)
 
         mcts.agent.policy_net.train()
-        for state, was_white, pi, history in buffer:
+        for uf, was_white, pi, history in buffer:
             # Flip if the buffer entry belongs to the opposite color
             #  - opposite of player who moves
             z = outcome if not was_white else -outcome
-            mcts.agent.augment_state(state, pi, z, history, was_white)
+            mcts.agent.augment_state(uf.state, pi, z, history, was_white)
 
         if iter < 16:
             print("Skipping training")
@@ -431,7 +431,7 @@ async def main_eval():
 
     plotter = Plotter()
     agent = AlphaZeroAgent(board_size, plotter)
-    agent.load_checkpoint("checkpoint_69.pth")
+    # agent.load_checkpoint("checkpoint_69.pth")
     mcts = MCTS(server, agent, search_iterations=1000)
 
     NUM_EPISODES = 100

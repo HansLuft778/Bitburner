@@ -2,6 +2,7 @@ import os
 import random
 from collections import deque
 from typing import Any
+
 # import pickle
 
 import numpy as np
@@ -112,7 +113,7 @@ class AlphaZeroAgent:
         board_width: int,
         plotter: Plotter,
         lr: float = 3e-4,
-        batch_size: int = 256,
+        batch_size: int = 32,
         num_past_steps: int = 2,
         wheight_decay: float = 2e-4,
         checkpoint_dir: str = "models/checkpoints",
@@ -234,7 +235,20 @@ class AlphaZeroAgent:
         2 -> 1.0  White, Channel 2, 4, 6
         3 -> 1.0  Channel 0
         0 -> 0.0  (Empty)
+        
+        Channels:
+        0: disabled
+        1: side (1...black, 0...white)
+        2: black pieces
+        3: white pieces
+        History:
+        4: black past moves
+        5: white past moves
+        6: black past moves
+        7: white past moves
+        
         """
+        
         num_channels = 4 + 2 * self.num_past_steps
         result = torch.zeros((1, num_channels, self.board_width, self.board_width), device=self.device)
         board_tensor = torch.as_tensor(state, device=self.device)

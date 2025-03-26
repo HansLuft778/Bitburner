@@ -779,7 +779,7 @@ class Go_uf:
 
         return in_history or in_additional
 
-    def make_move(self, action: int, is_white: bool) -> tuple[State, int, bool]:
+    def make_move(self, action: int, is_white: bool) -> tuple[UnionFind, int, bool]:
         uf_after_move = self.state_after_action(action, is_white, self.uf)
         assert uf_after_move is not None, "Illegal move"
         game_ended = self.has_game_ended(action, is_white, self.uf)
@@ -799,7 +799,7 @@ class Go_uf:
             print(f"score: {score}")
             outcome = 1 if score["black"]["sum"] > score["white"]["sum"] else -1
 
-        return self.uf.state, outcome, game_ended
+        return self.uf, outcome, game_ended
 
     def get_valid_moves(
         self,
