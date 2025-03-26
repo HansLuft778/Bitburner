@@ -1,6 +1,7 @@
 import time
 from collections import defaultdict
 from typing import Any, Union
+import random
 
 import numpy as np
 import torch
@@ -321,6 +322,7 @@ def find_child_index(root_node: Node, chosen_action: int) -> int:
 async def main() -> None:
     # torch.manual_seed(0)  # pyright: ignore
     # np.random.seed(0)
+    # random.seed(0)
 
     board_size = 5
     server = GameServerGo(board_size)
@@ -351,17 +353,19 @@ async def main() -> None:
 
     agent = AlphaZeroAgent(board_size, plotter)
     # agent.load_checkpoint("checkpoint_15.pth")
-    mcts = MCTS(server, agent, search_iterations=2)
+    mcts = MCTS(server, agent, search_iterations=1000)
 
     NUM_EPISODES = 1000
     outcome = 0
     for iter in range(NUM_EPISODES):
-        state, komi = await server.reset_game("No AI")
+
+        is_white = random.random() < 0.5
+
+        state, komi = await server.reset_game("No AI", is_white)
         uf = UnionFind.get_uf_from_state(state, server.go.zobrist)
         server.go = Go_uf(board_size, state, komi)
 
         buffer: list[tuple[UnionFind, bool, torch.Tensor, list[State]]] = []  # score: dict[str, dict[str, Any]]]
-        is_white = False
         done = False
         game_history = [state]
         mcts.agent.policy_net.eval()
@@ -376,7 +380,6 @@ async def main() -> None:
             print(pi_mcts)
             # best_move = int(torch.argmax(pi_mcts).item())
             best_move = choose_action(pi_mcts, episode_length)
-            # child_idx = get_child_idx(pi_mcts, best_move)
             print(f"{best_move}, {pi_mcts[best_move]}")
             action = mcts.agent.decode_action(best_move)
             print(f"make move: {action}")
