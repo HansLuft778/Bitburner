@@ -198,7 +198,7 @@ class UnionFind:
                     self.colors[action.position] = action.value
 
     @staticmethod
-    def get_uf_from_state(state: State, zobrist: ZobristHash) -> "UnionFind":
+    def get_uf_from_state(state: State, zobrist: ZobristHash | None) -> "UnionFind":
 
         width: int = state.shape[0]
 
@@ -208,7 +208,11 @@ class UnionFind:
         stones = np.zeros(width * width, dtype=np.int64)
         liberties = np.zeros(width * width, dtype=np.int64)
         uf = UnionFind(state, parent, colors, rank, stones, liberties, width)
-        uf.hash = zobrist.compute_hash(state)
+        
+        if zobrist is None:
+            uf.hash = np.uint64(0)
+        else:
+            uf.hash = zobrist.compute_hash(state)
 
         for x in range(width):
             for y in range(width):
@@ -344,7 +348,7 @@ class Go_uf:
         """
         return x * self.board_height + y
 
-    def encode_state(self, state: list[str]):
+    def encode_state(self, state: list[str]) -> State:
         """
         Converts a list of strings (like [".....", "..X..", ...]) into a numpy array
         with the following encoding:

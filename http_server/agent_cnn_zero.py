@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from Go.Go_uf import UnionFind, get_bit_indices
 
 from plotter import Plotter  # type: ignore
 
@@ -88,17 +89,17 @@ class ResBlock(nn.Module):
 
 class TrainingBuffer:
     def __init__(self, capacity: int = 75000):
-        self.buffer: deque[tuple[State, torch.Tensor, int, list[State], bool]] = deque(maxlen=capacity)
+        self.buffer: deque[tuple[UnionFind, torch.Tensor, int, list[State], bool]] = deque(maxlen=capacity)
 
     def push(
         self,
-        state: State,
+        uf: UnionFind,
         pi_mcts: torch.Tensor,
         outcome: int,
         history: list[State],
         was_white: bool,
     ):
-        self.buffer.append((state, pi_mcts, outcome, history, was_white))
+        self.buffer.append((uf, pi_mcts, outcome, history, was_white))
 
     def sample(self, batch_size: int):
         return random.sample(self.buffer, batch_size)
@@ -180,7 +181,7 @@ class AlphaZeroAgent:
 
     def augment_state(
         self,
-        state: State,
+        uf: UnionFind,
         pi_mcts: torch.Tensor,
         outcome: int,
         history: list[State],
@@ -189,8 +190,8 @@ class AlphaZeroAgent:
         """
         creates 7 augmented versions of the provided state, and pushes all 8 versions into the training buffer.
         """
-
-        self.train_buffer.push(state, pi_mcts, outcome, history, was_white)
+        state = uf.state.copy()
+        self.train_buffer.push(uf, pi_mcts, outcome, history, was_white)
 
         pi_board = pi_mcts[: self.board_width * self.board_height].reshape(self.board_width, self.board_height)
         pi_pass = pi_mcts[-1]
@@ -203,7 +204,8 @@ class AlphaZeroAgent:
             rotated_pi_board = torch.rot90(pi_board, rot)
             rotated_pi = torch.cat([rotated_pi_board.flatten(), pi_pass.unsqueeze(0)])
 
-            self.train_buffer.push(rotated_state, rotated_pi, outcome, rotated_history, was_white)
+            rotated_uf = UnionFind.get_uf_from_state(rotated_state, None)
+            self.train_buffer.push(rotated_uf, rotated_pi, outcome, rotated_history, was_white)
 
         # mirror state
         mirrored_state = np.fliplr(state).copy()
@@ -211,7 +213,8 @@ class AlphaZeroAgent:
         mirrored_pi_board = torch.fliplr(pi_board)
         mirrored_pi = torch.cat([mirrored_pi_board.flatten(), pi_pass.unsqueeze(0)])
 
-        self.train_buffer.push(mirrored_state, mirrored_pi, outcome, mirrored_history, was_white)
+        mirrored_uf = UnionFind.get_uf_from_state(mirrored_state, None)
+        self.train_buffer.push(mirrored_uf, mirrored_pi, outcome, mirrored_history, was_white)
 
         for rot in range(1, 4):
             mirrored_rotated_state = np.rot90(mirrored_state, rot).copy()
@@ -220,56 +223,82 @@ class AlphaZeroAgent:
             mirrored_rotated_pi_board = torch.rot90(mirrored_pi_board, rot)
             mirrored_rotated_pi = torch.cat([mirrored_rotated_pi_board.flatten(), pi_pass.unsqueeze(0)])
 
+            mirrored_rotated_uf = UnionFind.get_uf_from_state(mirrored_rotated_state, None)
             self.train_buffer.push(
-                mirrored_rotated_state,
+                mirrored_rotated_uf,
                 mirrored_rotated_pi,
                 outcome,
                 mirrored_rotated_history,
                 was_white,
             )
 
-    def preprocess_state(self, state: State, history: list[State], is_white: bool):
+    def preprocess_state(self, uf: UnionFind, history: list[State], is_white: bool):
         """
         Convert the board (numpy array) into a float tensor of shape [1,8,w,h].
-        1 -> 1.0  Black, Channel 1, 3, 5
-        2 -> 1.0  White, Channel 2, 4, 6
+        1 -> 1.0  Black
+        2 -> 1.0  White
         3 -> 1.0  Channel 0
         0 -> 0.0  (Empty)
-        
+
         Channels:
         0: disabled
-        1: side (1...black, 0...white)
-        2: black pieces
-        3: white pieces
+        1: current players stones
+        2: opponent stones
+        3: has one liberty
+        4: has two liberties
+        5: has three liberties
+
         History:
-        4: black past moves
-        5: white past moves
-        6: black past moves
-        7: white past moves
-        
+        4: current past moves
+        5: opponent past moves
+        6: current past moves
+        7: opponent past moves
         """
-        
-        num_channels = 4 + 2 * self.num_past_steps
+
+        liberty_counts = torch.zeros((self.board_width, self.board_height), device=self.device)
+        groups = uf.stones[uf.stones != 0]
+        for group in groups:
+            stones = get_bit_indices(group)
+            for stone in stones:
+                x, y = (stone // self.board_height, stone % self.board_height)
+                for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                    nx, ny = x + dx, y + dy
+                    if 0 <= nx < self.board_width and 0 <= ny < self.board_height:
+                        if uf.state[nx, ny] == 0:
+                            liberty_counts[x, y] += 1
+
+        num_channels = 6 + 2 * self.num_past_steps
         result = torch.zeros((1, num_channels, self.board_width, self.board_width), device=self.device)
-        board_tensor = torch.as_tensor(state, device=self.device)
+        board_tensor = torch.as_tensor(uf.state, device=self.device)
 
         result[0, 0] = (board_tensor == 3).float()  # disabled
-        result[0, 1].fill_(is_white)  # side
-        result[0, 2] = (board_tensor == 1).float()  # black
-        result[0, 3] = (board_tensor == 2).float()  # white
+        if is_white:
+            result[0, 1] = (board_tensor == 2).float()  # white
+            result[0, 2] = (board_tensor == 1).float()  # black
+        else:
+            result[0, 2] = (board_tensor == 1).float()  # black
+            result[0, 1] = (board_tensor == 2).float()  # white
+
+        result[0, 3] = (liberty_counts == 1).float()  # has one liberty
+        result[0, 4] = (liberty_counts == 2).float()  # has two liberties
+        result[0, 5] = (liberty_counts == 3).float()  # has three liberties
 
         # process history
         for past_idx in range(min(self.num_past_steps, len(history))):
             past_step = torch.as_tensor(history[past_idx], device=self.device)
-            result[0, 4 + past_idx * 2] = (past_step == 1).float()  # black
-            result[0, 5 + past_idx * 2] = (past_step == 2).float()  # white
+            if is_white:
+                result[0, 6 + past_idx * 2] = (past_step == 2).float()  # white
+                result[0, 7 + past_idx * 2] = (past_step == 1).float()  # black
+            else:
+                result[0, 6 + past_idx * 2] = (past_step == 1).float()  # black
+                result[0, 7 + past_idx * 2] = (past_step == 2).float()  # black
 
         return result
 
     @torch.no_grad()  # pyright: ignore
     def get_actions_eval(
         self,
-        board: State,
+        uf: UnionFind,
         valid_moves: np.ndarray[Any, np.dtype[np.bool_]],
         game_history: list[State],
         color_is_white: bool,
@@ -277,7 +306,7 @@ class AlphaZeroAgent:
         """
         Select action deterministically for evaluation (no exploration).
         """
-        state_tensor = self.preprocess_state(board, game_history, color_is_white)
+        state_tensor = self.preprocess_state(uf, game_history, color_is_white)
 
         # Get logits
         policy, value = self.policy_net(state_tensor)
@@ -306,12 +335,12 @@ class AlphaZeroAgent:
         # 1. sample batch from train buffer
         batch = self.train_buffer.sample(self.batch_size)
 
-        (states_list, pi_list, z_list, history_list, is_white_list) = zip(*batch)
+        (uf_list, pi_list, z_list, history_list, is_white_list) = zip(*batch)
 
         # 2. Convert Python data into PyTorch tensors
         state_tensor_list: list[torch.Tensor] = []
         for i in range(len(batch)):
-            t = self.preprocess_state(states_list[i], history_list[i], is_white_list[i])
+            t = self.preprocess_state(uf_list[i], history_list[i], is_white_list[i])
             state_tensor_list.append(t)
 
         state_batch = torch.cat(state_tensor_list)  # shape [B, channels, W, H]

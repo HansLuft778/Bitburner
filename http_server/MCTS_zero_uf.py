@@ -240,9 +240,7 @@ class MCTS:
 
                 inference_start = time.time()
                 if node.policy is None:
-                    raw_logits, raw_value = self.agent.get_actions_eval(
-                        node.uf.state, valid_moves, history, node.is_white
-                    )
+                    raw_logits, raw_value = self.agent.get_actions_eval(node.uf, valid_moves, history, node.is_white)
                     valid_mask = torch.tensor(valid_moves, device=self.agent.device, dtype=torch.bool)
                     raw_logits[~valid_mask] = -1e9
                     final_probs = torch.softmax(raw_logits, dim=0)
@@ -407,10 +405,9 @@ async def main() -> None:
 
         mcts.agent.policy_net.train()
         for uf, was_white, pi, history in buffer:
-            # Flip if the buffer entry belongs to the opposite color
-            #  - opposite of player who moves
+            # Flip if the outcome from neutrals perspective to players perspective
             z = outcome if not was_white else -outcome
-            mcts.agent.augment_state(uf.state, pi, z, history, was_white)
+            mcts.agent.augment_state(uf, pi, z, history, was_white)
 
         if iter < 16:
             print("Skipping training")
