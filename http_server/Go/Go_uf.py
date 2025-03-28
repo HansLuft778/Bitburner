@@ -553,52 +553,6 @@ class Go_uf:
 
         return liberties, stones
 
-    def simulate_move_original(
-        self,
-        state: State,
-        x: int,
-        y: int,
-        color: int,
-        additional_history: list[np.uint64] = [],
-    ) -> State | None:
-        if state[x][y] != 0:
-            return None
-
-        sim_state = state.copy()
-        sim_state[x][y] = color
-
-        # color = 1 => enemy = 2; color = 2 => ememy = 1
-        enemy = 3 - color
-
-        # start = time.time()
-        # check for capture
-        for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-            nx, ny = x + dx, y + dy
-            if 0 <= nx < self.board_width and 0 <= ny < self.board_height:
-                if sim_state[nx][ny] == enemy:
-                    liberties, territory = self.get_liberties(sim_state, nx, ny, set())
-                    # capture enemy stones if they have no liberties
-                    if len(liberties) == 0:
-                        for tx, ty in territory:
-                            sim_state[tx][ty] = 0
-
-        # end = time.time()
-        # print(f"FLOOD_FILL_CORE: Time: {end - start}")
-
-        # check if placed router has liberties
-        libs, _ = self.get_liberties(sim_state, x, y, set())
-        if len(libs) == 0:
-            # move was actually a suicide
-            return None
-
-        # check for repeat
-        next_hash = self.zobrist.compute_hash(sim_state)
-        is_repeat = self.check_state_is_repeat(next_hash, additional_history)
-        if is_repeat:
-            return None
-
-        return sim_state
-
     def simulate_move(
         self,
         uf: UnionFind,
