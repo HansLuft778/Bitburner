@@ -153,10 +153,10 @@ class Node:
             if action == board_size:
                 next_uf = self.uf.copy()
                 # Penalize passing if board is mostly empty
-                empty_cells = np.sum(self.uf.state == 0)
-                empty_percentage = empty_cells / board_size
-                if empty_percentage > 0.5:
-                    policy_cpu[action] *= (1.0 - empty_percentage) * 0.5
+                # empty_cells = np.sum(self.uf.state == 0)
+                # empty_percentage = empty_cells / board_size
+                # if empty_percentage > 0.5:
+                #     policy_cpu[action] *= (1.0 - empty_percentage) * 0.5
             else:
                 color = 2 if self.is_white else 1
                 is_legal, undo = self.server.go.simulate_move(self.uf, action, color, self.get_hash_history())
