@@ -1,7 +1,6 @@
 import time
 from collections import defaultdict
 from typing import Any, Union
-import random
 
 import numpy as np
 import torch
@@ -251,7 +250,7 @@ class MCTS:
                         alpha = 0.2
                         dir_noise = np.random.dirichlet([alpha] * len(final_probs))
                         dir_noise_tensor = torch.tensor(dir_noise, device=final_probs.device, dtype=final_probs.dtype)
-                        epsilon = 0.2  # noise weight
+                        epsilon = 0.25
                         final_probs = (1 - epsilon) * final_probs + epsilon * dir_noise_tensor
 
                         # Renormalize
@@ -266,7 +265,7 @@ class MCTS:
                 self.timing_stats["nn_inference"] += time.time() - inference_start
                 self.iterations_stats["nn_inference"] += 1
 
-                if node.parent is None:
+                if iter == 0:
                     print(f"Value estimate: {value:.3f} (from {'white' if node.is_white else 'black'}'s perspective)")
 
                 expand_start = time.time()
@@ -322,7 +321,6 @@ def find_child_index(root_node: Node, chosen_action: int) -> int:
 async def main() -> None:
     # torch.manual_seed(0)  # pyright: ignore
     # np.random.seed(0)
-    # random.seed(0)
 
     board_size = 5
     server = GameServerGo(board_size)
@@ -358,9 +356,7 @@ async def main() -> None:
     NUM_EPISODES = 1000
     outcome = 0
     for iter in range(NUM_EPISODES):
-
-        is_white = random.random() < 0.5
-
+        is_white = False
         state, komi = await server.reset_game("No AI", is_white)
         uf = UnionFind.get_uf_from_state(state, server.go.zobrist)
         server.go = Go_uf(board_size, state, komi)
@@ -412,11 +408,11 @@ async def main() -> None:
             z = outcome if not was_white else -outcome
             mcts.agent.augment_state(uf, pi, z, history, was_white)
 
-        if iter < 16:
+        if iter < 6:
             print("Skipping training")
             continue
 
-        train_steps = 10
+        train_steps = 15
         print(f"Game length: {episode_length}, performing {train_steps} training steps")
         for _ in range(train_steps):
             mcts.agent.train_step()
