@@ -30,8 +30,8 @@ class ResNet(nn.Module):
         self.initialConvBlock = nn.Sequential(
             nn.Conv2d(
                 in_channels=1  # disabled nodes
-                + 1  # side (1...black, 0...white)
-                + 2  # current black/white
+                + 2  # current player, opponent
+                + 3  # liberties
                 + num_past_steps * 2,  # past moves
                 out_channels=num_hiden,
                 kernel_size=3,
@@ -114,7 +114,7 @@ class AlphaZeroAgent:
         board_width: int,
         plotter: Plotter,
         lr: float = 3e-4,
-        batch_size: int = 32,
+        batch_size: int = 128,
         num_past_steps: int = 2,
         wheight_decay: float = 2e-4,
         checkpoint_dir: str = "models/checkpoints",
@@ -128,7 +128,7 @@ class AlphaZeroAgent:
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        self.policy_net = ResNet(board_width, board_width, 3, num_hiden=64, num_past_steps=num_past_steps).to(
+        self.policy_net = ResNet(board_width, board_width, num_res_blocks=6, num_hiden=128, num_past_steps=num_past_steps).to(
             self.device
         )
         self.policy_net.eval()
@@ -270,6 +270,7 @@ class AlphaZeroAgent:
         num_channels = 6 + 2 * self.num_past_steps
         result = torch.zeros((1, num_channels, self.board_width, self.board_width), device=self.device)
         board_tensor = torch.as_tensor(uf.state, device=self.device)
+        lib_count_tensor = torch.as_tensor(liberty_counts, device=self.device)
 
         result[0, 0] = (board_tensor == 3).float()  # disabled
         if is_white:
@@ -279,9 +280,9 @@ class AlphaZeroAgent:
             result[0, 2] = (board_tensor == 1).float()  # black
             result[0, 1] = (board_tensor == 2).float()  # white
 
-        result[0, 3] = (liberty_counts == 1).float()  # has one liberty
-        result[0, 4] = (liberty_counts == 2).float()  # has two liberties
-        result[0, 5] = (liberty_counts == 3).float()  # has three liberties
+        result[0, 3] = (lib_count_tensor == 1).float()  # has one liberty
+        result[0, 4] = (lib_count_tensor == 2).float()  # has two liberties
+        result[0, 5] = (lib_count_tensor == 3).float()  # has three liberties
 
         # process history
         for past_idx in range(min(self.num_past_steps, len(history))):
@@ -354,7 +355,7 @@ class AlphaZeroAgent:
         # 4. Calculate losses
         policy_log_probs = F.log_softmax(logits, dim=1)  # shape [B, num_actions]
         # pi_batch is shape [B, num_actions]
-        policy_loss = -(pi_batch * policy_log_probs).sum(dim=1).mean()
+        policy_loss = -(pi_batch * policy_log_probs).sum(dim=1).mean()  # cross entropy loss
         value_loss = F.mse_loss(values.squeeze(), z_batch)
 
         loss = policy_loss + value_loss

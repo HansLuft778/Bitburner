@@ -208,7 +208,7 @@ class UnionFind:
         stones = np.zeros(width * width, dtype=np.int64)
         liberties = np.zeros(width * width, dtype=np.int64)
         uf = UnionFind(state, parent, colors, rank, stones, liberties, width)
-        
+
         if zobrist is None:
             uf.hash = np.uint64(0)
         else:
@@ -312,11 +312,12 @@ class Go_uf:
         self.komi = komi
 
         # union find data structure
-        parent = np.full(self.board_width * self.board_height, -1, dtype=np.int8)
-        colors = np.full(self.board_width * self.board_height, -1, dtype=np.int8)
-        rank = np.full(self.board_width * self.board_height, -1, dtype=np.int8)
-        stones = np.zeros(board_width * board_width, dtype=np.int64)
-        liberties = np.zeros(board_width * board_width, dtype=np.int64)
+        size = board_width * board_width
+        parent = np.full(size, -1, dtype=np.int8)
+        colors = np.full(size, -1, dtype=np.int8)
+        rank = np.full(size, -1, dtype=np.int8)
+        stones = np.zeros(size, dtype=np.int64)
+        liberties = np.zeros(size, dtype=np.int64)
 
         self.zobrist = ZobristHash(self.board_width)
         self.uf: UnionFind = UnionFind(state, parent, colors, rank, stones, liberties, self.board_width)
