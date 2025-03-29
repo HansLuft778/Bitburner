@@ -86,7 +86,7 @@ class Plotter:
         self.update_stat("loss", new_loss)
         
     def update_policy_loss(self, new_policy_loss: float):
-        self.update_stat("policy_loss", new_policy_loss)
+        self.update_stat("policy_loss_own", new_policy_loss)
         
     def update_value_loss(self, new_value_loss: float):
         self.update_stat("value_loss", new_value_loss)
