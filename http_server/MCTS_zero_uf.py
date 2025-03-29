@@ -318,6 +318,23 @@ def find_child_index(root_node: Node, chosen_action: int) -> int:
     raise RuntimeError(f"No child found with action={chosen_action}")
 
 
+# UnionFind, bool, torch.Tensor, list[State], torch.Tensor | None
+class BufferElement:
+    def __init__(
+        self,
+        uf: UnionFind,
+        is_white: bool,
+        pi_mcts: torch.Tensor,
+        history: list[State],
+        pi_mcts_response: torch.Tensor | None = None,
+    ):
+        self.uf = uf
+        self.is_white = is_white
+        self.pi_mcts = pi_mcts
+        self.history = history
+        self.pi_mcts_response = pi_mcts_response
+
+
 async def main() -> None:
     # torch.manual_seed(0)  # pyright: ignore
     # np.random.seed(0)
@@ -326,7 +343,7 @@ async def main() -> None:
     server = GameServerGo(board_size)
     await server.wait()
     print("GameServer ready and client connected")
-    plotter = Plotter(2, 3)
+    plotter = Plotter(3, 3)
     plotter.add_plot(  # type: ignore
         "cumulative_reward_black",
         plotter.axes[0, 0],  # type: ignore
@@ -344,10 +361,11 @@ async def main() -> None:
         label="White",
     )
     plotter.add_plot("loss", plotter.axes[0, 1], "Training Loss Over Time", "Updates", "Loss")  # type: ignore
-    plotter.add_plot("policy_loss", plotter.axes[1, 0], "Policy Loss Over Time", "Updates", "Policy Loss")  # type: ignore
+    plotter.add_plot("policy_loss_own", plotter.axes[1, 0], "Own Policy Loss Over Time", "Updates", "Policy Loss")  # type: ignore
     plotter.add_plot("value_loss", plotter.axes[1, 1], "Value Loss Over Time", "Updates", "Value Loss")  # type: ignore
     plotter.add_plot("depth", plotter.axes[0, 2], "MCTS Depth", "Iteration", "Depth")  # type: ignore
     plotter.add_plot("episode_length", plotter.axes[1, 2], "Episode Length", "Iteration", "Length")  # type: ignore
+    plotter.add_plot("policy_loss_opp", plotter.axes[2, 0], "Opponent Policy Loss Over Time", "Updates", "Policy Loss")  # type: ignore
 
     agent = AlphaZeroAgent(board_size, plotter)
     # agent.load_checkpoint("checkpoint_15.pth")
@@ -361,7 +379,7 @@ async def main() -> None:
         uf = UnionFind.get_uf_from_state(state, server.go.zobrist)
         server.go = Go_uf(board_size, state, komi)
 
-        buffer: list[tuple[UnionFind, bool, torch.Tensor, list[State]]] = []  # score: dict[str, dict[str, Any]]]
+        buffer: list[BufferElement] = []
         done = False
         game_history = [state]
         mcts.agent.policy_net.eval()
@@ -380,7 +398,11 @@ async def main() -> None:
             action = mcts.agent.decode_action(best_move)
             print(f"make move: {action}")
 
-            buffer.append((uf, is_white, pi_mcts, game_history[: mcts.agent.num_past_steps]))
+            # add move response to buffer
+            if len(buffer) > 0:
+                buffer[-1].pi_mcts_response = pi_mcts
+
+            buffer.append(BufferElement(uf, is_white, pi_mcts, game_history[: mcts.agent.num_past_steps]))
 
             # outcome is: 1 if black won, -1 is white won
             next_uf, outcome, done = await server.make_move(action, best_move, is_white)
@@ -403,10 +425,10 @@ async def main() -> None:
         mcts.agent.plotter.update_wins_black(1 if outcome == 1 else -1)
 
         mcts.agent.policy_net.train()
-        for uf, was_white, pi, history in buffer:
+        for be in buffer:
             # Flip if the outcome from neutrals perspective to players perspective
-            z = outcome if not was_white else -outcome
-            mcts.agent.augment_state(uf, pi, z, history, was_white)
+            z = outcome if not be.is_white else -outcome
+            mcts.agent.augment_state(be, z)
 
         if iter < 6:
             print("Skipping training")
