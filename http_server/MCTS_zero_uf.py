@@ -10,6 +10,7 @@ from gameserver_local_uf import GameServerGo
 from Go.Go_uf import Go_uf, UnionFind
 from plotter import Plotter  # type: ignore
 from TreePlotter import TreePlot  # pyright: ignore
+from Buffer import BufferElement
 
 State = np.ndarray[Any, np.dtype[np.int8]]
 
@@ -318,21 +319,7 @@ def find_child_index(root_node: Node, chosen_action: int) -> int:
     raise RuntimeError(f"No child found with action={chosen_action}")
 
 
-# UnionFind, bool, torch.Tensor, list[State], torch.Tensor | None
-class BufferElement:
-    def __init__(
-        self,
-        uf: UnionFind,
-        is_white: bool,
-        pi_mcts: torch.Tensor,
-        history: list[State],
-        pi_mcts_response: torch.Tensor | None = None,
-    ):
-        self.uf = uf
-        self.is_white = is_white
-        self.pi_mcts = pi_mcts
-        self.history = history
-        self.pi_mcts_response = pi_mcts_response
+
 
 
 async def main() -> None:
