@@ -417,47 +417,47 @@ class Go_uf:
             return None
 
     def flood_fill_territory(
-        self, state: State, x: int, y: int, visited: set[tuple[int, int]]
-    ) -> tuple[int | None, set[tuple[int, int]]]:
-        """
-        A helper for territory detection, territory is how many empty nodes a color surrounds:
-          - BFS/DFS from (x, y) to gather all connected empty cells.
-          - Track the colors of any stones adjacent to those empty cells.
-          - If we find exactly one color, that color "owns" the territory.
-          - If we find both black and white, or we run into blocked nodes in a way that
-            doesn't result in a single color, it's disputed (None).
-
-        Returns: (color_owner, territory_positions)
-                 color_owner = 1 (black), 2 (white), or None (disputed or no single color).
-        """
+        self, state: State, x: int, y: int, visited: np.ndarray[Any, np.dtype[np.bool_]]
+    ) -> tuple[int | None, np.ndarray[Any, np.dtype[np.bool_]]]:
 
         queue: deque[tuple[int, int]] = deque()
         queue.append((x, y))
-        territory: set[tuple[int, int]] = set()
+
+        territory: np.ndarray[Any, np.dtype[np.bool_]] = np.zeros((self.board_width, self.board_height), dtype=np.bool_)
         adjacent_colors: set[int] = set()
+
+        dx = np.array([0, 1, 0, -1])
+        dy = np.array([1, 0, -1, 0])
 
         while queue:
             cx, cy = queue.popleft()
-            if (cx, cy) in visited:
+            if visited[cx, cy]:
                 continue
-            visited.add((cx, cy))
+            visited[cx, cy] = True
 
             # If its empty -> part of the territory
-            if state[cx][cy] == 0:
-                territory.add((cx, cy))
-                # Check neighbors
-                for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                    nx, ny = cx + dx, cy + dy
-                    if 0 <= nx < self.board_width and 0 <= ny < self.board_height:
-                        if state[nx][ny] == 0:
-                            if (nx, ny) not in visited:
-                                queue.append((nx, ny))
-                        # If it its a stone save its color
-                        elif state[nx][ny] in [1, 2]:
-                            adjacent_colors.add(state[nx][ny])
+            if state[cx, cy] == 0:
+                territory[cx, cy] = True
+
+                nx = cx + dx
+                ny = cy + dy
+                valid_mask = (0 <= nx) & (nx < self.board_width) & (0 <= ny) & (ny < self.board_height)
+                # Check pre-computed neighbors
+                for i in range(4):
+                    if not valid_mask[i]:
+                        continue
+                    neighbor_x = nx[i]
+                    neighbor_y = ny[i]
+                    cell_value = state[neighbor_x, neighbor_y]
+                    if cell_value == 0:
+                        if not visited[neighbor_x, neighbor_y]:
+                            queue.append((neighbor_x, neighbor_y))
+                    # If it its a stone save its color
+                    elif cell_value in [1, 2]:
+                        adjacent_colors.add(int(cell_value))
 
         # if territory is too large, its not valid
-        if len(territory) > 2 * self.board_width:
+        if np.count_nonzero(territory) > 2 * self.board_width:
             return None, territory
 
         # If territory touches exactly one color, it belongs to that color
@@ -471,19 +471,19 @@ class Go_uf:
         Finds how many empty intersections belong to black or white via territory.
         Returns (white_territory, black_territory).
         """
-        visited: set[tuple[int, int]] = set()
+        visited: np.ndarray[Any, np.dtype[np.bool_]] = np.zeros((self.board_width, self.board_height), dtype=np.bool_)
         white_territory = 0
         black_territory = 0
 
         for x in range(self.board_width):
             for y in range(self.board_height):
                 # 0 means node is empty
-                if (x, y) not in visited and state[x][y] == 0:
+                if not visited[x, y] and state[x, y] == 0:
                     color_owner, territory = self.flood_fill_territory(state, x, y, visited)
                     if color_owner == 1:  # black
-                        black_territory += len(territory)
+                        black_territory += np.count_nonzero(territory)
                     elif color_owner == 2:  # white
-                        white_territory += len(territory)
+                        white_territory += np.count_nonzero(territory)
 
         return white_territory, black_territory
 
