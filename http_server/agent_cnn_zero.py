@@ -531,19 +531,25 @@ class AlphaZeroAgent:
         pi_batch = torch.stack(pi_list, dim=0).to(device=self.device)  # shape [B, 26]
         pi_opp_batch = torch.stack(pi_mcts_res_list, dim=0).to(device=self.device)  # shape [B, 26]
         z_batch = torch.tensor(z_list, dtype=torch.float, device=self.device)  # [B]
+        z_batch_transformed = torch.stack([z_batch, 1 - z_batch], dim=1)  # [B, 2]
 
         # 3. feed states trough NN
         # logits shape [B, 26], values shape [B, 1] (assuming your net does that)
-        logits_own, logits_opp, values = self.policy_net(state_batch)
+        logits_own, logits_opp, outcome_logits, ownership_logits, score_logits = self.policy_net(state_batch)
 
         # 4. Calculate losses
         policy_log_probs_own = F.log_softmax(logits_own, dim=1)  # shape [B, num_actions]
         policy_log_probs_opp = F.log_softmax(logits_opp, dim=1)  # shape [B, num_actions]
+        z_hat = F.log_softmax(outcome_logits, dim=1)  # shape [B, num_actions]
+        ownership_logits = 
 
         # pi_batch is shape [B, num_actions]
         policy_loss_own = -(pi_batch * policy_log_probs_own).sum(dim=1).mean() * 1.5  # cross entropy loss
         policy_loss_opp = -(pi_opp_batch * policy_log_probs_opp).sum(dim=1).mean() * 0.15  # cross entropy loss
-        value_loss = F.mse_loss(values.squeeze(), z_batch)
+
+        value_loss = -(z_batch_transformed * z_hat).sum(dim=1).mean() * 1.5
+
+        ownership_loss
 
         loss = policy_loss_own + policy_loss_opp + value_loss
 
