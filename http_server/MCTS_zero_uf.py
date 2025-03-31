@@ -319,9 +319,6 @@ def find_child_index(root_node: Node, chosen_action: int) -> int:
     raise RuntimeError(f"No child found with action={chosen_action}")
 
 
-
-
-
 async def main() -> None:
     # torch.manual_seed(0)  # pyright: ignore
     # np.random.seed(0)
@@ -412,10 +409,23 @@ async def main() -> None:
         mcts.agent.plotter.update_wins_black(1 if outcome == 1 else -1)
 
         mcts.agent.policy_net.train()
+
+        ownership_mask = np.zeros((board_size, board_size), dtype=np.int8)
+        visited: np.ndarray[Any, np.dtype[np.bool_]] = np.zeros((board_size, board_size), dtype=np.bool_)
+        for x in range(board_size):
+            for y in range(board_size):
+                if server.go.uf.state[x, y] == 0 and not visited[x, y]:
+                    color, territory = server.go.flood_fill_territory(server.go.uf.state, x, y, visited)
+                    if color is not None:
+                        if color == 1:
+                            ownership_mask[territory] = 1
+                        elif color == 2:
+                            ownership_mask[territory] = -1
+
         for be in buffer:
             # Flip if the outcome from neutrals perspective to players perspective
             z = outcome if not be.is_white else -outcome
-            mcts.agent.augment_state(be, z)
+            mcts.agent.augment_state(be, z, ownership_mask)
 
         if iter < 6:
             print("Skipping training")
