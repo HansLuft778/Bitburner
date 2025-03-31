@@ -253,7 +253,7 @@ class ResBlock(nn.Module):
 
 class TrainingBuffer:
     def __init__(self, capacity: int = 75000):
-        self.buffer: deque[tuple[UnionFind, torch.Tensor, int, list[State], bool, torch.Tensor]] = deque(
+        self.buffer: deque[tuple[UnionFind, torch.Tensor, int, list[State], bool, torch.Tensor, torch.Tensor]] = deque(
             maxlen=capacity
         )
 
@@ -265,8 +265,9 @@ class TrainingBuffer:
         history: list[State],
         was_white: bool,
         pi_mcts_response: torch.Tensor,
+        ownership: torch.Tensor,
     ):
-        self.buffer.append((uf, pi_mcts, outcome, history, was_white, pi_mcts_response))
+        self.buffer.append((uf, pi_mcts, outcome, history, was_white, pi_mcts_response, ownership))
 
     def sample(self, batch_size: int):
         return random.sample(self.buffer, batch_size)
@@ -350,6 +351,7 @@ class AlphaZeroAgent:
         self,
         be: BufferElement,
         outcome: int,
+        ownership: np.ndarray[Any, np.dtype[np.int8]],
     ):
         """
         creates 7 augmented versions of the provided state, and pushes all 8 versions into the training buffer.
@@ -360,15 +362,22 @@ class AlphaZeroAgent:
         was_white = be.is_white
         pi_mcts_res = be.pi_mcts_response
         assert pi_mcts_res is not None, "pi_mcts_response must be provided for augmentation."
-
         state = uf.state.copy()
-        self.train_buffer.push(uf, pi_mcts, outcome, history, was_white, pi_mcts_res)
 
         pi_board = pi_mcts[: self.board_width * self.board_height].reshape(self.board_width, self.board_height)
         pi_pass = pi_mcts[-1]
 
         pi_response = pi_mcts_res[: self.board_width * self.board_height].reshape(self.board_width, self.board_height)
         pi_res_pass = pi_mcts_res[-1]
+
+        grouped_tensor = torch.zeros((self.board_width, self.board_height, 5), device=self.device)
+        grouped_tensor[:, :, 0] = torch.as_tensor(uf.state, device=self.device)
+        grouped_tensor[:, :, 1] = torch.as_tensor(ownership, device=self.device)
+        grouped_tensor[:, :, 2] = torch.as_tensor(pi_board, device=self.device)
+        grouped_tensor[:, :, 3] = torch.as_tensor(pi_response, device=self.device)
+        grouped_tensor[:, :, 4] = torch.stack([torch.from_numpy(hist) for hist in history]) # type: ignore
+
+        self.train_buffer.push(uf, pi_mcts, outcome, history, was_white, pi_mcts_res, grouped_tensor[:, :, 1])
 
         # rotate state
         for rot in range(1, 4):
