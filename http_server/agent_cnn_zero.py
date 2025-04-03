@@ -17,6 +17,8 @@ from Buffer import BufferElement
 
 State = np.ndarray[Any, np.dtype[np.int8]]
 
+NUM_POSSIBLE_SCORES = int(30.5 * 2 + 1)
+
 
 class GlobalPoolingBias(nn.Module):
     def __init__(self, channels_g: int, channels_x: int):
@@ -102,7 +104,7 @@ class FinalScoreDistHead(nn.Module):
 
         self.min_score = -30.5
         self.max_score = 30.5
-        self.num_possible_scores = int(30.5 * 2 + 1)
+        self.num_possible_scores = NUM_POSSIBLE_SCORES
 
         # Layers processing pooled features + score info (shared weights across scores)
         # Input: pooled_features_dim + 2 (scaled score s, parity(s))
@@ -253,21 +255,18 @@ class ResBlock(nn.Module):
 
 class TrainingBuffer:
     def __init__(self, capacity: int = 75000):
-        self.buffer: deque[tuple[UnionFind, torch.Tensor, int, list[State], bool, torch.Tensor, torch.Tensor]] = deque(
-            maxlen=capacity
-        )
+        self.buffer: deque[tuple[torch.Tensor, torch.Tensor, int, bool, torch.Tensor, float]] = deque(maxlen=capacity)
 
     def push(
         self,
-        uf: UnionFind,
         pi_mcts: torch.Tensor,
+        pi_opp: torch.Tensor,
         outcome: int,
-        history: list[State],
         was_white: bool,
-        pi_mcts_response: torch.Tensor,
-        ownership: torch.Tensor,
+        group: torch.Tensor,
+        score: float,
     ):
-        self.buffer.append((uf, pi_mcts, outcome, history, was_white, pi_mcts_response, ownership))
+        self.buffer.append((pi_mcts, pi_opp, outcome, was_white, group, score))
 
     def sample(self, batch_size: int):
         return random.sample(self.buffer, batch_size)
@@ -352,6 +351,7 @@ class AlphaZeroAgent:
         be: BufferElement,
         outcome: int,
         ownership: np.ndarray[Any, np.dtype[np.int8]],
+        score: float,
     ):
         """
         creates 7 augmented versions of the provided state, and pushes all 8 versions into the training buffer.
@@ -360,53 +360,48 @@ class AlphaZeroAgent:
         pi_mcts = be.pi_mcts
         history = be.history
         was_white = be.is_white
-        pi_mcts_res = be.pi_mcts_response
-        assert pi_mcts_res is not None, "pi_mcts_response must be provided for augmentation."
-        state = uf.state.copy()
+        pi_mcts_opp = be.pi_mcts_response
+        assert pi_mcts_opp is not None, "pi_mcts_response must be provided for augmentation."
 
         pi_board = pi_mcts[: self.board_width * self.board_height].reshape(self.board_width, self.board_height)
         pi_pass = pi_mcts[-1]
 
-        pi_response = pi_mcts_res[: self.board_width * self.board_height].reshape(self.board_width, self.board_height)
-        pi_res_pass = pi_mcts_res[-1]
+        pi_opp = pi_mcts_opp[: self.board_width * self.board_height].reshape(self.board_width, self.board_height)
+        pi_res_pass = pi_mcts_opp[-1]
 
-        grouped_tensor = torch.zeros((self.board_width, self.board_height, 5), device=self.device)
-        grouped_tensor[:, :, 0] = torch.as_tensor(uf.state, device=self.device)
-        grouped_tensor[:, :, 1] = torch.as_tensor(ownership, device=self.device)
-        grouped_tensor[:, :, 2] = torch.as_tensor(pi_board, device=self.device)
-        grouped_tensor[:, :, 3] = torch.as_tensor(pi_response, device=self.device)
-        grouped_tensor[:, :, 4] = torch.stack([torch.from_numpy(hist) for hist in history]) # type: ignore
+        grouped_tensor = torch.zeros((self.board_width, self.board_height, 5))
+        grouped_tensor[:, :, 0] = torch.as_tensor(uf.state)
+        grouped_tensor[:, :, 1] = torch.as_tensor(ownership)
+        grouped_tensor[:, :, 2] = torch.as_tensor(pi_board)
+        grouped_tensor[:, :, 3] = torch.as_tensor(pi_opp)
+        grouped_tensor[:, :, 4] = torch.stack([torch.from_numpy(hist) for hist in history])  # type: ignore
 
-        self.train_buffer.push(uf, pi_mcts, outcome, history, was_white, pi_mcts_res, grouped_tensor[:, :, 1])
+        self.train_buffer.push(pi_mcts, pi_opp, outcome, was_white, grouped_tensor, score)
 
         # rotate state
         for rot in range(1, 4):
-            rotated_state = np.rot90(state, rot).copy()
-            rotated_history = [np.rot90(h, rot).copy() for h in history]
+            rotated_grouped_tensor = torch.rot90(grouped_tensor, rot)
 
-            rotated_pi_board = torch.rot90(pi_board, rot)
+            rotated_pi_board = rotated_grouped_tensor[:, :, 2]
+            rotated_opp_board = rotated_grouped_tensor[:, :, 3]
+
             rotated_pi = torch.cat([rotated_pi_board.flatten(), pi_pass.unsqueeze(0)])
+            rotated_opp = torch.cat([rotated_opp_board.flatten(), pi_res_pass.unsqueeze(0)])
 
-            rotated_reponse_board = torch.rot90(pi_response, rot)
-            rotated_response = torch.cat([rotated_reponse_board.flatten(), pi_res_pass.unsqueeze(0)])
-
-            rotated_uf = UnionFind.get_uf_from_state(rotated_state, None)
-            self.train_buffer.push(rotated_uf, rotated_pi, outcome, rotated_history, was_white, rotated_response)
+            self.train_buffer.push(rotated_pi, rotated_opp, outcome, was_white, rotated_grouped_tensor, score)
 
         # mirror state
-        mirrored_state = np.fliplr(state).copy()
-        mirrored_history = [np.fliplr(h).copy() for h in history]
+        mirrored_grouped_tensor = torch.fliplr(grouped_tensor)
+
         mirrored_pi_board = torch.fliplr(pi_board)
         mirrored_pi = torch.cat([mirrored_pi_board.flatten(), pi_pass.unsqueeze(0)])
-        mirrored_pi_response_board = torch.fliplr(pi_response)
+        mirrored_pi_response_board = torch.fliplr(pi_opp)
         mirrored_pi_response = torch.cat([mirrored_pi_response_board.flatten(), pi_res_pass.unsqueeze(0)])
 
-        mirrored_uf = UnionFind.get_uf_from_state(mirrored_state, None)
-        self.train_buffer.push(mirrored_uf, mirrored_pi, outcome, mirrored_history, was_white, mirrored_pi_response)
+        self.train_buffer.push(mirrored_pi, mirrored_pi_response, outcome, was_white, mirrored_grouped_tensor, score)
 
         for rot in range(1, 4):
-            mirrored_rotated_state = np.rot90(mirrored_state, rot).copy()
-            mirrored_rotated_history = [np.rot90(h, rot).copy() for h in mirrored_history]
+            mirrored_rotated_group = torch.rot90(mirrored_grouped_tensor, rot)
 
             mirrored_rotated_pi_board = torch.rot90(mirrored_pi_board, rot)
             mirrored_rotated_pi = torch.cat([mirrored_rotated_pi_board.flatten(), pi_pass.unsqueeze(0)])
@@ -414,14 +409,8 @@ class AlphaZeroAgent:
             mirrored_rotated_res_board = torch.rot90(mirrored_pi_response_board, rot)
             mirrored_rotated_response = torch.cat([mirrored_rotated_res_board.flatten(), pi_res_pass.unsqueeze(0)])
 
-            mirrored_rotated_uf = UnionFind.get_uf_from_state(mirrored_rotated_state, None)
             self.train_buffer.push(
-                mirrored_rotated_uf,
-                mirrored_rotated_pi,
-                outcome,
-                mirrored_rotated_history,
-                was_white,
-                mirrored_rotated_response,
+                mirrored_rotated_pi, mirrored_rotated_response, outcome, was_white, mirrored_rotated_group, score
             )
 
     def preprocess_state(self, uf: UnionFind, history: list[State], is_white: bool):
@@ -528,19 +517,38 @@ class AlphaZeroAgent:
         # 1. sample batch from train buffer
         batch = self.train_buffer.sample(self.batch_size)
 
-        (uf_list, pi_list, z_list, history_list, is_white_list, pi_mcts_res_list) = zip(*batch)
+        # tuple[torch.Tensor, torch.Tensor, int, bool, torch.Tensor]
+        (pi_list, pi_opp_list, z_list, is_white_list, group_list, score_list) = zip(*batch)
 
-        # 2. Convert Python data into PyTorch tensors
+        # 2. Convert data into tensors
         state_tensor_list: list[torch.Tensor] = []
+        ownership_list: list[torch.Tensor] = []
         for i in range(len(batch)):
-            t = self.preprocess_state(uf_list[i], history_list[i], is_white_list[i])
+            uf = UnionFind.get_uf_from_state(group_list[i][:, :, 0], None)
+            history = group_list[i][:, :, 4:]
+            t = self.preprocess_state(uf, history, is_white_list[i])
             state_tensor_list.append(t)
+            ownership_list.append(group_list[i][:, :, 1])
 
         state_batch = torch.cat(state_tensor_list)  # shape [B, channels, W, H]
         pi_batch = torch.stack(pi_list, dim=0).to(device=self.device)  # shape [B, 26]
-        pi_opp_batch = torch.stack(pi_mcts_res_list, dim=0).to(device=self.device)  # shape [B, 26]
+        pi_opp_batch = torch.stack(pi_opp_list, dim=0).to(device=self.device)  # shape [B, 26]
         z_batch = torch.tensor(z_list, dtype=torch.float, device=self.device)  # [B]
         z_batch_transformed = torch.stack([z_batch, 1 - z_batch], dim=1)  # [B, 2]
+
+        ownership_batch = torch.stack(ownership_list, dim=0).to(device=self.device)  # shape [B, 1, W, H]
+        o_target_player = (ownership_batch == 1).float()
+        o_target_opponent = (ownership_batch == -1).float()
+        o_target_shared = (ownership_batch == 0).float()
+        o_target_prob = torch.stack(
+            [
+                o_target_player + 0.5 * o_target_shared,  # Prob current player owns
+                o_target_opponent + 0.5 * o_target_shared,  # Prob opponent owns
+            ],
+            dim=1,
+        ).to(device=self.device)
+
+        score_batch = torch.stack(score_list, dim=0).to(device=self.device)  # shape [B]
 
         # 3. feed states trough NN
         # logits shape [B, 26], values shape [B, 1] (assuming your net does that)
@@ -550,7 +558,23 @@ class AlphaZeroAgent:
         policy_log_probs_own = F.log_softmax(logits_own, dim=1)  # shape [B, num_actions]
         policy_log_probs_opp = F.log_softmax(logits_opp, dim=1)  # shape [B, num_actions]
         z_hat = F.log_softmax(outcome_logits, dim=1)  # shape [B, num_actions]
-        ownership_logits = 
+
+        ## ownership loss preparation
+        ownership_logits_player = (F.tanh(ownership_logits) + 1) / 2  # type: ignore
+        ownership_logits_opp = 1 - ownership_logits_player  # type: ignore
+        ownership_hat = torch.cat([ownership_logits_player, ownership_logits_opp], dim=1)  # shape [B, 2]
+        epsilon = 1e-9
+        ownership_hat_prob = torch.clamp(ownership_hat, epsilon, 1.0 - epsilon)
+
+        B, C, _, _ = o_target_prob.shape
+        o_target_flat = o_target_prob.view(B, C, -1)  # shape [B, 2, W*H]
+        ownership_hat_flat = ownership_hat_prob.view(B, C, -1)  # shape [B, 2, W*H]
+
+        ## score loss preparation
+        score_onehot = torch.zeros((self.batch_size, NUM_POSSIBLE_SCORES), device=self.device)
+        for i in range(self.batch_size):
+            score_idx = int(NUM_POSSIBLE_SCORES / 2) + (score_batch[i] * 2)
+            score_onehot[i, score_idx] = 1.0
 
         # pi_batch is shape [B, num_actions]
         policy_loss_own = -(pi_batch * policy_log_probs_own).sum(dim=1).mean() * 1.5  # cross entropy loss
@@ -558,9 +582,9 @@ class AlphaZeroAgent:
 
         value_loss = -(z_batch_transformed * z_hat).sum(dim=1).mean() * 1.5
 
-        ownership_loss
+        ownership_loss = -(o_target_flat * torch.log(ownership_hat_flat)).sum(dim=1).mean() * 0.06
 
-        loss = policy_loss_own + policy_loss_opp + value_loss
+        loss = policy_loss_own + policy_loss_opp + value_loss + ownership_loss
 
         self.plotter.update_loss(loss.item())
         self.plotter.update_policy_loss(policy_loss_own.item())

@@ -411,21 +411,39 @@ async def main() -> None:
         mcts.agent.policy_net.train()
 
         ownership_mask = np.zeros((board_size, board_size), dtype=np.int8)
+        black_territory = np.zeros((board_size, board_size), dtype=np.int8)
+        black_stones = np.zeros((board_size, board_size), dtype=np.int8)
+        white_territory = np.zeros((board_size, board_size), dtype=np.int8)
+        white_stones = np.zeros((board_size, board_size), dtype=np.int8)
+
         visited: np.ndarray[Any, np.dtype[np.bool_]] = np.zeros((board_size, board_size), dtype=np.bool_)
         for x in range(board_size):
             for y in range(board_size):
                 if server.go.uf.state[x, y] == 0 and not visited[x, y]:
                     color, territory = server.go.flood_fill_territory(server.go.uf.state, x, y, visited)
                     if color is not None:
-                        if color == 1:
+                        if color == 1:  # black
                             ownership_mask[territory] = 1
-                        elif color == 2:
+                            black_territory[territory] = 1
+                        elif color == 2:  # white
                             ownership_mask[territory] = -1
+                            white_territory[territory] = 1
+                else:
+                    if server.go.uf.state[x, y] == 1:
+                        black_stones[x, y] = 1
+                    elif server.go.uf.state[x, y] == 2:
+                        white_stones[x, y] = 1
+                        
+        black_score = np.count_nonzero(black_stones) + np.count_nonzero(black_territory)
+        white_score = np.count_nonzero(white_stones) + np.count_nonzero(white_territory)
+        score = black_score - white_score
 
         for be in buffer:
             # Flip if the outcome from neutrals perspective to players perspective
             z = outcome if not be.is_white else -outcome
-            mcts.agent.augment_state(be, z, ownership_mask)
+            ownership_corrected = ownership_mask * (-1 if be.is_white else 1)
+            score_corrected = score * (-1 if be.is_white else 1)
+            mcts.agent.augment_state(be, z, ownership_corrected, score_corrected)
 
         if iter < 6:
             print("Skipping training")
