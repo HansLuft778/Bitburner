@@ -122,29 +122,35 @@ class FinalScoreDistHead(nn.Module):
         gamma = self.scale_fc2(F.relu(self.scale_fc1(v_pooled)))  # [batch, 1]
 
         # Prepare score features and process each possible score
-        score_logits_list: list[torch.Tensor] = []
+        # score_logits_list: list[torch.Tensor] = []
         possible_scores = torch.linspace(
             self.min_score, self.max_score, self.num_possible_scores, device=v_pooled.device
         )
 
-        for s in possible_scores:
-            # Shape: [batch, 1]
-            score_feat_s = torch.zeros(v_pooled.size(0), 1, device=v_pooled.device)
-            score_feat_s[:, 0] = 0.05 * s  # Scaled score [cite: 286]
+        scaled_scores_feat = (possible_scores * 0.05).view(1, -1, 1).expand(v_pooled.size(0), -1, -1)
+        v_pooled_expanded = v_pooled.unsqueeze(1).expand(-1, self.num_possible_scores, -1)
+        combined = torch.cat([v_pooled_expanded, scaled_scores_feat], dim=2)
+        unscaled_logits = self.fc2(F.relu(self.fc1(combined)))
+        scaled_logits = (unscaled_logits * F.softplus(gamma.unsqueeze(-1))).squeeze(-1)
 
-            # Concatenate pooled features with score features
-            # Shape: [batch, pooled_features_dim + 2]
-            combined_features = torch.cat([v_pooled, score_feat_s], dim=1)
+        # for s in possible_scores:
+        #     # Shape: [batch, 1]
+        #     score_feat_s = torch.zeros(v_pooled.size(0), 1, device=v_pooled.device)
+        #     score_feat_s[:, 0] = 0.05 * s  # Scaled score
 
-            # Shape: [batch, 1]
-            logit_component = self.fc2(F.relu(self.fc1(combined_features)))
-            score_logits_list.append(logit_component)
+        #     # Concatenate pooled features with score features
+        #     # Shape: [batch, pooled_features_dim + 2]
+        #     combined_features = torch.cat([v_pooled, score_feat_s], dim=1)
 
-        # Shape: [batch, num_possible_scores]
-        all_score_logits = torch.cat(score_logits_list, dim=1)
+        #     # Shape: [batch, 1]
+        #     logit_component = self.fc2(F.relu(self.fc1(combined_features)))
+        #     score_logits_list.append(logit_component)
 
-        # Apply scaling factor gamma [cite: 288]
-        scaled_logits = all_score_logits * F.softplus(gamma)
+        # # Shape: [batch, num_possible_scores]
+        # all_score_logits = torch.cat(score_logits_list, dim=1)
+
+        # # Apply scaling factor gamma
+        # scaled_logits = all_score_logits * F.softplus(gamma)
 
         return scaled_logits
 
@@ -203,18 +209,16 @@ class ResNet(nn.Module):
 
         self.score_head = FinalScoreDistHead(pooled_features_dim, value_head_intermediate_channels)
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         x = self.initialConvBlock(x)
         for block in self.feature_extractor:
             x = block(x)
 
         # policy head
-        own_policy_pass, opp_policy_pass = self.policy_head(x)  # shape [batch, 2, w, h]
+        own_policy_logits, opp_policy_logits = self.policy_head(x)  # shape [batch, 2, w, h]
 
         # value head
         v_base = self.vh_init_conv(x)  # shape [batch, 16, w, h]
-
-        # pooling
         v_mean = v_base.mean(dim=(2, 3))  # shape [batch, 16]
         v_max = v_base.amax(dim=(2, 3))  # shape [batch, 16]
         v_pooled = torch.cat([v_mean, v_max], dim=1)  # shape [batch, 32]
@@ -222,8 +226,8 @@ class ResNet(nn.Module):
         # --- game outcome head ---
         game_outcome_logits = self.game_outcome_head(v_pooled)  # shape [batch, 4]
         outcome_distribution = torch.softmax(game_outcome_logits[:, 0:2], dim=1)  # shape [batch, 2]
-        score_difference = game_outcome_logits[:, 2:3] * 8  # shape [batch, 1]
-        score_std = F.softplus(game_outcome_logits[:, 3:4] * 8)  # shape [batch, 1]
+        score_difference = game_outcome_logits[:, 2:3] * 20  # shape [batch, 1]
+        score_std = F.softplus(game_outcome_logits[:, 3:4] * 20)  # shape [batch, 1]
 
         game_outcome = torch.cat([outcome_distribution, score_difference, score_std], dim=1)  # shape [batch, 4]
 
@@ -233,7 +237,25 @@ class ResNet(nn.Module):
         # --- score head ---
         score_logits = self.score_head(v_pooled)  # shape [batch, num_possible_scores (-27.5, 27.5)]
 
-        return (own_policy_pass, opp_policy_pass, game_outcome, ownership_logits, score_logits)
+        return (own_policy_logits, opp_policy_logits, game_outcome, ownership_logits, score_logits)
+
+    def forward_mcts_eval(self, x: torch.Tensor):
+        x = self.initialConvBlock(x)
+        for block in self.feature_extractor:
+            x = block(x)
+
+        own_policy_logits, _ = self.policy_head(x)
+
+        # Compute Value Head Base and Game Outcome Head
+        v_base = self.vh_init_conv(x)
+        v_mean = v_base.mean(dim=(2, 3))
+        v_max = v_base.amax(dim=(2, 3))
+        v_pooled = torch.cat([v_mean, v_max], dim=1)
+        game_outcome_head_output = self.game_outcome_head(v_pooled)
+
+        outcome_distribution = torch.softmax(game_outcome_head_output[:, 0:2], dim=1)  # shape [batch, 2]
+
+        return own_policy_logits, outcome_distribution
 
 
 class ResBlock(nn.Module):
@@ -369,14 +391,28 @@ class AlphaZeroAgent:
         pi_opp = pi_mcts_opp[: self.board_width * self.board_height].reshape(self.board_width, self.board_height)
         pi_res_pass = pi_mcts_opp[-1]
 
-        grouped_tensor = torch.zeros((self.board_width, self.board_height, 5))
-        grouped_tensor[:, :, 0] = torch.as_tensor(uf.state)
-        grouped_tensor[:, :, 1] = torch.as_tensor(ownership)
+        num_non_history_channels = 4  # state, ownership, pi_board, pi_opp
+        grouped_tensor = torch.zeros(
+            (self.board_width, self.board_height, num_non_history_channels + self.num_past_steps), device=self.device
+        )
+        grouped_tensor[:, :, 0] = torch.as_tensor(uf.state, device=self.device)
+        grouped_tensor[:, :, 1] = torch.as_tensor(ownership, device=self.device)
         grouped_tensor[:, :, 2] = torch.as_tensor(pi_board)
         grouped_tensor[:, :, 3] = torch.as_tensor(pi_opp)
-        grouped_tensor[:, :, 4] = torch.stack([torch.from_numpy(hist) for hist in history])  # type: ignore
 
-        self.train_buffer.push(pi_mcts, pi_opp, outcome, was_white, grouped_tensor, score)
+        padded_history = list(history)
+        num_mising = self.num_past_steps - len(padded_history)
+        if num_mising > 0:
+            padding = [np.zeros((self.board_width, self.board_width), dtype=np.int8)] * num_mising
+            padded_history.extend(padding)
+
+        final_history_list = padded_history[: self.num_past_steps]
+        for i in range(self.num_past_steps):
+            grouped_tensor[:, :, num_non_history_channels + i] = torch.as_tensor(
+                final_history_list[i], device=self.device
+            )
+
+        self.train_buffer.push(pi_mcts, pi_mcts_opp, outcome, was_white, grouped_tensor, score)
 
         # rotate state
         for rot in range(1, 4):
@@ -481,20 +517,18 @@ class AlphaZeroAgent:
     def get_actions_eval(
         self,
         uf: UnionFind,
-        valid_moves: np.ndarray[Any, np.dtype[np.bool_]],
         game_history: list[State],
         color_is_white: bool,
-    ) -> tuple[torch.Tensor, int]:
+    ) -> tuple[torch.Tensor, float]:
         """
         Select action deterministically for evaluation (no exploration).
         """
         state_tensor = self.preprocess_state(uf, game_history, color_is_white)
 
         # Get logits
-        policy, value = self.policy_net(state_tensor)
-
-        # Select the action with highest Q-value
-        return policy.squeeze(0), value.item()
+        policy, outcome_logits = self.policy_net.forward_mcts_eval(state_tensor)
+        outcome = outcome_logits.squeeze(0)  # shape [2]
+        return policy.squeeze(0), outcome[0].item()
 
     def decode_action(self, action_idx: int) -> tuple[int, int]:
         """
@@ -524,11 +558,14 @@ class AlphaZeroAgent:
         state_tensor_list: list[torch.Tensor] = []
         ownership_list: list[torch.Tensor] = []
         for i in range(len(batch)):
-            uf = UnionFind.get_uf_from_state(group_list[i][:, :, 0], None)
+            current_group = group_list[i]
+            uf = UnionFind.get_uf_from_state(current_group[:, :, 0].cpu().numpy(), None)
             history = group_list[i][:, :, 4:]
-            t = self.preprocess_state(uf, history, is_white_list[i])
+            history_list = [history[:, :, j] for j in range(self.num_past_steps)]
+
+            t = self.preprocess_state(uf, history_list, is_white_list[i])
             state_tensor_list.append(t)
-            ownership_list.append(group_list[i][:, :, 1])
+            ownership_list.append(current_group[:, :, 1])
 
         state_batch = torch.cat(state_tensor_list)  # shape [B, channels, W, H]
         pi_batch = torch.stack(pi_list, dim=0).to(device=self.device)  # shape [B, 26]
@@ -548,7 +585,7 @@ class AlphaZeroAgent:
             dim=1,
         ).to(device=self.device)
 
-        score_batch = torch.stack(score_list, dim=0).to(device=self.device)  # shape [B]
+        score_batch = torch.tensor(score_list, device=self.device)  # shape [B]
 
         # 3. feed states trough NN
         # logits shape [B, 26], values shape [B, 1] (assuming your net does that)
@@ -557,7 +594,11 @@ class AlphaZeroAgent:
         # 4. Calculate losses
         policy_log_probs_own = F.log_softmax(logits_own, dim=1)  # shape [B, num_actions]
         policy_log_probs_opp = F.log_softmax(logits_opp, dim=1)  # shape [B, num_actions]
-        z_hat = F.log_softmax(outcome_logits, dim=1)  # shape [B, num_actions]
+        z_hat = F.log_softmax(outcome_logits[:, :2], dim=1)  # shape [B, 2]
+        score_log_probs = F.log_softmax(score_logits, dim=1)  # shape [B, num_possible_scores]
+        score_probs = F.softmax(score_logits, dim=1)  # shape [B, num_possible_scores]
+        mu_hat = outcome_logits[:, 2]
+        sigma_hat = outcome_logits[:, 3]
 
         ## ownership loss preparation
         ownership_logits_player = (F.tanh(ownership_logits) + 1) / 2  # type: ignore
@@ -573,23 +614,58 @@ class AlphaZeroAgent:
         ## score loss preparation
         score_onehot = torch.zeros((self.batch_size, NUM_POSSIBLE_SCORES), device=self.device)
         for i in range(self.batch_size):
-            score_idx = int(NUM_POSSIBLE_SCORES / 2) + (score_batch[i] * 2)
-            score_onehot[i, score_idx] = 1.0
+            score_idx = int(NUM_POSSIBLE_SCORES / 2) + score_batch[i].floor()
+            score_onehot[i, int(score_idx)] = 1.0
 
+        # calculate losses
         # pi_batch is shape [B, num_actions]
-        policy_loss_own = -(pi_batch * policy_log_probs_own).sum(dim=1).mean() * 1.5  # cross entropy loss
+        policy_loss_own = -(pi_batch * policy_log_probs_own).sum(dim=1).mean()  # cross entropy loss
         policy_loss_opp = -(pi_opp_batch * policy_log_probs_opp).sum(dim=1).mean() * 0.15  # cross entropy loss
 
-        value_loss = -(z_batch_transformed * z_hat).sum(dim=1).mean() * 1.5
+        game_outcome_value_loss = -(z_batch_transformed * z_hat).sum(dim=1).mean() * 1.5
 
         ownership_loss = -(o_target_flat * torch.log(ownership_hat_flat)).sum(dim=1).mean() * 0.06
 
-        loss = policy_loss_own + policy_loss_opp + value_loss + ownership_loss
+        score_pdf_loss = -(score_onehot * score_log_probs).sum(dim=1).mean() * 0.02
+
+        target_cdf = torch.cumsum(score_onehot, dim=1)  # shape [B, num_possible_scores]
+        predicted_cdf = torch.cumsum(score_probs, dim=1)  # shape [B, num_possible_scores]
+        score_cdf_loss = torch.mean(torch.sum((target_cdf - predicted_cdf) ** 2, dim=1)) * 0.02
+
+        possible_scores = torch.linspace(  # shape [1, num_possible_scores]
+            self.policy_net.score_head.min_score,
+            self.policy_net.score_head.max_score,
+            self.policy_net.score_head.num_possible_scores,
+            device=self.device,
+        ).unsqueeze(0)
+
+        mu_s = torch.sum(possible_scores * score_probs, dim=1, keepdim=True)  # shape [B, 1]
+        variance_s = torch.sum(((possible_scores - mu_s) ** 2) * score_probs, dim=1, keepdim=True)  # shape [B, 1]
+        sigma_s = torch.sqrt(variance_s + epsilon)  # epsilon in case variance_s is 0
+
+        score_mean_loss = F.huber_loss(mu_hat, mu_s.detach(), delta=10.0) * 0.004
+        score_std_loss = F.huber_loss(sigma_hat, sigma_s.detach(), delta=10.0) * 0.004
+
+        loss = (
+            policy_loss_own
+            + policy_loss_opp
+            + game_outcome_value_loss
+            + ownership_loss
+            + score_pdf_loss
+            + score_cdf_loss
+            + score_mean_loss
+            + score_std_loss
+        )
 
         self.plotter.update_loss(loss.item())
         self.plotter.update_policy_loss(policy_loss_own.item())
-        self.plotter.update_value_loss(value_loss.item())
+        self.plotter.update_value_loss(game_outcome_value_loss.item())
         self.plotter.update_stat("policy_loss_opp", policy_loss_opp.item())  # type: ignore
+        self.plotter.update_stat("ownership_loss", ownership_loss.item())  # type: ignore
+        self.plotter.update_stat("score_pdf_loss", score_pdf_loss.item())  # type: ignore
+        self.plotter.update_stat("score_cdf_loss", score_cdf_loss.item())  # type: ignore
+        self.plotter.update_stat("score_mean_loss", score_mean_loss.item())  # type: ignore
+        self.plotter.update_stat("score_std_loss", score_std_loss.item())  # type: ignore
 
         # 5. Optimize the policy_net
         self.optimizer.zero_grad()
@@ -598,4 +674,6 @@ class AlphaZeroAgent:
         self.scheduler.step()
 
         current_lr = self.scheduler.get_last_lr()[0]
-        print(f"Training step: loss={loss}, policy_loss={policy_loss_own}, value_loss={value_loss}, lr={current_lr}")
+        print(
+            f"Training step: loss={loss}, policy_loss={policy_loss_own}, value_loss={game_outcome_value_loss}, lr={current_lr}"
+        )

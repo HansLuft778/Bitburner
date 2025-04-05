@@ -241,7 +241,7 @@ class MCTS:
 
                 inference_start = time.time()
                 if node.policy is None:
-                    raw_logits, raw_value = self.agent.get_actions_eval(node.uf, valid_moves, history, node.is_white)
+                    raw_logits, raw_value = self.agent.get_actions_eval(node.uf, history, node.is_white)
                     valid_mask = torch.tensor(valid_moves, device=self.agent.device, dtype=torch.bool)
                     raw_logits[~valid_mask] = -1e9
                     final_probs = torch.softmax(raw_logits, dim=0)
@@ -327,7 +327,7 @@ async def main() -> None:
     server = GameServerGo(board_size)
     await server.wait()
     print("GameServer ready and client connected")
-    plotter = Plotter(3, 3)
+    plotter = Plotter(4, 3)
     plotter.add_plot(  # type: ignore
         "cumulative_reward_black",
         plotter.axes[0, 0],  # type: ignore
@@ -345,11 +345,19 @@ async def main() -> None:
         label="White",
     )
     plotter.add_plot("loss", plotter.axes[0, 1], "Training Loss Over Time", "Updates", "Loss")  # type: ignore
+    plotter.add_plot("depth", plotter.axes[0, 2], "MCTS Depth", "Iteration", "Depth", label="tree depth")  # type: ignore
+    plotter.add_plot("episode_length", plotter.axes[0, 2], "Episode Length", "Iteration", "Length", label="episode length")  # type: ignore
+
     plotter.add_plot("policy_loss_own", plotter.axes[1, 0], "Own Policy Loss Over Time", "Updates", "Policy Loss")  # type: ignore
-    plotter.add_plot("value_loss", plotter.axes[1, 1], "Value Loss Over Time", "Updates", "Value Loss")  # type: ignore
-    plotter.add_plot("depth", plotter.axes[0, 2], "MCTS Depth", "Iteration", "Depth")  # type: ignore
-    plotter.add_plot("episode_length", plotter.axes[1, 2], "Episode Length", "Iteration", "Length")  # type: ignore
-    plotter.add_plot("policy_loss_opp", plotter.axes[2, 0], "Opponent Policy Loss Over Time", "Updates", "Policy Loss")  # type: ignore
+    plotter.add_plot("policy_loss_opp", plotter.axes[1, 1], "Opponent Policy Loss Over Time", "Updates", "Policy Loss")  # type: ignore
+    plotter.add_plot("value_loss", plotter.axes[1, 2], "Value Loss Over Time", "Updates", "Value Loss")  # type: ignore
+
+    plotter.add_plot("ownership_loss", plotter.axes[2, 1], "Ownership Loss Over Time", "Updates", "Ownership Loss")  # type: ignore
+    plotter.add_plot("score_pdf_loss", plotter.axes[2, 2], "Score PDF Loss Over Time", "Updates", "Score PDF Loss")  # type: ignore
+
+    plotter.add_plot("score_cdf_loss", plotter.axes[3, 0], "Score CDF Loss Over Time", "Updates", "Score CDF Loss")  # type: ignore
+    plotter.add_plot("score_mean_loss", plotter.axes[3, 1], "Score Mean Loss Over Time", "Updates", "Score Mean Loss")  # type: ignore
+    plotter.add_plot("score_std_loss", plotter.axes[3, 2], "Score Std Dev Loss Over Time", "Updates", "Score Std Dev Loss")  # type: ignore
 
     agent = AlphaZeroAgent(board_size, plotter)
     # agent.load_checkpoint("checkpoint_15.pth")
@@ -397,6 +405,9 @@ async def main() -> None:
             previous_move = best_move
             episode_length += 1
 
+        # last move has no response, so set it to zero
+        buffer[-1].pi_mcts_response = torch.zeros(mcts.agent.board_height * mcts.agent.board_height + 1, device=mcts.agent.device)  # type: ignore
+
         plotter.update_stat("depth", mcts.max_depth)  # type: ignore
         plotter.update_stat("episode_length", episode_length)  # type: ignore
         mcts.max_depth = 0
@@ -433,9 +444,9 @@ async def main() -> None:
                         black_stones[x, y] = 1
                     elif server.go.uf.state[x, y] == 2:
                         white_stones[x, y] = 1
-                        
+
         black_score = np.count_nonzero(black_stones) + np.count_nonzero(black_territory)
-        white_score = np.count_nonzero(white_stones) + np.count_nonzero(white_territory)
+        white_score = np.count_nonzero(white_stones) + np.count_nonzero(white_territory) + komi
         score = black_score - white_score
 
         for be in buffer:
