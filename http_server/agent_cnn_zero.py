@@ -571,7 +571,8 @@ class AlphaZeroAgent:
         pi_batch = torch.stack(pi_list, dim=0).to(device=self.device)  # shape [B, 26]
         pi_opp_batch = torch.stack(pi_opp_list, dim=0).to(device=self.device)  # shape [B, 26]
         z_batch = torch.tensor(z_list, dtype=torch.float, device=self.device)  # [B]
-        z_batch_transformed = torch.stack([z_batch, 1 - z_batch], dim=1)  # [B, 2]
+        # z_batch_transformed = torch.stack([(z_batch + 1) / 2, (1 - z_batch) / 2], dim=1)  # [B, 2]
+        z_class_indices = ((1 - z_batch) / 2).long()
 
         ownership_batch = torch.stack(ownership_list, dim=0).to(device=self.device)  # shape [B, 1, W, H]
         o_target_player = (ownership_batch == 1).float()
@@ -594,7 +595,7 @@ class AlphaZeroAgent:
         # 4. Calculate losses
         policy_log_probs_own = F.log_softmax(logits_own, dim=1)  # shape [B, num_actions]
         policy_log_probs_opp = F.log_softmax(logits_opp, dim=1)  # shape [B, num_actions]
-        z_hat = F.log_softmax(outcome_logits[:, :2], dim=1)  # shape [B, 2]
+        # z_hat = F.log_softmax(outcome_logits[:, :2], dim=1)  # shape [B, 2]
         score_log_probs = F.log_softmax(score_logits, dim=1)  # shape [B, num_possible_scores]
         score_probs = F.softmax(score_logits, dim=1)  # shape [B, num_possible_scores]
         mu_hat = outcome_logits[:, 2]
@@ -614,7 +615,7 @@ class AlphaZeroAgent:
         ## score loss preparation
         score_onehot = torch.zeros((self.batch_size, NUM_POSSIBLE_SCORES), device=self.device)
         for i in range(self.batch_size):
-            score_idx = int(NUM_POSSIBLE_SCORES / 2) + score_batch[i].floor()
+            score_idx = int(NUM_POSSIBLE_SCORES / 2) + torch.floor(score_batch[i])
             score_onehot[i, int(score_idx)] = 1.0
 
         # calculate losses
@@ -622,7 +623,8 @@ class AlphaZeroAgent:
         policy_loss_own = -(pi_batch * policy_log_probs_own).sum(dim=1).mean()  # cross entropy loss
         policy_loss_opp = -(pi_opp_batch * policy_log_probs_opp).sum(dim=1).mean() * 0.15  # cross entropy loss
 
-        game_outcome_value_loss = -(z_batch_transformed * z_hat).sum(dim=1).mean() * 1.5
+        # game_outcome_value_loss = -(z_batch_transformed * z_hat).sum(dim=1).mean() * 1.5
+        game_outcome_value_loss = F.cross_entropy(outcome_logits[:, :2], z_class_indices) * 1.5
 
         ownership_loss = -(o_target_flat * torch.log(ownership_hat_flat)).sum(dim=1).mean() * 0.06
 
