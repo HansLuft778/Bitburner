@@ -115,6 +115,13 @@ class FinalScoreDistHead(nn.Module):
         self.scale_fc1 = nn.Linear(pooled_features_dim, value_head_intermediate_channels)
         self.scale_fc2 = nn.Linear(value_head_intermediate_channels, 1)  # Output gamma
 
+        self.possible_scores = torch.linspace(
+            self.min_score,
+            self.max_score,
+            self.num_possible_scores,
+            device="cuda" if torch.cuda.is_available() else "cpu",
+        )
+
     def forward(self, v_pooled: torch.Tensor) -> torch.Tensor:
         # v_pooled shape: [batch, pooled_features_dim]
 
@@ -123,11 +130,8 @@ class FinalScoreDistHead(nn.Module):
 
         # Prepare score features and process each possible score
         # score_logits_list: list[torch.Tensor] = []
-        possible_scores = torch.linspace(
-            self.min_score, self.max_score, self.num_possible_scores, device=v_pooled.device
-        )
 
-        scaled_scores_feat = (possible_scores * 0.05).view(1, -1, 1).expand(v_pooled.size(0), -1, -1)
+        scaled_scores_feat = (self.possible_scores * 0.05).view(1, -1, 1).expand(v_pooled.size(0), -1, -1)
         v_pooled_expanded = v_pooled.unsqueeze(1).expand(-1, self.num_possible_scores, -1)
         combined = torch.cat([v_pooled_expanded, scaled_scores_feat], dim=2)
         unscaled_logits = self.fc2(F.relu(self.fc1(combined)))
@@ -227,7 +231,7 @@ class ResNet(nn.Module):
         game_outcome_logits = self.game_outcome_head(v_pooled)  # shape [batch, 4]
         outcome_distribution = torch.softmax(game_outcome_logits[:, 0:2], dim=1)  # shape [batch, 2]
         score_difference = game_outcome_logits[:, 2:3] * 20  # shape [batch, 1]
-        score_std = F.softplus(game_outcome_logits[:, 3:4] * 20)  # shape [batch, 1]
+        score_std = F.softplus(game_outcome_logits[:, 3:4]) * 20  # shape [batch, 1]
 
         game_outcome = torch.cat([outcome_distribution, score_difference, score_std], dim=1)  # shape [batch, 4]
 
@@ -327,6 +331,13 @@ class AlphaZeroAgent:
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=4000, eta_min=1e-5)
 
         self.train_buffer = TrainingBuffer()
+
+        self.possible_scores = torch.linspace(  # shape [1, num_possible_scores]
+            self.policy_net.score_head.min_score,
+            self.policy_net.score_head.max_score,
+            self.policy_net.score_head.num_possible_scores,
+            device=self.device,
+        ).unsqueeze(0)
 
     def save_checkpoint(self, filename: str):
         """Saves the model and optimizer state to a file."""
@@ -602,11 +613,13 @@ class AlphaZeroAgent:
         sigma_hat = outcome_logits[:, 3]
 
         ## ownership loss preparation
-        ownership_logits_player = (F.tanh(ownership_logits) + 1) / 2  # type: ignore
+        ownership_logits_player = (ownership_logits + 1) / 2  # type: ignore
         ownership_logits_opp = 1 - ownership_logits_player  # type: ignore
         ownership_hat = torch.cat([ownership_logits_player, ownership_logits_opp], dim=1)  # shape [B, 2]
         epsilon = 1e-9
-        ownership_hat_prob = torch.clamp(ownership_hat, epsilon, 1.0 - epsilon)
+        ownership_hat_prob = torch.clamp(
+            ownership_hat, epsilon, 1.0 - epsilon
+        )  # move predictions close to 0 and 1 away from it
 
         B, C, _, _ = o_target_prob.shape
         o_target_flat = o_target_prob.view(B, C, -1)  # shape [B, 2, W*H]
@@ -634,18 +647,11 @@ class AlphaZeroAgent:
         predicted_cdf = torch.cumsum(score_probs, dim=1)  # shape [B, num_possible_scores]
         score_cdf_loss = torch.mean(torch.sum((target_cdf - predicted_cdf) ** 2, dim=1)) * 0.02
 
-        possible_scores = torch.linspace(  # shape [1, num_possible_scores]
-            self.policy_net.score_head.min_score,
-            self.policy_net.score_head.max_score,
-            self.policy_net.score_head.num_possible_scores,
-            device=self.device,
-        ).unsqueeze(0)
-
-        mu_s = torch.sum(possible_scores * score_probs, dim=1, keepdim=True)  # shape [B, 1]
-        variance_s = torch.sum(((possible_scores - mu_s) ** 2) * score_probs, dim=1, keepdim=True)  # shape [B, 1]
+        mu_s = torch.sum(self.possible_scores * score_probs, dim=1, keepdim=True)  # shape [B, 1]
+        variance_s = torch.sum(((self.possible_scores - mu_s) ** 2) * score_probs, dim=1, keepdim=True)  # shape [B, 1]
         sigma_s = torch.sqrt(variance_s + epsilon)  # epsilon in case variance_s is 0
 
-        score_mean_loss = F.huber_loss(mu_hat, mu_s.detach(), delta=10.0) * 0.004
+        score_mean_loss = F.huber_loss(mu_hat, score_batch, delta=10.0) * 0.004
         score_std_loss = F.huber_loss(sigma_hat, sigma_s.detach(), delta=10.0) * 0.004
 
         loss = (
