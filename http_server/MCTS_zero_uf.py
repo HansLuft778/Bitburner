@@ -8,7 +8,7 @@ import torch
 from agent_cnn_zero import AlphaZeroAgent
 from gameserver_local_uf import GameServerGo
 from Go.Go_uf import Go_uf, UnionFind
-from plotter import Plotter  # type: ignore
+from plotter import Plotter, ModelOverlay  # type: ignore
 from TreePlotter import TreePlot  # pyright: ignore
 from Buffer import BufferElement
 
@@ -360,7 +360,7 @@ async def main() -> None:
     plotter.add_plot("score_std_loss", plotter.axes[3, 2], "Score Std Dev Loss Over Time", "Updates", "Score Std Dev Loss")  # type: ignore
 
     agent = AlphaZeroAgent(board_size, plotter)
-    # agent.load_checkpoint("checkpoint_15.pth")
+    # agent.load_checkpoint("checkpoint_126.pth")
     mcts = MCTS(server, agent, search_iterations=1000)
 
     NUM_EPISODES = 1000
@@ -439,15 +439,24 @@ async def main() -> None:
                         elif color == 2:  # white
                             ownership_mask[territory] = -1
                             white_territory[territory] = 1
-                else:
-                    if server.go.uf.state[x, y] == 1:
-                        black_stones[x, y] = 1
-                    elif server.go.uf.state[x, y] == 2:
-                        white_stones[x, y] = 1
+                elif server.go.uf.state[x, y] == 1:
+                    black_stones[x, y] = 1
+                    ownership_mask[x, y] = 1
+                    visited[x, y] = True
+                elif server.go.uf.state[x, y] == 2:
+                    white_stones[x, y] = 1
+                    ownership_mask[x, y] = -1
+                    visited[x, y] = True
 
         black_score = np.count_nonzero(black_stones) + np.count_nonzero(black_territory)
         white_score = np.count_nonzero(white_stones) + np.count_nonzero(white_territory) + komi
-        score = black_score - white_score
+        score = black_score - white_score # black leads with
+
+        # mo = ModelOverlay()
+        # for be in buffer:
+        #     state_tensor = agent.preprocess_state(be.uf, be.history, be.is_white)
+        #     out = agent.policy_net(state_tensor)
+        #     mo.heatmap(be.uf, out, be.is_white, server)
 
         for be in buffer:
             # Flip if the outcome from neutrals perspective to players perspective
@@ -456,7 +465,7 @@ async def main() -> None:
             score_corrected = score * (-1 if be.is_white else 1)
             mcts.agent.augment_state(be, z, ownership_corrected, score_corrected)
 
-        if iter < 6:
+        if iter < 12:
             print("Skipping training")
             continue
 

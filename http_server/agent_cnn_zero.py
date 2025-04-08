@@ -137,25 +137,6 @@ class FinalScoreDistHead(nn.Module):
         unscaled_logits = self.fc2(F.relu(self.fc1(combined)))
         scaled_logits = (unscaled_logits * F.softplus(gamma.unsqueeze(-1))).squeeze(-1)
 
-        # for s in possible_scores:
-        #     # Shape: [batch, 1]
-        #     score_feat_s = torch.zeros(v_pooled.size(0), 1, device=v_pooled.device)
-        #     score_feat_s[:, 0] = 0.05 * s  # Scaled score
-
-        #     # Concatenate pooled features with score features
-        #     # Shape: [batch, pooled_features_dim + 2]
-        #     combined_features = torch.cat([v_pooled, score_feat_s], dim=1)
-
-        #     # Shape: [batch, 1]
-        #     logit_component = self.fc2(F.relu(self.fc1(combined_features)))
-        #     score_logits_list.append(logit_component)
-
-        # # Shape: [batch, num_possible_scores]
-        # all_score_logits = torch.cat(score_logits_list, dim=1)
-
-        # # Apply scaling factor gamma
-        # scaled_logits = all_score_logits * F.softplus(gamma)
-
         return scaled_logits
 
 
