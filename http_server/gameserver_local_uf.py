@@ -68,11 +68,11 @@ class GameServerGo:
         else:
             x, y = action
             res = await self.send_request({"command": "make_move", "x": x, "y": y, "playAsWhite": is_white})
+        print(res)
+        assert res != -2, f"This was an invalid move somehow: {res}"
 
         # make same move locally
         uf, r, d = self.go.make_move(action_idx, is_white)
-        print(res)
-        assert res != -2, f"This was an invalid move somehow: {res}"
 
         next_state = res.get("board", [])
         reward = res.get("outcome", 0)
@@ -113,14 +113,9 @@ class GameServerGo:
 
         assert np.array_equal(
             uf.state, self.go.encode_state(next_state)
-        ), f"State mismatch: left: {uf}, right: {self.go.encode_state(next_state)}"
+        ), f"State mismatch: left: {uf.state}, right: {self.go.encode_state(next_state)}"
         assert r == outcome, f"Reward mismatch: left: {r}, right: {outcome}"
         assert d == done, f"Done flag mismatch: left: {d}, right: {done}"
-
-        # enc_state = self.go.encode_state(next_state)
-        # self.go.uf = UnionFind.get_uf_from_state(enc_state).copy()
-
-        self.go.history.append(self.go.uf.state)
 
         return uf, outcome, done
 

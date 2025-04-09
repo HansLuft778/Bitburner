@@ -477,27 +477,46 @@ async def main() -> None:
 
 
 async def main_eval():
+    
+    
     board_size = 5
     server = GameServerGo(board_size)
     await server.wait()
     print("GameServer ready and client connected")
 
     plotter = Plotter()
-    agent = AlphaZeroAgent(board_size, plotter)
-    # agent.load_checkpoint("checkpoint_69.pth")
+    agent = AlphaZeroAgent(board_size, plotter, checkpoint_dir="models")
+    agent.load_checkpoint("checkpoint_129_katago_v1.pth")
     mcts = MCTS(server, agent, search_iterations=1000)
+    
+    plotter.add_plot(  # type: ignore
+        "cumulative_reward_black",
+        plotter.axes[0, 0],  # type: ignore
+        "Cumulative Wins Over Time",
+        "Updates",
+        "Cumulative Wins",
+        label="Black",
+    )
+    plotter.add_plot(  # type: ignore
+        "cumulative_reward_white",
+        plotter.axes[0, 0],  # type: ignore
+        "Cumulative Wins Over Time",
+        "Updates",
+        "Cumulative Wins",
+        label="White",
+    )
 
     NUM_EPISODES = 100
     outcome = 0
     for _ in range(NUM_EPISODES):
-        state, komi = await server.reset_game("Netburners")
+        state, komi = await server.reset_game("Slum Snakes")
         server.go = Go_uf(board_size, state, komi)
 
         is_white = False
         done = False
         mcts.agent.policy_net.eval()
         while not done:
-            pi_mcts = mcts.search(server.go.uf, is_white, True)
+            pi_mcts = mcts.search(server.go.uf, is_white, -1, eval_mode=True)
             print(pi_mcts)
             best_move = int(torch.argmax(pi_mcts).item())
             print(f"{best_move}, {pi_mcts[best_move]}")
