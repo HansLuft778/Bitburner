@@ -107,3 +107,10 @@ batch size: 128
 
 similar performance to 3 ResBlocks, 32 channels
 result is ~60% winrate for black, but might be marginally better (overall loss is the same)
+
+checkpoint_1_8M.pth
+
+
+# katago model
+66% netburner
+50% slum snakes
