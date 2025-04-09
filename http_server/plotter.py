@@ -4,9 +4,11 @@ from collections import deque
 import numpy as np
 import torch
 import torch.nn.functional as F
+import math
 
 from Go.Go_uf import UnionFind
 from Buffer import BufferElement
+from gameserver_local_uf import GameServerGo
 
 NUM_POSSIBLE_SCORES = int(30.5 * 2 + 1)
 
@@ -107,46 +109,51 @@ class Plotter:
 
 class ModelOverlay:
     def __init__(self) -> None:
+        self.possible_scores = np.linspace(-30.5, 30.5, NUM_POSSIBLE_SCORES)
         pass
 
     def heatmap(
         self,
         uf: UnionFind,
         model_output: tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
-        score: float,
+        is_white: bool,
+        server: GameServerGo,
     ):
         pi, pi_opp, outcome_logits, ownership, score_logits = model_output
+
+        score = server.go.get_score(uf, server.go.komi)
+
+        score_diff = score["black"]["sum"] - score["white"]["sum"]
+        score_normalized = score_diff * (-1 if is_white else 1)
 
         owner_normalized = ownership * 2 - 1
 
         black_y, black_x = np.where(uf.state == 1)
         white_y, white_x = np.where(uf.state == 2)
 
-        fig, ax = plt.subplots(2, 2)
+        fig, ax = plt.subplots(2, 2, figsize=(8, 8))
+        fig.suptitle(f"Move Prediction for {'White' if is_white else 'Black'} with score {score_normalized}")
 
-        im = ax[0][0].imshow(owner_normalized.numpy(), cmap="PuOr", interpolation="nearest", vmin=-1, vmax=1)
+        im = ax[0][0].imshow(
+            owner_normalized.detach().cpu().squeeze().numpy(), cmap="PuOr", interpolation="nearest", vmin=-1, vmax=1
+        )
         ax[0][0].scatter(black_x, black_y, c="black", s=200, alpha=1)
         ax[0][0].scatter(white_x, white_y, c="white", s=200, alpha=1)
         cbar = fig.colorbar(im, ax=ax)
 
         score_onehot = torch.zeros(NUM_POSSIBLE_SCORES)
-        score_idx = int(NUM_POSSIBLE_SCORES / 2) + torch.floor(score)
+        score_idx = int(NUM_POSSIBLE_SCORES / 2) + math.floor(score_normalized)
         score_onehot[score_idx] = 1.0
 
         # plot score pdf and cdf
-        target_cdf = torch.cumsum(score_onehot)
+        target_cdf = torch.cumsum(score_onehot, dim=0)
 
-        score_probs = F.softmax(score_logits)
-        predicted_cdf = torch.cumsum(score_probs)
-        
-        ax[0][1].plot(predicted_cdf.numpy(), label="Predicted CDF")
+        score_probs = F.softmax(score_logits.squeeze(), dim=0)
+        predicted_cdf: torch.Tensor = torch.cumsum(score_probs, dim=0)
+
+        ax[0][1].plot(predicted_cdf.detach().cpu().numpy(), label="Predicted CDF")
         ax[0][1].plot(target_cdf.numpy(), label="Target CDF")
         ax[0][1].set_title("CDF")
 
-        score_log_probs = F.log_softmax(score_logits)
-        ax[1][2].bar(
-            range(NUM_POSSIBLE_SCORES), score_log_probs.numpy(), label="Predicted PDF", alpha=0.5
-        )
-        ax[1][2].set_title("PDF")
-        
-        
+        ax[1][0].bar(self.possible_scores, score_probs.detach().cpu().numpy(), label="Predicted PDF", alpha=0.5)
+        ax[1][0].set_title("PDF")
