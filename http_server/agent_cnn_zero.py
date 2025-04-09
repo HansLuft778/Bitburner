@@ -1,6 +1,4 @@
 import os
-import random
-from collections import deque
 from typing import Any
 
 # import pickle
@@ -13,7 +11,7 @@ import torch.optim as optim
 from Go.Go_uf import UnionFind, get_bit_indices
 
 from plotter import Plotter  # type: ignore
-from Buffer import BufferElement
+from Buffer import BufferElement, TrainingBuffer
 
 State = np.ndarray[Any, np.dtype[np.int8]]
 
@@ -260,28 +258,6 @@ class ResBlock(nn.Module):
         return x
 
 
-class TrainingBuffer:
-    def __init__(self, capacity: int = 75000):
-        self.buffer: deque[tuple[torch.Tensor, torch.Tensor, int, bool, torch.Tensor, float]] = deque(maxlen=capacity)
-
-    def push(
-        self,
-        pi_mcts: torch.Tensor,
-        pi_opp: torch.Tensor,
-        outcome: int,
-        was_white: bool,
-        group: torch.Tensor,
-        score: float,
-    ):
-        self.buffer.append((pi_mcts, pi_opp, outcome, was_white, group, score))
-
-    def sample(self, batch_size: int):
-        return random.sample(self.buffer, batch_size)
-
-    def __len__(self):
-        return len(self.buffer)
-
-
 class AlphaZeroAgent:
     def __init__(
         self,
@@ -505,6 +481,20 @@ class AlphaZeroAgent:
 
         return result
 
+    def deprocess_state(self, state: torch.Tensor, is_white: bool) -> State:
+        """
+        Deprocess the state tensor into a numpy array.
+        """
+        new_state = np.zeros((5, 5), dtype=np.int8)
+        new_state[state[0] == 1] = 3  # disabled stones
+        if is_white:
+            new_state[state[1] == 1] = 2  # own stones
+            new_state[state[2] == 1] = 1  # opponent stones
+        else:
+            new_state[state[1] == 1] = 1  # own stones
+            new_state[state[2] == 1] = 2  # opponent stones
+        return new_state
+
     @torch.no_grad()  # pyright: ignore
     def get_actions_eval(
         self,
@@ -622,18 +612,18 @@ class AlphaZeroAgent:
 
         ownership_loss = -(o_target_flat * torch.log(ownership_hat_flat)).sum(dim=1).mean() * 0.06
 
-        score_pdf_loss = -(score_onehot * score_log_probs).sum(dim=1).mean() * 0.02
+        score_pdf_loss = -(score_onehot * score_log_probs).sum(dim=1).mean() * 0.1
 
         target_cdf = torch.cumsum(score_onehot, dim=1)  # shape [B, num_possible_scores]
         predicted_cdf = torch.cumsum(score_probs, dim=1)  # shape [B, num_possible_scores]
-        score_cdf_loss = torch.mean(torch.sum((target_cdf - predicted_cdf) ** 2, dim=1)) * 0.02
+        score_cdf_loss = torch.mean(torch.sum((target_cdf - predicted_cdf) ** 2, dim=1)) * 0.1
 
         mu_s = torch.sum(self.possible_scores * score_probs, dim=1, keepdim=True)  # shape [B, 1]
         variance_s = torch.sum(((self.possible_scores - mu_s) ** 2) * score_probs, dim=1, keepdim=True)  # shape [B, 1]
         sigma_s = torch.sqrt(variance_s + epsilon)  # epsilon in case variance_s is 0
 
-        score_mean_loss = F.huber_loss(mu_hat, score_batch, delta=10.0) * 0.004
-        score_std_loss = F.huber_loss(sigma_hat, sigma_s.detach(), delta=10.0) * 0.004
+        score_mean_loss = F.huber_loss(mu_hat, score_batch, delta=10.0) * 0.02
+        score_std_loss = F.huber_loss(sigma_hat, sigma_s.detach(), delta=10.0) * 0.02
 
         loss = (
             policy_loss_own
