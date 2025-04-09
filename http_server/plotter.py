@@ -118,7 +118,14 @@ class ModelOverlay:
         model_output: tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
         is_white: bool,
         server: GameServerGo,
+        save_image: bool = False,
+        save_path: str = "model_overlay.png",
     ):
+        # If we're saving, switch to a non-interactive backend temporarily
+        if save_image:
+            current_backend = plt.get_backend()
+            plt.switch_backend('Agg')
+            
         pi, pi_opp, outcome_logits, ownership, score_logits = model_output
 
         score = server.go.get_score(uf, server.go.komi)
@@ -157,3 +164,8 @@ class ModelOverlay:
 
         ax[1][0].bar(self.possible_scores, score_probs.detach().cpu().numpy(), label="Predicted PDF", alpha=0.5)
         ax[1][0].set_title("PDF")
+        
+        if save_image:
+            plt.savefig(f"out/{save_path}")
+            plt.close(fig)  # Close the figure to prevent display
+            plt.switch_backend(current_backend)  # Restore original backend

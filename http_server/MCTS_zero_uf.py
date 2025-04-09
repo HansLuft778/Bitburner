@@ -450,13 +450,21 @@ async def main() -> None:
 
         black_score = np.count_nonzero(black_stones) + np.count_nonzero(black_territory)
         white_score = np.count_nonzero(white_stones) + np.count_nonzero(white_territory) + komi
-        score = black_score - white_score # black leads with
+        score = black_score - white_score  # black leads with
 
-        # mo = ModelOverlay()
-        # for be in buffer:
-        #     state_tensor = agent.preprocess_state(be.uf, be.history, be.is_white)
-        #     out = agent.policy_net(state_tensor)
-        #     mo.heatmap(be.uf, out, be.is_white, server)
+        mo = ModelOverlay()
+        for i, be in enumerate(buffer[-4:]):
+            state_tensor = agent.preprocess_state(be.uf, be.history, be.is_white)
+            out = agent.policy_net(state_tensor)
+            mo.heatmap(be.uf, out, be.is_white, server, True, f"model_overlay_ep_{iter}_{i}.png")
+
+        for i in range(2):
+            be = buffer[i]
+            state_tensor = agent.preprocess_state(be.uf, be.history, be.is_white)
+            out = agent.policy_net(state_tensor)
+            mo.heatmap(
+                be.uf, out, be.is_white, server, True, f"model_overlay_ep_{iter}_{"first" if i==0 else "second"}.png"
+            )
 
         for be in buffer:
             # Flip if the outcome from neutrals perspective to players perspective
@@ -477,8 +485,7 @@ async def main() -> None:
 
 
 async def main_eval():
-    
-    
+
     board_size = 5
     server = GameServerGo(board_size)
     await server.wait()
@@ -488,7 +495,7 @@ async def main_eval():
     agent = AlphaZeroAgent(board_size, plotter, checkpoint_dir="models")
     agent.load_checkpoint("checkpoint_129_katago_v1.pth")
     mcts = MCTS(server, agent, search_iterations=1000)
-    
+
     plotter.add_plot(  # type: ignore
         "cumulative_reward_black",
         plotter.axes[0, 0],  # type: ignore
