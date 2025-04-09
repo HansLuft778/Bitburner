@@ -198,7 +198,7 @@ class UnionFind:
                     self.colors[action.position] = action.value
 
     @staticmethod
-    def get_uf_from_state(state: State) -> "UnionFind":
+    def get_uf_from_state(state: State, zobrist: ZobristHash | None) -> "UnionFind":
 
         width: int = state.shape[0]
 
@@ -208,6 +208,11 @@ class UnionFind:
         stones = np.zeros(width * width, dtype=np.int64)
         liberties = np.zeros(width * width, dtype=np.int64)
         uf = UnionFind(state, parent, colors, rank, stones, liberties, width)
+
+        if zobrist is None:
+            uf.hash = np.uint64(0)
+        else:
+            uf.hash = zobrist.compute_hash(state)
 
         for x in range(width):
             for y in range(width):
@@ -307,15 +312,17 @@ class Go_uf:
         self.komi = komi
 
         # union find data structure
-        parent = np.full(self.board_width * self.board_height, -1, dtype=np.int8)
-        colors = np.full(self.board_width * self.board_height, -1, dtype=np.int8)
-        rank = np.full(self.board_width * self.board_height, -1, dtype=np.int8)
-        stones = np.zeros(board_width * board_width, dtype=np.int64)
-        liberties = np.zeros(board_width * board_width, dtype=np.int64)
+        size = board_width * board_width
+        parent = np.full(size, -1, dtype=np.int8)
+        colors = np.full(size, -1, dtype=np.int8)
+        rank = np.full(size, -1, dtype=np.int8)
+        stones = np.zeros(size, dtype=np.int64)
+        liberties = np.zeros(size, dtype=np.int64)
 
-        self.uf: UnionFind = UnionFind(state, parent, colors, rank, stones, liberties, self.board_width)
         self.zobrist = ZobristHash(self.board_width)
-        self.hash_history: list[np.uint64] = []
+        self.uf: UnionFind = UnionFind(state, parent, colors, rank, stones, liberties, self.board_width)
+        self.uf.hash = self.zobrist.compute_hash(state)
+        self.hash_history: list[np.uint64] = [self.uf.hash]
 
     def __str__(self):
         board = self.decode_state(self.uf.state)
@@ -342,7 +349,7 @@ class Go_uf:
         """
         return x * self.board_height + y
 
-    def encode_state(self, state: list[str]):
+    def encode_state(self, state: list[str]) -> State:
         """
         Converts a list of strings (like [".....", "..X..", ...]) into a numpy array
         with the following encoding:
@@ -410,47 +417,47 @@ class Go_uf:
             return None
 
     def flood_fill_territory(
-        self, state: State, x: int, y: int, visited: set[tuple[int, int]]
-    ) -> tuple[int | None, set[tuple[int, int]]]:
-        """
-        A helper for territory detection, territory is how many empty nodes a color surrounds:
-          - BFS/DFS from (x, y) to gather all connected empty cells.
-          - Track the colors of any stones adjacent to those empty cells.
-          - If we find exactly one color, that color "owns" the territory.
-          - If we find both black and white, or we run into blocked nodes in a way that
-            doesn't result in a single color, it's disputed (None).
-
-        Returns: (color_owner, territory_positions)
-                 color_owner = 1 (black), 2 (white), or None (disputed or no single color).
-        """
+        self, state: State, x: int, y: int, visited: np.ndarray[Any, np.dtype[np.bool_]]
+    ) -> tuple[int | None, np.ndarray[Any, np.dtype[np.bool_]]]:
 
         queue: deque[tuple[int, int]] = deque()
         queue.append((x, y))
-        territory: set[tuple[int, int]] = set()
+
+        territory: np.ndarray[Any, np.dtype[np.bool_]] = np.zeros((self.board_width, self.board_height), dtype=np.bool_)
         adjacent_colors: set[int] = set()
+
+        dx = np.array([0, 1, 0, -1])
+        dy = np.array([1, 0, -1, 0])
 
         while queue:
             cx, cy = queue.popleft()
-            if (cx, cy) in visited:
+            if visited[cx, cy]:
                 continue
-            visited.add((cx, cy))
+            visited[cx, cy] = True
 
             # If its empty -> part of the territory
-            if state[cx][cy] == 0:
-                territory.add((cx, cy))
-                # Check neighbors
-                for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                    nx, ny = cx + dx, cy + dy
-                    if 0 <= nx < self.board_width and 0 <= ny < self.board_height:
-                        if state[nx][ny] == 0:
-                            if (nx, ny) not in visited:
-                                queue.append((nx, ny))
-                        # If it its a stone save its color
-                        elif state[nx][ny] in [1, 2]:
-                            adjacent_colors.add(state[nx][ny])
+            if state[cx, cy] == 0:
+                territory[cx, cy] = True
+
+                nx = cx + dx
+                ny = cy + dy
+                valid_mask = (0 <= nx) & (nx < self.board_width) & (0 <= ny) & (ny < self.board_height)
+                # Check pre-computed neighbors
+                for i in range(4):
+                    if not valid_mask[i]:
+                        continue
+                    neighbor_x = nx[i]
+                    neighbor_y = ny[i]
+                    cell_value = state[neighbor_x, neighbor_y]
+                    if cell_value == 0:
+                        if not visited[neighbor_x, neighbor_y]:
+                            queue.append((neighbor_x, neighbor_y))
+                    # If it its a stone save its color
+                    elif cell_value in [1, 2]:
+                        adjacent_colors.add(int(cell_value))
 
         # if territory is too large, its not valid
-        if len(territory) > 2 * self.board_width:
+        if np.count_nonzero(territory) > 2 * self.board_width:
             return None, territory
 
         # If territory touches exactly one color, it belongs to that color
@@ -464,19 +471,19 @@ class Go_uf:
         Finds how many empty intersections belong to black or white via territory.
         Returns (white_territory, black_territory).
         """
-        visited: set[tuple[int, int]] = set()
+        visited: np.ndarray[Any, np.dtype[np.bool_]] = np.zeros((self.board_width, self.board_height), dtype=np.bool_)
         white_territory = 0
         black_territory = 0
 
         for x in range(self.board_width):
             for y in range(self.board_height):
                 # 0 means node is empty
-                if (x, y) not in visited and state[x][y] == 0:
+                if not visited[x, y] and state[x, y] == 0:
                     color_owner, territory = self.flood_fill_territory(state, x, y, visited)
                     if color_owner == 1:  # black
-                        black_territory += len(territory)
+                        black_territory += np.count_nonzero(territory)
                     elif color_owner == 2:  # white
-                        white_territory += len(territory)
+                        white_territory += np.count_nonzero(territory)
 
         return white_territory, black_territory
 
@@ -546,52 +553,6 @@ class Go_uf:
                             liberties.add((nx, ny))
 
         return liberties, stones
-
-    def simulate_move_original(
-        self,
-        state: State,
-        x: int,
-        y: int,
-        color: int,
-        additional_history: list[np.uint64] = [],
-    ) -> State | None:
-        if state[x][y] != 0:
-            return None
-
-        sim_state = state.copy()
-        sim_state[x][y] = color
-
-        # color = 1 => enemy = 2; color = 2 => ememy = 1
-        enemy = 3 - color
-
-        # start = time.time()
-        # check for capture
-        for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-            nx, ny = x + dx, y + dy
-            if 0 <= nx < self.board_width and 0 <= ny < self.board_height:
-                if sim_state[nx][ny] == enemy:
-                    liberties, territory = self.get_liberties(sim_state, nx, ny, set())
-                    # capture enemy stones if they have no liberties
-                    if len(liberties) == 0:
-                        for tx, ty in territory:
-                            sim_state[tx][ty] = 0
-
-        # end = time.time()
-        # print(f"FLOOD_FILL_CORE: Time: {end - start}")
-
-        # check if placed router has liberties
-        libs, _ = self.get_liberties(sim_state, x, y, set())
-        if len(libs) == 0:
-            # move was actually a suicide
-            return None
-
-        # check for repeat
-        next_hash = self.zobrist.compute_hash(sim_state)
-        is_repeat = self.check_state_is_repeat(next_hash, additional_history)
-        if is_repeat:
-            return None
-
-        return sim_state
 
     def simulate_move(
         self,
@@ -777,7 +738,7 @@ class Go_uf:
 
         return in_history or in_additional
 
-    def make_move(self, action: int, is_white: bool) -> tuple[State, int, bool]:
+    def make_move(self, action: int, is_white: bool) -> tuple[UnionFind, int, bool]:
         uf_after_move = self.state_after_action(action, is_white, self.uf)
         assert uf_after_move is not None, "Illegal move"
         game_ended = self.has_game_ended(action, is_white, self.uf)
@@ -797,7 +758,7 @@ class Go_uf:
             print(f"score: {score}")
             outcome = 1 if score["black"]["sum"] > score["white"]["sum"] else -1
 
-        return self.uf.state, outcome, game_ended
+        return self.uf, outcome, game_ended
 
     def get_valid_moves(
         self,

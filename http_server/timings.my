@@ -95,3 +95,13 @@ final_policy: 0.001s (0.0%) - Avg: 0.00ms
 TOOK: 6.4895219802856445s
 
 
+64: Game length: 78, took 103.570s
+32: Game length: 78, took 99.566s
+16: Game length: 78, took 103.309s
+8:  Game length: 78, took 103.817s
+2:  Game length: 78, took 105.167s
+
+
+2: Game length: 29, took 24.575s
+16: Game length: 29, took 26.012s
+32: Game length: 29, took 24.094s

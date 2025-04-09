@@ -8,8 +8,9 @@ import torch
 from agent_cnn_zero import AlphaZeroAgent
 from gameserver_local_uf import GameServerGo
 from Go.Go_uf import Go_uf, UnionFind
-from plotter import Plotter # type: ignore
+from plotter import Plotter, ModelOverlay  # type: ignore
 from TreePlotter import TreePlot  # pyright: ignore
+from Buffer import BufferElement
 
 State = np.ndarray[Any, np.dtype[np.int8]]
 
@@ -24,7 +25,7 @@ def get_ucb_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) -
         q_value = 0.0
     else:
         q_value = -(child.win_sum / child.visit_cnt)
-    u_value = c_puct * child.selected_policy * parent_visit_count**0.5 / (1 + child.visit_cnt)
+    u_value = c_puct * child.prior * parent_visit_count**0.5 / (1 + child.visit_cnt)
     return q_value + u_value
 
 
@@ -38,7 +39,7 @@ class Node:
         agent: AlphaZeroAgent,
         parent: Union["Node", None] = None,
         action: int | None = None,
-        selected_policy: float = 0,
+        prior: float = 0,
         visit_count: int = 0,
     ):
         # self.state = state
@@ -48,10 +49,15 @@ class Node:
         self.server = server
         self.is_white = is_white
         self.agent = agent
-        self.selected_policy = selected_policy
+        self.prior = prior
         self.valid_moves: np.ndarray[Any, np.dtype[np.bool_]] | None = None
+        self.depth: int = 0 if parent is None else parent.depth + 1
 
         self.children: list[Node] = []
+        self.policy: torch.Tensor | None = None
+        self.value: float | None = None
+
+        self.done: bool | None = None
 
         self.visit_cnt = visit_count
         self.win_sum = 0.0
@@ -70,7 +76,6 @@ class Node:
         return self.valid_moves
 
     # returns score based on current node
-    # maybe should be based on root node (current player/who initiated the search)
     def get_score(self) -> float:
         score: dict[str, dict[str, float]] = self.server.get_score(self.uf)
         score_white = score["white"]["sum"]
@@ -143,15 +148,15 @@ class Node:
 
     def expand(self, q_values: torch.Tensor) -> None:
         board_size = self.agent.board_width * self.agent.board_height
-        policy_cpu: np.ndarray[Any, np.dtype[np.float32]] = q_values.cpu().numpy() # type: ignore
+        policy_cpu: np.ndarray[Any, np.dtype[np.float32]] = q_values.cpu().numpy()  # type: ignore
         for action in range(board_size + 1):
             if action == board_size:
                 next_uf = self.uf.copy()
                 # Penalize passing if board is mostly empty
-                empty_cells = np.sum(self.uf.state == 0)
-                empty_percentage = empty_cells / board_size
-                if empty_percentage > 0.5:
-                    policy_cpu[action] *= (1.0 - empty_percentage) * 0.5
+                # empty_cells = np.sum(self.uf.state == 0)
+                # empty_percentage = empty_cells / board_size
+                # if empty_percentage > 0.5:
+                #     policy_cpu[action] *= (1.0 - empty_percentage) * 0.5
             else:
                 color = 2 if self.is_white else 1
                 is_legal, undo = self.server.go.simulate_move(self.uf, action, color, self.get_hash_history())
@@ -193,31 +198,41 @@ class MCTS:
         self.agent = agent
         self.timing_stats: defaultdict[str, float] = defaultdict(float)
         self.iterations_stats: defaultdict[str, int] = defaultdict(int)
+        self.max_depth = 0
 
     @torch.no_grad()  # pyright: ignore
-    def search(self, uf: UnionFind, is_white: bool, eval_mode: bool = False) -> torch.Tensor:
-        uf.hash = self.server.go.zobrist.compute_hash(uf.state)
-        root: Node = Node(uf, self.server, is_white, self.agent)
+    def search(self, uf: UnionFind, is_white: bool, best_move: int, eval_mode: bool = False) -> torch.Tensor:
+        if best_move == -1:
+            self.root = Node(uf, self.server, is_white, self.agent)
+        else:
+            child_idx = find_child_index(self.root, best_move)
+            self.root = self.root.children[child_idx]
+            self.root.parent = None
 
         self.timing_stats.clear()
         self.iterations_stats.clear()
         search_start = time.time()
 
-        for _ in range(self.search_iterations):
-            node = root
+        for iter in range(self.search_iterations):  # type: ignore
+            node = self.root
             # selection
             select_start = time.time()
             while node.is_fully_expanded():
                 node = node.next()
+                self.max_depth = max(self.max_depth, node.depth)
             self.timing_stats["selection"] += time.time() - select_start
             self.iterations_stats["selection"] += 1
 
             # expansion
             end_check_start = time.time()
-            done, value = node.has_game_ended()
+            if node.done is None:
+                node.done, node.value = node.has_game_ended()
+            assert node.value is not None, "Value should not be None"
+            value = node.value
+
             self.timing_stats["end_check"] += time.time() - end_check_start
 
-            if not done:
+            if not node.done:
                 prep_start = time.time()
                 valid_moves = node.get_valid_moves()
                 history = node.get_history_ref()
@@ -225,29 +240,34 @@ class MCTS:
                 self.timing_stats["move_prep"] += time.time() - prep_start
 
                 inference_start = time.time()
-                logits, value = self.agent.get_actions_eval(node.uf.state, valid_moves, history, node.is_white)
-                if node.parent is None:
-                    print(f"Value estimate: {value:.3f} (from {'white' if node.is_white else 'black'}'s perspective)")
+                if node.policy is None:
+                    raw_logits, raw_value = self.agent.get_actions_eval(node.uf, history, node.is_white)
+                    valid_mask = torch.tensor(valid_moves, device=self.agent.device, dtype=torch.bool)
+                    raw_logits[~valid_mask] = -1e9
+                    final_probs = torch.softmax(raw_logits, dim=0)
+
+                    # Apply dirichlet noise
+                    if node.parent is None and not eval_mode:
+                        alpha = 0.2
+                        dir_noise = np.random.dirichlet([alpha] * len(final_probs))
+                        dir_noise_tensor = torch.tensor(dir_noise, device=final_probs.device, dtype=final_probs.dtype)
+                        epsilon = 0.25
+                        final_probs = (1 - epsilon) * final_probs + epsilon * dir_noise_tensor
+
+                        # Renormalize
+                        final_probs = final_probs / torch.sum(final_probs)
+                    node.policy = final_probs
+                    node.value = raw_value
+
+                policy = node.policy
+                assert node.value is not None, "Value should not be None"
+                value = node.value
 
                 self.timing_stats["nn_inference"] += time.time() - inference_start
                 self.iterations_stats["nn_inference"] += 1
 
-                policy_start = time.time()
-                valid_mask = torch.tensor(valid_moves, device=self.agent.device, dtype=torch.bool)
-                logits[~valid_mask] = -1e9
-                policy = torch.softmax(logits, dim=0)
-
-                # Apply dirichlet noise
-                if node.parent is None and not eval_mode:
-                    alpha = 0.2
-                    dir_noise = np.random.dirichlet([alpha] * len(policy))
-                    dir_noise_tensor = torch.tensor(dir_noise, device=policy.device, dtype=policy.dtype)
-                    epsilon = 0.2  # noise weight
-                    policy = (1 - epsilon) * policy + epsilon * dir_noise_tensor
-
-                    # Renormalize
-                    policy = policy / torch.sum(policy)
-                self.timing_stats["policy_compute"] += time.time() - policy_start
+                if iter == 0:
+                    print(f"Value estimate: {value:.3f} (from {'white' if node.is_white else 'black'}'s perspective)")
 
                 expand_start = time.time()
                 node.expand(policy)
@@ -267,7 +287,7 @@ class MCTS:
             self.agent.board_height * self.agent.board_height + 1,
             device=self.agent.device,
         )
-        for c in root.children:
+        for c in self.root.children:
             props[c.action] = c.visit_cnt
         props /= props.sum()
         self.timing_stats["final_policy"] += time.time() - final_policy_start
@@ -292,6 +312,13 @@ def choose_action(pi: torch.Tensor, episode_length: int) -> int:
     return int(torch.argmax(pi).item())
 
 
+def find_child_index(root_node: Node, chosen_action: int) -> int:
+    for i, child in enumerate(root_node.children):
+        if child.action == chosen_action:
+            return i
+    raise RuntimeError(f"No child found with action={chosen_action}")
+
+
 async def main() -> None:
     # torch.manual_seed(0)  # pyright: ignore
     # np.random.seed(0)
@@ -300,28 +327,60 @@ async def main() -> None:
     server = GameServerGo(board_size)
     await server.wait()
     print("GameServer ready and client connected")
+    plotter = Plotter(4, 3)
+    plotter.add_plot(  # type: ignore
+        "cumulative_reward_black",
+        plotter.axes[0, 0],  # type: ignore
+        "Cumulative Wins Over Time",
+        "Updates",
+        "Cumulative Wins",
+        label="Black",
+    )
+    plotter.add_plot(  # type: ignore
+        "cumulative_reward_white",
+        plotter.axes[0, 0],  # type: ignore
+        "Cumulative Wins Over Time",
+        "Updates",
+        "Cumulative Wins",
+        label="White",
+    )
+    plotter.add_plot("loss", plotter.axes[0, 1], "Training Loss Over Time", "Updates", "Loss")  # type: ignore
+    plotter.add_plot("depth", plotter.axes[0, 2], "MCTS Depth", "Iteration", "Depth", label="tree depth")  # type: ignore
+    plotter.add_plot("episode_length", plotter.axes[0, 2], "Episode Length", "Iteration", "Length", label="episode length")  # type: ignore
 
-    plotter = Plotter()
+    plotter.add_plot("policy_loss_own", plotter.axes[1, 0], "Own Policy Loss Over Time", "Updates", "Policy Loss")  # type: ignore
+    plotter.add_plot("policy_loss_opp", plotter.axes[1, 1], "Opponent Policy Loss Over Time", "Updates", "Policy Loss")  # type: ignore
+    plotter.add_plot("value_loss", plotter.axes[1, 2], "Value Loss Over Time", "Updates", "Value Loss")  # type: ignore
+
+    plotter.add_plot("ownership_loss", plotter.axes[2, 1], "Ownership Loss Over Time", "Updates", "Ownership Loss")  # type: ignore
+    plotter.add_plot("score_pdf_loss", plotter.axes[2, 2], "Score PDF Loss Over Time", "Updates", "Score PDF Loss")  # type: ignore
+
+    plotter.add_plot("score_cdf_loss", plotter.axes[3, 0], "Score CDF Loss Over Time", "Updates", "Score CDF Loss")  # type: ignore
+    plotter.add_plot("score_mean_loss", plotter.axes[3, 1], "Score Mean Loss Over Time", "Updates", "Score Mean Loss")  # type: ignore
+    plotter.add_plot("score_std_loss", plotter.axes[3, 2], "Score Std Dev Loss Over Time", "Updates", "Score Std Dev Loss")  # type: ignore
+
     agent = AlphaZeroAgent(board_size, plotter)
-    # agent.load_checkpoint("checkpoint_69.pth")
+    # agent.load_checkpoint("checkpoint_126.pth")
     mcts = MCTS(server, agent, search_iterations=1000)
 
     NUM_EPISODES = 1000
     outcome = 0
     for iter in range(NUM_EPISODES):
-        state, komi = await server.reset_game("No AI")
+        is_white = False
+        state, komi = await server.reset_game("No AI", is_white)
+        uf = UnionFind.get_uf_from_state(state, server.go.zobrist)
         server.go = Go_uf(board_size, state, komi)
 
-        buffer: list[tuple[State, bool, torch.Tensor, list[State]]] = []  # score: dict[str, dict[str, Any]]]
-        is_white = False
+        buffer: list[BufferElement] = []
         done = False
         game_history = [state]
         mcts.agent.policy_net.eval()
         episode_length = 0
+        previous_move = -1
         start_time = time.time()
         while not done:
             before = time.time()
-            pi_mcts = mcts.search(server.go.uf, is_white)
+            pi_mcts = mcts.search(server.go.uf, is_white, previous_move)
             after = time.time()
             print(f"TOOK: {after-before}s")
             print(pi_mcts)
@@ -331,15 +390,27 @@ async def main() -> None:
             action = mcts.agent.decode_action(best_move)
             print(f"make move: {action}")
 
-            buffer.append((state, is_white, pi_mcts, game_history[: mcts.agent.num_past_steps]))
+            # add move response to buffer
+            if len(buffer) > 0:
+                buffer[-1].pi_mcts_response = pi_mcts
+
+            buffer.append(BufferElement(uf, is_white, pi_mcts, game_history[: mcts.agent.num_past_steps]))
 
             # outcome is: 1 if black won, -1 is white won
-            next_state, outcome, done = await server.make_move(action, best_move, is_white)
-            game_history.insert(0, next_state)
+            next_uf, outcome, done = await server.make_move(action, best_move, is_white)
+            game_history.insert(0, next_uf.state)
 
             is_white = not is_white
-            state = next_state
+            uf = next_uf
+            previous_move = best_move
             episode_length += 1
+
+        # last move has no response, so set it to zero
+        buffer[-1].pi_mcts_response = torch.zeros(mcts.agent.board_height * mcts.agent.board_height + 1, device=mcts.agent.device)  # type: ignore
+
+        plotter.update_stat("depth", mcts.max_depth)  # type: ignore
+        plotter.update_stat("episode_length", episode_length)  # type: ignore
+        mcts.max_depth = 0
         print(f"Episode length: {episode_length}, took {time.time()-start_time:.3f}s")
         print("================================================================================")
 
@@ -349,50 +420,103 @@ async def main() -> None:
         mcts.agent.plotter.update_wins_black(1 if outcome == 1 else -1)
 
         mcts.agent.policy_net.train()
-        for state, was_white, pi, history in buffer:
-            # Flip if the buffer entry belongs to the opposite color
-            #  - opposite of player who moves
-            z = outcome if not was_white else -outcome
-            mcts.agent.augment_state(state, pi, z, history, was_white)
 
-        if iter < 8:
+        ownership_mask = np.zeros((board_size, board_size), dtype=np.int8)
+        black_territory = np.zeros((board_size, board_size), dtype=np.int8)
+        black_stones = np.zeros((board_size, board_size), dtype=np.int8)
+        white_territory = np.zeros((board_size, board_size), dtype=np.int8)
+        white_stones = np.zeros((board_size, board_size), dtype=np.int8)
+
+        visited: np.ndarray[Any, np.dtype[np.bool_]] = np.zeros((board_size, board_size), dtype=np.bool_)
+        for x in range(board_size):
+            for y in range(board_size):
+                if server.go.uf.state[x, y] == 0 and not visited[x, y]:
+                    color, territory = server.go.flood_fill_territory(server.go.uf.state, x, y, visited)
+                    if color is not None:
+                        if color == 1:  # black
+                            ownership_mask[territory] = 1
+                            black_territory[territory] = 1
+                        elif color == 2:  # white
+                            ownership_mask[territory] = -1
+                            white_territory[territory] = 1
+                elif server.go.uf.state[x, y] == 1:
+                    black_stones[x, y] = 1
+                    ownership_mask[x, y] = 1
+                    visited[x, y] = True
+                elif server.go.uf.state[x, y] == 2:
+                    white_stones[x, y] = 1
+                    ownership_mask[x, y] = -1
+                    visited[x, y] = True
+
+        black_score = np.count_nonzero(black_stones) + np.count_nonzero(black_territory)
+        white_score = np.count_nonzero(white_stones) + np.count_nonzero(white_territory) + komi
+        score = black_score - white_score # black leads with
+
+        # mo = ModelOverlay()
+        # for be in buffer:
+        #     state_tensor = agent.preprocess_state(be.uf, be.history, be.is_white)
+        #     out = agent.policy_net(state_tensor)
+        #     mo.heatmap(be.uf, out, be.is_white, server)
+
+        for be in buffer:
+            # Flip if the outcome from neutrals perspective to players perspective
+            z = outcome if not be.is_white else -outcome
+            ownership_corrected = ownership_mask * (-1 if be.is_white else 1)
+            score_corrected = score * (-1 if be.is_white else 1)
+            mcts.agent.augment_state(be, z, ownership_corrected, score_corrected)
+
+        if iter < 12:
             print("Skipping training")
             continue
-        game_length = len(game_history)
-        min_train_steps = 10  # Minimum number of training steps
-        max_train_steps = 40  # Maximum number of training steps
 
-        # Calculate training steps - scales with game length
-        train_steps = min(max_train_steps, max(min_train_steps, int(game_length * 0.75)))
-        train_steps = 20
-        print(f"Game length: {game_length}, performing {train_steps} training steps")
+        train_steps = 15
+        print(f"Game length: {episode_length}, performing {train_steps} training steps")
         for _ in range(train_steps):
             mcts.agent.train_step()
         mcts.agent.save_checkpoint(f"checkpoint_{iter}.pth")
 
 
 async def main_eval():
+    
+    
     board_size = 5
     server = GameServerGo(board_size)
     await server.wait()
     print("GameServer ready and client connected")
 
     plotter = Plotter()
-    agent = AlphaZeroAgent(board_size, plotter)
-    agent.load_checkpoint("checkpoint_69.pth")
+    agent = AlphaZeroAgent(board_size, plotter, checkpoint_dir="models")
+    agent.load_checkpoint("checkpoint_129_katago_v1.pth")
     mcts = MCTS(server, agent, search_iterations=1000)
+    
+    plotter.add_plot(  # type: ignore
+        "cumulative_reward_black",
+        plotter.axes[0, 0],  # type: ignore
+        "Cumulative Wins Over Time",
+        "Updates",
+        "Cumulative Wins",
+        label="Black",
+    )
+    plotter.add_plot(  # type: ignore
+        "cumulative_reward_white",
+        plotter.axes[0, 0],  # type: ignore
+        "Cumulative Wins Over Time",
+        "Updates",
+        "Cumulative Wins",
+        label="White",
+    )
 
     NUM_EPISODES = 100
     outcome = 0
     for _ in range(NUM_EPISODES):
-        state, komi = await server.reset_game("Netburners")
+        state, komi = await server.reset_game("Slum Snakes")
         server.go = Go_uf(board_size, state, komi)
 
         is_white = False
         done = False
         mcts.agent.policy_net.eval()
         while not done:
-            pi_mcts = mcts.search(server.go.uf, is_white, True)
+            pi_mcts = mcts.search(server.go.uf, is_white, -1, eval_mode=True)
             print(pi_mcts)
             best_move = int(torch.argmax(pi_mcts).item())
             print(f"{best_move}, {pi_mcts[best_move]}")
