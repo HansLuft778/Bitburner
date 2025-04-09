@@ -96,3 +96,21 @@ checkpoint_29_GOOD.pth
 checkpoint_35_GOOD.pth
 checkpoint_49_GOOD.pth <- the one before plateau
 checkpoint_74_GOOD.pth
+
+# 1814407 params
+2 past steps
+6 ResBlocks
+128 channels
+
+lr: 3e-4
+batch size: 128
+
+similar performance to 3 ResBlocks, 32 channels
+result is ~60% winrate for black, but might be marginally better (overall loss is the same)
+
+checkpoint_1_8M.pth
+
+
+# katago model
+66% netburner
+50% slum snakes
