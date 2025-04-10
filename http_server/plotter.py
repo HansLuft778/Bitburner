@@ -124,10 +124,13 @@ class ModelOverlay:
         # If we're saving, switch to a non-interactive backend temporarily
         if save_image:
             current_backend = plt.get_backend()
-            plt.switch_backend('Agg')
-            
+            plt.switch_backend("Agg")
+
         pi, pi_opp, outcome_logits, ownership, score_logits = model_output
 
+        value = outcome_logits[0][0].item()
+        mu_score = outcome_logits[0][1].item()
+        sigma_score = outcome_logits[0][2].item()
         score = server.go.get_score(uf, server.go.komi)
 
         score_diff = score["black"]["sum"] - score["white"]["sum"]
@@ -135,18 +138,20 @@ class ModelOverlay:
 
         owner_normalized = ownership * 2 - 1
 
-        black_y, black_x = np.where(uf.state == 1)
-        white_y, white_x = np.where(uf.state == 2)
-
         fig, ax = plt.subplots(2, 2, figsize=(8, 8))
-        fig.suptitle(f"Move Prediction for {'White' if is_white else 'Black'} with score {score_normalized}")
+        fig.suptitle(
+            f"Move Prediction for {'White' if is_white else 'Black'} with score {score_normalized}\nOutcome Prediction: value: {value}, mu: {mu_score}, sigma: {sigma_score}"
+        )
 
         im = ax[0][0].imshow(
             owner_normalized.detach().cpu().squeeze().numpy(), cmap="PuOr", interpolation="nearest", vmin=-1, vmax=1
         )
+        black_y, black_x = np.where(uf.state == 1)
+        white_y, white_x = np.where(uf.state == 2)
         ax[0][0].scatter(black_x, black_y, c="black", s=200, alpha=1)
         ax[0][0].scatter(white_x, white_y, c="white", s=200, alpha=1)
-        cbar = fig.colorbar(im, ax=ax)
+        ax[0][0].set_title("Ownership prediction")
+        fig.colorbar(im, ax=ax[0][0])
 
         score_onehot = torch.zeros(NUM_POSSIBLE_SCORES)
         score_idx = int(NUM_POSSIBLE_SCORES / 2) + math.floor(score_normalized)
@@ -160,11 +165,27 @@ class ModelOverlay:
 
         ax[0][1].plot(predicted_cdf.detach().cpu().numpy(), label="Predicted CDF")
         ax[0][1].plot(target_cdf.numpy(), label="Target CDF")
-        ax[0][1].set_title("CDF")
+        ax[0][1].set_title("score CDF prediction")
 
-        ax[1][0].bar(self.possible_scores, score_probs.detach().cpu().numpy(), label="Predicted PDF", alpha=0.5)
-        ax[1][0].set_title("PDF")
-        
+        ax[1][1].bar(self.possible_scores, score_probs.detach().cpu().numpy(), label="Predicted PDF", alpha=0.5)
+        ax[1][1].set_title("score PDF prediction")
+
+        pi_np = pi.detach().cpu().squeeze().numpy()
+        pi_opp_np = pi_opp.detach().cpu().squeeze().numpy()
+
+        pi_board = pi_np[:-1].reshape((5, 5))
+        pi_pass = pi_np[-1].item()
+        pi_opp_board = pi_opp_np[:-1].reshape((5, 5))
+        pi_opp_pass = pi_opp_np[-1]
+
+        move_im = ax[1][0].imshow(pi_board, cmap="RdYlGn", interpolation="nearest", vmin=0, vmax=1)
+        ax[1][0].set_title(f"Own Move Policy (green=good, red=bad), pass: {pi_pass:.2f}")
+        fig.colorbar(move_im, ax=ax[1][0])
+
+        move_im = ax[2][0].imshow(pi_opp_board, cmap="RdYlGn", interpolation="nearest", vmin=0, vmax=1)
+        ax[2][0].set_title(f"Opponent Move Policy (green=good, red=bad), pass: {pi_opp_pass:.2f}")
+        fig.colorbar(move_im, ax=ax[2][0])
+
         if save_image:
             plt.savefig(f"out/{save_path}")
             plt.close(fig)  # Close the figure to prevent display

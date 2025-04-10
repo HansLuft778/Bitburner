@@ -453,18 +453,11 @@ async def main() -> None:
         score = black_score - white_score  # black leads with
 
         mo = ModelOverlay()
-        for i, be in enumerate(buffer[-4:]):
-            state_tensor = agent.preprocess_state(be.uf, be.history, be.is_white)
-            out = agent.policy_net(state_tensor)
-            mo.heatmap(be.uf, out, be.is_white, server, True, f"model_overlay_ep_{iter}_{i}.png")
-
-        for i in range(2):
+        for i in [0, 1, len(buffer) // 2, len(buffer) // 2 + 1, -1, -2]:
             be = buffer[i]
             state_tensor = agent.preprocess_state(be.uf, be.history, be.is_white)
             out = agent.policy_net(state_tensor)
-            mo.heatmap(
-                be.uf, out, be.is_white, server, True, f"model_overlay_ep_{iter}_{"first" if i==0 else "second"}.png"
-            )
+            mo.heatmap(be.uf, out, be.is_white, server, True, f"model_overlay_ep_{iter}_{i}.png")
 
         for be in buffer:
             # Flip if the outcome from neutrals perspective to players perspective
