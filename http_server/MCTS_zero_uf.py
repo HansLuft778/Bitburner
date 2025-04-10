@@ -29,6 +29,11 @@ def get_ucb_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) -
     return q_value + u_value
 
 
+def get_num_forced_playouts(child: "Node", k: int = 2):
+    assert child.parent is not None, "Child must have a parent to calculate number of forced playouts"
+    return (k * child.prior * child.parent.visit_cnt) ** 0.5
+
+
 class Node:
     def __init__(
         self,
@@ -137,7 +142,7 @@ class Node:
         return history[::-1]  # Reverse for chronological order
 
     def next(self) -> "Node":
-        best: tuple[Node | None, float] = (None, -999999999)
+        best: tuple[Node | None, float] = (None, -99999)
         for c in self.children:
             score = get_ucb_value(c, self.visit_cnt, c_puct=1.8)
             if score > best[1]:
@@ -218,8 +223,19 @@ class MCTS:
             # selection
             select_start = time.time()
             while node.is_fully_expanded():
-                node = node.next()
-                self.max_depth = max(self.max_depth, node.depth)
+                next_node = None
+                if node.parent is None:
+                    for c in node.children:
+                        if c.visit_cnt < get_num_forced_playouts(c) and (
+                            next_node is None or c.prior > next_node.prior
+                        ):
+                            next_node = c
+                if next_node is None:
+                    node = node.next()
+                    self.max_depth = max(self.max_depth, node.depth)
+                else:
+                    node = next_node
+
             self.timing_stats["selection"] += time.time() - select_start
             self.iterations_stats["selection"] += 1
 
