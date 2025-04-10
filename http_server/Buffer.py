@@ -52,7 +52,9 @@ class TrainingBuffer:
     def sample(self, batch_size: int):
         white_sample = random.sample(self.buffer_white, batch_size // 2)
         black_sample = random.sample(self.buffer_black, batch_size // 2)
-        return white_sample + black_sample
+        merged_sample = white_sample + black_sample
+        random.shuffle(merged_sample)
+        return merged_sample
 
     def __len__(self):
         return min(len(self.buffer_white), len(self.buffer_black)) * 2
