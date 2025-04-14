@@ -8,7 +8,7 @@ import torch
 import torch.nn.functional as F
 
 from agent_cnn_zero import AlphaZeroAgent
-from gameserver_local import GameServerGo
+from legacy.gameserver_local import GameServerGo
 from Go.Go import Go
 from plotter import Plotter
 from TreePlotter import TreePlot

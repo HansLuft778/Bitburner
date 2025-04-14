@@ -14,8 +14,10 @@ from Buffer import BufferElement
 
 State = np.ndarray[Any, np.dtype[np.int8]]
 
+C_PUCT = 1.8
 
-def get_ucb_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) -> float:
+
+def get_puct_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) -> float:
     """
     child.win_sum is from the childs perspective, so from the parent's perspective we must negate it
       Q(s,a) = child.win_sum/child.visit_cnt
@@ -29,9 +31,30 @@ def get_ucb_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) -
     return q_value + u_value
 
 
-def get_num_forced_playouts(child: "Node", k: int = 2):
+def get_num_forced_playouts(child: "Node", k: int = 2) -> int:
     assert child.parent is not None, "Child must have a parent to calculate number of forced playouts"
-    return (k * child.prior * child.parent.visit_cnt) ** 0.5
+    return int((k * child.prior * child.parent.visit_cnt) ** 0.5)
+
+
+def get_explore_selection_value_inverse(
+    explore_selection_value: float, explore_scaling: float, prior: float, child_utility: float, is_shite: bool
+) -> float:
+    if prior < 0:
+        return 0
+
+    value_component = child_utility if is_shite else -child_utility
+
+    explore_component = explore_selection_value - value_component
+    explore_component_scaling = explore_scaling * prior
+
+    if explore_component < 0:
+        return 1e100
+
+    child_weight = explore_component_scaling / explore_component - 1
+    if child_weight < 0:
+        child_weight = 0
+
+    return child_weight
 
 
 class Node:
@@ -144,7 +167,7 @@ class Node:
     def next(self) -> "Node":
         best: tuple[Node | None, float] = (None, -99999)
         for c in self.children:
-            score = get_ucb_value(c, self.visit_cnt, c_puct=1.8)
+            score = get_puct_value(c, self.visit_cnt, c_puct=C_PUCT)
             if score > best[1]:
                 best = (c, score)
 
@@ -297,7 +320,15 @@ class MCTS:
             # if iter == 999:
             #     TreePlot(root).create_tree()
 
+        # calculate final policy distribution
         final_policy_start = time.time()
+
+        # policy target pruning
+        c_star = max(self.root.children, key=lambda c: c.visit_cnt)
+        assert c_star.parent is not None, "c_start must have a parent"
+        c_star_puct = get_puct_value(c_star, c_star.parent.visit_cnt, c_puct=C_PUCT)
+
+        pruned_visit_counts = {c.action: float(c.visit_cnt) for c in self.root.children}  # Use float for weights
 
         props = torch.zeros(
             self.agent.board_height * self.agent.board_height + 1,
@@ -305,7 +336,34 @@ class MCTS:
         )
         for c in self.root.children:
             props[c.action] = c.visit_cnt
+
+        for c in self.root.children:
+            action = c.action
+            # use action to differentiate between c and c_star, since action is unique for every child
+            if action is None or action == c_star.action:
+                continue
+
+            n_orig = float(c.visit_cnt)
+            wins = c.win_sum
+            prior = c.prior
+
+            # set visit count to 0 if c has no visits
+            if n_orig <= 0:
+                pruned_visit_counts[action] = 0.0
+                continue
+
+            child_q_value = wins / n_orig
+            child_utility_from_parent = -child_q_value
+
+            wanted_weight = get_explore_selection_value_inverse(
+                c_star_puct, explore_scaling, prior, child_utility_from_parent, c.is_white
+            )
+            
+            actual_weight = n_orig
+            pruned_weight = min(wanted_weight, actual_weight)
+
         props /= props.sum()
+
         self.timing_stats["final_policy"] += time.time() - final_policy_start
         total_time = time.time() - search_start
         self.timing_stats["total"] = total_time

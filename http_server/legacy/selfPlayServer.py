@@ -10,8 +10,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 import websockets
 
-from agent_cnn import DQNAgentCNN
-from agent_cnn_self import DQNAgentCNNShared
+from legacy.agent_cnn import DQNAgentCNN
+from legacy.agent_cnn_self import DQNAgentCNNShared
 from plotter import Plotter
 
 

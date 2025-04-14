@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-from agent import DQNAgent
+from legacy.agent import DQNAgent
 import numpy as np
 from plotter import Plotter
 
