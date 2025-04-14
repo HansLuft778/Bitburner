@@ -37,24 +37,22 @@ def get_num_forced_playouts(child: "Node", k: int = 2) -> int:
 
 
 def get_explore_selection_value_inverse(
-    explore_selection_value: float, explore_scaling: float, prior: float, child_utility: float, is_shite: bool
+    explore_selection_value: float, explore_scaling: float, prior: float, child_utility: float
 ) -> float:
     if prior < 0:
         return 0
 
-    value_component = child_utility if is_shite else -child_utility
+    value_component = child_utility
 
     explore_component = explore_selection_value - value_component
     explore_component_scaling = explore_scaling * prior
 
-    if explore_component < 0:
-        return 1e100
+    if explore_component < 1e-9 or explore_component_scaling <= 1e-9:
+        return 0.0
 
-    child_weight = explore_component_scaling / explore_component - 1
-    if child_weight < 0:
-        child_weight = 0
+    child_weight = (explore_component_scaling / explore_component) - 1.0
 
-    return child_weight
+    return max(0.0, child_weight)
 
 
 class Node:
@@ -327,15 +325,8 @@ class MCTS:
         c_star = max(self.root.children, key=lambda c: c.visit_cnt)
         assert c_star.parent is not None, "c_start must have a parent"
         c_star_puct = get_puct_value(c_star, c_star.parent.visit_cnt, c_puct=C_PUCT)
-
-        pruned_visit_counts = {c.action: float(c.visit_cnt) for c in self.root.children}  # Use float for weights
-
-        props = torch.zeros(
-            self.agent.board_height * self.agent.board_height + 1,
-            device=self.agent.device,
-        )
-        for c in self.root.children:
-            props[c.action] = c.visit_cnt
+        explore_scaling = C_PUCT * self.root.visit_cnt**0.5
+        pruned_visit_counts = {c.action: float(c.visit_cnt) for c in self.root.children}
 
         for c in self.root.children:
             action = c.action
@@ -356,11 +347,34 @@ class MCTS:
             child_utility_from_parent = -child_q_value
 
             wanted_weight = get_explore_selection_value_inverse(
-                c_star_puct, explore_scaling, prior, child_utility_from_parent, c.is_white
+                c_star_puct, explore_scaling, prior, child_utility_from_parent
             )
-            
+
             actual_weight = n_orig
             pruned_weight = min(wanted_weight, actual_weight)
+
+            if pruned_weight < 1.0:
+                pruned_weight = 0.0
+
+            pruned_visit_counts[action] = pruned_weight
+
+        props = torch.zeros(
+            self.agent.board_height * self.agent.board_height + 1,
+            device=self.agent.device,
+            dtype=torch.float32,
+        )
+        total_pruned_weight = 0.0
+        for action, weight in pruned_visit_counts.items():
+            if action is not None:
+                props[action] = weight
+                total_pruned_weight += weight
+
+        if total_pruned_weight > 1e-9:
+            props /= total_pruned_weight
+        else:
+            # If all visit counts are zero, set the policy to uniform distribution
+            print("WARNING: All moves pruned, returning uniform policy")
+            props = torch.ones_like(props) / (self.agent.board_height * self.agent.board_height + 1)
 
         props /= props.sum()
 
