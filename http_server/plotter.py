@@ -115,6 +115,7 @@ class ModelOverlay:
     def heatmap(
         self,
         uf: UnionFind,
+        uf_after: UnionFind | None,
         model_output: tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
         is_white: bool,
         server: GameServerGo,
@@ -143,6 +144,7 @@ class ModelOverlay:
             f"Move Prediction for {'White' if is_white else 'Black'} with score {score_normalized}\nOutcome Prediction: value: {value}, mu: {mu_score}, sigma: {sigma_score}"
         )
 
+        # ownership prediction plot
         im = ax[0][0].imshow(
             owner_normalized.detach().cpu().squeeze().numpy(), cmap="PuOr", interpolation="nearest", vmin=-1, vmax=1
         )
@@ -153,11 +155,11 @@ class ModelOverlay:
         ax[0][0].set_title("Ownership prediction")
         fig.colorbar(im, ax=ax[0][0])
 
+        # score cdf plot
         score_onehot = torch.zeros(NUM_POSSIBLE_SCORES)
         score_idx = int(NUM_POSSIBLE_SCORES / 2) + math.floor(score_normalized)
         score_onehot[score_idx] = 1.0
 
-        # plot score pdf and cdf
         target_cdf = torch.cumsum(score_onehot, dim=0)
 
         score_probs = F.softmax(score_logits.squeeze(), dim=0)
@@ -167,6 +169,7 @@ class ModelOverlay:
         ax[0][1].plot(target_cdf.numpy(), label="Target CDF")
         ax[0][1].set_title("score CDF prediction")
 
+        # score pdf plot
         ax[1][1].bar(self.possible_scores, score_probs.detach().cpu().numpy(), label="Predicted PDF", alpha=0.5)
         ax[1][1].set_title("score PDF prediction")
 
@@ -178,13 +181,26 @@ class ModelOverlay:
         pi_opp_board = pi_opp_np[:-1].reshape((5, 5))
         pi_opp_pass = pi_opp_np[-1]
 
+        # own move policy plot
         move_im = ax[1][0].imshow(pi_board, cmap="RdYlGn", interpolation="nearest", vmin=0, vmax=1)
-        ax[1][0].set_title(f"Own Move Policy (green=good, red=bad), pass: {pi_pass:.2f}")
+        ax[1][0].set_title(f"Own Move Policy, pass: {pi_pass:.2f}")
         fig.colorbar(move_im, ax=ax[1][0])
 
+        # opponent move policy plot
         move_im = ax[2][0].imshow(pi_opp_board, cmap="RdYlGn", interpolation="nearest", vmin=0, vmax=1)
-        ax[2][0].set_title(f"Opponent Move Policy (green=good, red=bad), pass: {pi_opp_pass:.2f}")
+        ax[2][0].set_title(f"Opp Move Policy, pass: {pi_opp_pass:.2f}")
         fig.colorbar(move_im, ax=ax[2][0])
+
+        if uf_after is not None:
+            current_state = uf.state
+            next_state = uf_after.state
+            diff = current_state - next_state
+            stone_y, stone_x = np.where(diff != 0)
+            assert len(stone_x) == len(stone_y) == 1, "There should be only one stone placed"
+            color = "black" if is_white else "white"
+            ax[2][0].scatter(stone_x, stone_y, c=color, s=200, alpha=1)
+
+        fig.tight_layout()
 
         if save_image:
             plt.savefig(f"out/{save_path}")
