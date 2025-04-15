@@ -137,14 +137,13 @@ class ModelOverlay:
         score = server.go.get_score(uf, server.go.komi)
 
         score_diff = score["black"]["sum"] - score["white"]["sum"]
-        score_normalized = score_diff * (-1 if is_white else 1)
-        
-        final_score_normalized = score_normalized * (-1 if is_white else 1)
+        score_normalized = -score_diff if is_white else score_diff
+        final_score_normalized = -final_score if is_white else final_score
 
         fig, ax = plt.subplots(3, 2, figsize=(8, 8))
         fig.suptitle(
             f"Move Prediction for {'White' if is_white else 'Black'} with current score: {score_normalized} | "
-            f"final score: {final_score}\n"
+            f"final score: {final_score_normalized}\n"
             f"Outcome Prediction: value: {win_prob_pred:.2f}, {r'$\mu$'}: {mu_score:.2f}, {r'$\sigma$'}: {sigma_score:.2f}"
         )
 
@@ -176,7 +175,9 @@ class ModelOverlay:
         ax[0][1].set_title("score CDF prediction")
 
         # score pdf plot
-        ax[1][1].bar(self.possible_scores, score_probs.detach().cpu().numpy(), label="Predicted PDF", alpha=0.5, width=0.8)
+        ax[1][1].bar(
+            self.possible_scores, score_probs.detach().cpu().numpy(), label="Predicted PDF", alpha=0.5, width=0.8
+        )
         ax[1][1].set_title("score PDF prediction")
 
         pi_props = torch.softmax(pi.squeeze(), dim=0).detach().cpu().squeeze().numpy()
@@ -203,7 +204,9 @@ class ModelOverlay:
             diff = next_next_state - next_state
             placed_stone_y, placed_stone_x = np.where(diff > 0)
             removed_stones_y, removed_stones_x = np.where(diff < 0)
-            assert len(placed_stone_x) == len(placed_stone_y) and len(placed_stone_x) <= 1, "There should be only one or none stone placed"
+            assert (
+                len(placed_stone_x) == len(placed_stone_y) and len(placed_stone_x) <= 1
+            ), "There should be only one or none stone placed"
             # plot placed stone
             color = "black" if is_white else "white"
             ax[2][0].scatter(placed_stone_x, placed_stone_y, c=color, s=200, alpha=1)
