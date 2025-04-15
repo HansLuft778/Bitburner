@@ -129,28 +129,28 @@ class ModelOverlay:
             current_backend = plt.get_backend()
             plt.switch_backend("Agg")
 
-        pi, pi_opp, outcome_logits, ownership, score_logits = model_output
+        pi, pi_opp, game_outcome_tensor, ownership, score_logits = model_output
 
-        value = outcome_logits[0][0].item()
-        mu_score = outcome_logits[0][2].item()
-        sigma_score = outcome_logits[0][3].item()
+        win_prob_pred = game_outcome_tensor[0][0].item()
+        mu_score = game_outcome_tensor[0][2].item()
+        sigma_score = game_outcome_tensor[0][3].item()
         score = server.go.get_score(uf, server.go.komi)
 
         score_diff = score["black"]["sum"] - score["white"]["sum"]
         score_normalized = score_diff * (-1 if is_white else 1)
-
-        owner_normalized = ownership * 2 - 1
+        
+        final_score_normalized = score_normalized * (-1 if is_white else 1)
 
         fig, ax = plt.subplots(3, 2, figsize=(8, 8))
         fig.suptitle(
             f"Move Prediction for {'White' if is_white else 'Black'} with current score: {score_normalized} | "
             f"final score: {final_score}\n"
-            f"Outcome Prediction: value: {value:.2f}, {r'$\mu$'}: {mu_score:.2f}, {r'$\sigma$'}: {sigma_score:.2f}"
+            f"Outcome Prediction: value: {win_prob_pred:.2f}, {r'$\mu$'}: {mu_score:.2f}, {r'$\sigma$'}: {sigma_score:.2f}"
         )
 
         # ownership prediction plot
         im = ax[0][0].imshow(
-            owner_normalized.detach().cpu().squeeze().numpy(), cmap="PuOr", interpolation="nearest", vmin=-1, vmax=1
+            ownership.detach().cpu().squeeze().numpy(), cmap="PuOr", interpolation="nearest", vmin=-1, vmax=1
         )
         black_y, black_x = np.where(uf.state == 1)
         white_y, white_x = np.where(uf.state == 2)
@@ -163,7 +163,7 @@ class ModelOverlay:
 
         # score cdf plot
         score_onehot = torch.zeros(NUM_POSSIBLE_SCORES)
-        score_idx = int(NUM_POSSIBLE_SCORES / 2) + math.floor(score_normalized)
+        score_idx = int(NUM_POSSIBLE_SCORES / 2) + math.floor(final_score_normalized)
         score_onehot[score_idx] = 1.0
 
         target_cdf = torch.cumsum(score_onehot, dim=0)
@@ -176,24 +176,24 @@ class ModelOverlay:
         ax[0][1].set_title("score CDF prediction")
 
         # score pdf plot
-        ax[1][1].bar(self.possible_scores, score_probs.detach().cpu().numpy(), label="Predicted PDF", alpha=0.5)
+        ax[1][1].bar(self.possible_scores, score_probs.detach().cpu().numpy(), label="Predicted PDF", alpha=0.5, width=0.8)
         ax[1][1].set_title("score PDF prediction")
 
-        pi_np = pi.detach().cpu().squeeze().numpy()
-        pi_opp_np = pi_opp.detach().cpu().squeeze().numpy()
+        pi_props = torch.softmax(pi.squeeze(), dim=0).detach().cpu().squeeze().numpy()
+        pi_opp_props = torch.softmax(pi_opp.squeeze(), dim=0).detach().cpu().squeeze().numpy()
 
-        pi_board = pi_np[:-1].reshape((5, 5))
-        pi_pass = pi_np[-1].item()
-        pi_opp_board = pi_opp_np[:-1].reshape((5, 5))
-        pi_opp_pass = pi_opp_np[-1]
+        pi_board = pi_props[:-1].reshape((5, 5))
+        pi_pass = pi_props[-1].item()
+        pi_opp_board = pi_opp_props[:-1].reshape((5, 5))
+        pi_opp_pass = pi_opp_props[-1]
 
         # own move policy plot
-        move_im = ax[1][0].imshow(pi_board, cmap="RdYlGn", interpolation="nearest", vmin=0, vmax=1)
+        move_im = ax[1][0].imshow(pi_board, cmap="plasma", interpolation="nearest", vmin=0, vmax=1)
         ax[1][0].set_title(f"Own Move Policy, pass: {pi_pass:.2f}")
         fig.colorbar(move_im, ax=ax[1][0])
 
         # opponent move policy plot
-        move_im = ax[2][0].imshow(pi_opp_board, cmap="RdYlGn", interpolation="nearest", vmin=0, vmax=1)
+        move_im = ax[2][0].imshow(pi_opp_board, cmap="plasma", interpolation="nearest", vmin=0, vmax=1)
         ax[2][0].set_title(f"Opp Move Policy, pass: {pi_opp_pass:.2f}")
         fig.colorbar(move_im, ax=ax[2][0])
 
