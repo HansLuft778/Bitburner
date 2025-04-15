@@ -116,6 +116,7 @@ class ModelOverlay:
         self,
         uf: UnionFind,
         uf_after: UnionFind | None,
+        uf_after_after: UnionFind | None,
         model_output: tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
         is_white: bool,
         server: GameServerGo,
@@ -131,8 +132,8 @@ class ModelOverlay:
         pi, pi_opp, outcome_logits, ownership, score_logits = model_output
 
         value = outcome_logits[0][0].item()
-        mu_score = outcome_logits[0][1].item()
-        sigma_score = outcome_logits[0][2].item()
+        mu_score = outcome_logits[0][2].item()
+        sigma_score = outcome_logits[0][3].item()
         score = server.go.get_score(uf, server.go.komi)
 
         score_diff = score["black"]["sum"] - score["white"]["sum"]
@@ -196,14 +197,16 @@ class ModelOverlay:
         ax[2][0].set_title(f"Opp Move Policy, pass: {pi_opp_pass:.2f}")
         fig.colorbar(move_im, ax=ax[2][0])
 
-        if uf_after is not None:
-            current_state = uf.state
+        if uf_after is not None and uf_after_after is not None:
             next_state = uf_after.state
-            diff = current_state - next_state
-            stone_y, stone_x = np.where(diff != 0)
-            assert len(stone_x) == len(stone_y) == 1, "There should be only one stone placed"
+            next_next_state = uf_after_after.state
+            diff = next_next_state - next_state
+            placed_stone_y, placed_stone_x = np.where(diff > 0)
+            removed_stones_y, removed_stones_x = np.where(diff < 0)
+            assert len(placed_stone_x) == len(placed_stone_y) and len(placed_stone_x) <= 1, "There should be only one or none stone placed"
+            # plot placed stone
             color = "black" if is_white else "white"
-            ax[2][0].scatter(stone_x, stone_y, c=color, s=200, alpha=1)
+            ax[2][0].scatter(placed_stone_x, placed_stone_y, c=color, s=200, alpha=1)
 
         fig.tight_layout()
 
