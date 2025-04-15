@@ -5,14 +5,12 @@ from typing import Any, Union
 import numpy as np
 import torch
 
-from agent_cnn_zero import AlphaZeroAgent
+from agent_cnn_zero import AlphaZeroAgent, State
 from gameserver_local_uf import GameServerGo
 from Go.Go_uf import Go_uf, UnionFind
 from plotter import Plotter, ModelOverlay  # type: ignore
 from TreePlotter import TreePlot  # pyright: ignore
 from Buffer import BufferElement
-
-State = np.ndarray[Any, np.dtype[np.int8]]
 
 C_PUCT = 1.8
 
@@ -278,7 +276,7 @@ class MCTS:
 
                 inference_start = time.time()
                 if node.policy is None:
-                    raw_logits, raw_value = self.agent.get_actions_eval(node.uf, history, node.is_white)
+                    raw_logits, raw_value = self.agent.get_actions_eval(node.uf, history, valid_moves, node.is_white)
                     valid_mask = torch.tensor(valid_moves, device=self.agent.device, dtype=torch.bool)
                     raw_logits[~valid_mask] = -1e9
                     final_probs = torch.softmax(raw_logits, dim=0)
@@ -484,7 +482,8 @@ async def main() -> None:
             if len(buffer) > 0:
                 buffer[-1].pi_mcts_response = pi_mcts
 
-            buffer.append(BufferElement(uf, is_white, pi_mcts, game_history[: mcts.agent.num_past_steps]))
+            valid_moves = server.go.get_valid_moves(uf, is_white, server.go.hash_history)
+            buffer.append(BufferElement(uf, is_white, pi_mcts, game_history[: mcts.agent.num_past_steps], valid_moves))
 
             # outcome is: 1 if black won, -1 is white won
             next_uf, outcome, done = await server.make_move(action, best_move, is_white)
@@ -546,8 +545,8 @@ async def main() -> None:
         len_buffer = len(buffer)
         for i in [0, 1, len_buffer // 2, len_buffer // 2 + 1, len_buffer - 2, len_buffer - 1]:
             be = buffer[i]
-            state_tensor = agent.preprocess_state(be.uf, be.history, be.is_white)
-            logits = agent.policy_net(state_tensor)
+            state_tensor, state_vector = agent.preprocess_state(be.uf, be.history, be.valid_moves, be.is_white)
+            logits = agent.policy_net(state_tensor, state_vector)
             next_uf = buffer[i + 1].uf if i + 1 < len_buffer else None
             next_next_uf = buffer[i + 2].uf if i + 2 < len_buffer else None
             mo.heatmap(
