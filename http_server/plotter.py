@@ -119,6 +119,7 @@ class ModelOverlay:
         model_output: tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
         is_white: bool,
         server: GameServerGo,
+        final_score: float,
         save_image: bool = False,
         save_path: str = "model_overlay.png",
     ):
@@ -139,9 +140,11 @@ class ModelOverlay:
 
         owner_normalized = ownership * 2 - 1
 
-        fig, ax = plt.subplots(2, 2, figsize=(8, 8))
+        fig, ax = plt.subplots(3, 2, figsize=(8, 8))
         fig.suptitle(
-            f"Move Prediction for {'White' if is_white else 'Black'} with score {score_normalized}\nOutcome Prediction: value: {value}, mu: {mu_score}, sigma: {sigma_score}"
+            f"Move Prediction for {'White' if is_white else 'Black'} with current score: {score_normalized} | "
+            f"final score: {final_score}\n"
+            f"Outcome Prediction: value: {value:.2f}, {r'$\mu$'}: {mu_score:.2f}, {r'$\sigma$'}: {sigma_score:.2f}"
         )
 
         # ownership prediction plot
@@ -150,8 +153,10 @@ class ModelOverlay:
         )
         black_y, black_x = np.where(uf.state == 1)
         white_y, white_x = np.where(uf.state == 2)
+        disabled_y, disabled_x = np.where(uf.state == 3)
         ax[0][0].scatter(black_x, black_y, c="black", s=200, alpha=1)
         ax[0][0].scatter(white_x, white_y, c="white", s=200, alpha=1)
+        ax[0][0].scatter(disabled_x, disabled_y, c="#808080", s=200, alpha=1, marker="x")
         ax[0][0].set_title("Ownership prediction")
         fig.colorbar(im, ax=ax[0][0])
 
