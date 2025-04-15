@@ -7,7 +7,7 @@ import numpy as np
 import torch
 import websockets
 
-from agent_cnn import DQNAgentCNN
+from legacy.agent_cnn import DQNAgentCNN
 from plotter import Plotter
 
 

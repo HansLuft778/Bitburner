@@ -14,8 +14,10 @@ from Buffer import BufferElement
 
 State = np.ndarray[Any, np.dtype[np.int8]]
 
+C_PUCT = 1.8
 
-def get_ucb_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) -> float:
+
+def get_puct_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) -> float:
     """
     child.win_sum is from the childs perspective, so from the parent's perspective we must negate it
       Q(s,a) = child.win_sum/child.visit_cnt
@@ -27,6 +29,30 @@ def get_ucb_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) -
         q_value = -(child.win_sum / child.visit_cnt)
     u_value = c_puct * child.prior * parent_visit_count**0.5 / (1 + child.visit_cnt)
     return q_value + u_value
+
+
+def get_num_forced_playouts(child: "Node", k: int = 2) -> int:
+    assert child.parent is not None, "Child must have a parent to calculate number of forced playouts"
+    return int((k * child.prior * child.parent.visit_cnt) ** 0.5)
+
+
+def get_explore_selection_value_inverse(
+    explore_selection_value: float, explore_scaling: float, prior: float, child_utility: float
+) -> float:
+    if prior < 0:
+        return 0
+
+    value_component = child_utility
+
+    explore_component = explore_selection_value - value_component
+    explore_component_scaling = explore_scaling * prior
+
+    if explore_component < 1e-9 or explore_component_scaling <= 1e-9:
+        return 0.0
+
+    child_weight = (explore_component_scaling / explore_component) - 1.0
+
+    return max(0.0, child_weight)
 
 
 class Node:
@@ -137,9 +163,9 @@ class Node:
         return history[::-1]  # Reverse for chronological order
 
     def next(self) -> "Node":
-        best: tuple[Node | None, float] = (None, -999999999)
+        best: tuple[Node | None, float] = (None, -99999)
         for c in self.children:
-            score = get_ucb_value(c, self.visit_cnt, c_puct=1.8)
+            score = get_puct_value(c, self.visit_cnt, c_puct=C_PUCT)
             if score > best[1]:
                 best = (c, score)
 
@@ -218,8 +244,19 @@ class MCTS:
             # selection
             select_start = time.time()
             while node.is_fully_expanded():
-                node = node.next()
-                self.max_depth = max(self.max_depth, node.depth)
+                next_node = None
+                if node.parent is None:
+                    for c in node.children:
+                        if c.visit_cnt < get_num_forced_playouts(c) and (
+                            next_node is None or c.prior > next_node.prior
+                        ):
+                            next_node = c
+                if next_node is None:
+                    node = node.next()
+                    self.max_depth = max(self.max_depth, node.depth)
+                else:
+                    node = next_node
+
             self.timing_stats["selection"] += time.time() - select_start
             self.iterations_stats["selection"] += 1
 
@@ -281,15 +318,67 @@ class MCTS:
             # if iter == 999:
             #     TreePlot(root).create_tree()
 
+        # calculate final policy distribution
         final_policy_start = time.time()
+
+        # policy target pruning
+        c_star = max(self.root.children, key=lambda c: c.visit_cnt)
+        assert c_star.parent is not None, "c_start must have a parent"
+        c_star_puct = get_puct_value(c_star, c_star.parent.visit_cnt, c_puct=C_PUCT)
+        explore_scaling = C_PUCT * self.root.visit_cnt**0.5
+        pruned_visit_counts = {c.action: float(c.visit_cnt) for c in self.root.children}
+
+        for c in self.root.children:
+            action = c.action
+            # use action to differentiate between c and c_star, since action is unique for every child
+            if action is None or action == c_star.action:
+                continue
+
+            n_orig = float(c.visit_cnt)
+            wins = c.win_sum
+            prior = c.prior
+
+            # set visit count to 0 if c has no visits
+            if n_orig <= 0:
+                pruned_visit_counts[action] = 0.0
+                continue
+
+            child_q_value = wins / n_orig
+            child_utility_from_parent = -child_q_value
+
+            wanted_weight = get_explore_selection_value_inverse(
+                c_star_puct, explore_scaling, prior, child_utility_from_parent
+            )
+
+            actual_weight = n_orig
+            pruned_weight = min(wanted_weight, actual_weight)
+
+            if pruned_weight < 1.0:
+                print(f"Pruning child {action} from {actual_weight:.3f} to {pruned_weight:.3f}")
+                pruned_weight = 0.0
+
+            pruned_visit_counts[action] = pruned_weight
 
         props = torch.zeros(
             self.agent.board_height * self.agent.board_height + 1,
             device=self.agent.device,
+            dtype=torch.float32,
         )
-        for c in self.root.children:
-            props[c.action] = c.visit_cnt
+        total_pruned_weight = 0.0
+        for action, weight in pruned_visit_counts.items():
+            if action is not None:
+                props[action] = float(weight)
+                total_pruned_weight += weight
+
+        if total_pruned_weight > 1e-9:
+            props /= total_pruned_weight
+        else:
+            # If all visit counts are zero, set the policy to uniform distribution
+            print("WARNING: All moves pruned, returning uniform policy")
+            props = torch.ones_like(props) / (self.agent.board_height * self.agent.board_height + 1)
+
         props /= props.sum()
+
         self.timing_stats["final_policy"] += time.time() - final_policy_start
         total_time = time.time() - search_start
         self.timing_stats["total"] = total_time
@@ -379,6 +468,7 @@ async def main() -> None:
         previous_move = -1
         start_time = time.time()
         while not done:
+            print(f"================================ {episode_length} ================================")
             before = time.time()
             pi_mcts = mcts.search(server.go.uf, is_white, previous_move)
             after = time.time()
@@ -453,17 +543,23 @@ async def main() -> None:
         score = black_score - white_score  # black leads with
 
         mo = ModelOverlay()
-        for i, be in enumerate(buffer[-4:]):
-            state_tensor = agent.preprocess_state(be.uf, be.history, be.is_white)
-            out = agent.policy_net(state_tensor)
-            mo.heatmap(be.uf, out, be.is_white, server, True, f"model_overlay_ep_{iter}_{i}.png")
-
-        for i in range(2):
+        len_buffer = len(buffer)
+        for i in [0, 1, len_buffer // 2, len_buffer // 2 + 1, len_buffer - 2, len_buffer - 1]:
             be = buffer[i]
             state_tensor = agent.preprocess_state(be.uf, be.history, be.is_white)
-            out = agent.policy_net(state_tensor)
+            logits = agent.policy_net(state_tensor)
+            next_uf = buffer[i + 1].uf if i + 1 < len_buffer else None
+            next_next_uf = buffer[i + 2].uf if i + 2 < len_buffer else None
             mo.heatmap(
-                be.uf, out, be.is_white, server, True, f"model_overlay_ep_{iter}_{"first" if i==0 else "second"}.png"
+                be.uf,
+                next_uf,
+                next_next_uf,
+                logits,
+                be.is_white,
+                server,
+                score,
+                True,
+                f"model_overlay_ep_{iter}_{i}.png",
             )
 
         for be in buffer:

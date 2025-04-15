@@ -7,8 +7,8 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from agent_cnn import DQNAgentCNN
-from gameserver import GameServer
+from legacy.agent_cnn import DQNAgentCNN
+from legacy.gameserver import GameServer
 from plotter import Plotter
 
 

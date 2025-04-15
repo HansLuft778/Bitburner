@@ -115,44 +115,56 @@ class ModelOverlay:
     def heatmap(
         self,
         uf: UnionFind,
+        uf_after: UnionFind | None,
+        uf_after_after: UnionFind | None,
         model_output: tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
         is_white: bool,
         server: GameServerGo,
+        final_score: float,
         save_image: bool = False,
         save_path: str = "model_overlay.png",
     ):
         # If we're saving, switch to a non-interactive backend temporarily
         if save_image:
             current_backend = plt.get_backend()
-            plt.switch_backend('Agg')
-            
-        pi, pi_opp, outcome_logits, ownership, score_logits = model_output
+            plt.switch_backend("Agg")
 
+        pi, pi_opp, game_outcome_tensor, ownership, score_logits = model_output
+
+        win_prob_pred = game_outcome_tensor[0][0].item()
+        mu_score = game_outcome_tensor[0][2].item()
+        sigma_score = game_outcome_tensor[0][3].item()
         score = server.go.get_score(uf, server.go.komi)
 
         score_diff = score["black"]["sum"] - score["white"]["sum"]
-        score_normalized = score_diff * (-1 if is_white else 1)
+        score_normalized = -score_diff if is_white else score_diff
+        final_score_normalized = -final_score if is_white else final_score
 
-        owner_normalized = ownership * 2 - 1
+        fig, ax = plt.subplots(3, 2, figsize=(8, 8))
+        fig.suptitle(
+            f"Move Prediction for {'White' if is_white else 'Black'} with current score: {score_normalized} | "
+            f"final score: {final_score_normalized}\n"
+            f"Outcome Prediction: value: {win_prob_pred:.2f}, {r'$\mu$'}: {mu_score:.2f}, {r'$\sigma$'}: {sigma_score:.2f}"
+        )
 
+        # ownership prediction plot
+        im = ax[0][0].imshow(
+            ownership.detach().cpu().squeeze().numpy(), cmap="PuOr", interpolation="nearest", vmin=-1, vmax=1
+        )
         black_y, black_x = np.where(uf.state == 1)
         white_y, white_x = np.where(uf.state == 2)
-
-        fig, ax = plt.subplots(2, 2, figsize=(8, 8))
-        fig.suptitle(f"Move Prediction for {'White' if is_white else 'Black'} with score {score_normalized}")
-
-        im = ax[0][0].imshow(
-            owner_normalized.detach().cpu().squeeze().numpy(), cmap="PuOr", interpolation="nearest", vmin=-1, vmax=1
-        )
+        disabled_y, disabled_x = np.where(uf.state == 3)
         ax[0][0].scatter(black_x, black_y, c="black", s=200, alpha=1)
         ax[0][0].scatter(white_x, white_y, c="white", s=200, alpha=1)
-        cbar = fig.colorbar(im, ax=ax)
+        ax[0][0].scatter(disabled_x, disabled_y, c="#808080", s=200, alpha=1, marker="x")
+        ax[0][0].set_title("Ownership prediction")
+        fig.colorbar(im, ax=ax[0][0])
 
+        # score cdf plot
         score_onehot = torch.zeros(NUM_POSSIBLE_SCORES)
-        score_idx = int(NUM_POSSIBLE_SCORES / 2) + math.floor(score_normalized)
+        score_idx = int(NUM_POSSIBLE_SCORES / 2) + math.floor(final_score_normalized)
         score_onehot[score_idx] = 1.0
 
-        # plot score pdf and cdf
         target_cdf = torch.cumsum(score_onehot, dim=0)
 
         score_probs = F.softmax(score_logits.squeeze(), dim=0)
@@ -160,11 +172,47 @@ class ModelOverlay:
 
         ax[0][1].plot(predicted_cdf.detach().cpu().numpy(), label="Predicted CDF")
         ax[0][1].plot(target_cdf.numpy(), label="Target CDF")
-        ax[0][1].set_title("CDF")
+        ax[0][1].set_title("score CDF prediction")
 
-        ax[1][0].bar(self.possible_scores, score_probs.detach().cpu().numpy(), label="Predicted PDF", alpha=0.5)
-        ax[1][0].set_title("PDF")
-        
+        # score pdf plot
+        ax[1][1].bar(
+            self.possible_scores, score_probs.detach().cpu().numpy(), label="Predicted PDF", alpha=0.5, width=0.8
+        )
+        ax[1][1].set_title("score PDF prediction")
+
+        pi_props = torch.softmax(pi.squeeze(), dim=0).detach().cpu().squeeze().numpy()
+        pi_opp_props = torch.softmax(pi_opp.squeeze(), dim=0).detach().cpu().squeeze().numpy()
+
+        pi_board = pi_props[:-1].reshape((5, 5))
+        pi_pass = pi_props[-1].item()
+        pi_opp_board = pi_opp_props[:-1].reshape((5, 5))
+        pi_opp_pass = pi_opp_props[-1]
+
+        # own move policy plot
+        move_im = ax[1][0].imshow(pi_board, cmap="plasma", interpolation="nearest", vmin=0, vmax=1)
+        ax[1][0].set_title(f"Own Move Policy, pass: {pi_pass:.2f}")
+        fig.colorbar(move_im, ax=ax[1][0])
+
+        # opponent move policy plot
+        move_im = ax[2][0].imshow(pi_opp_board, cmap="plasma", interpolation="nearest", vmin=0, vmax=1)
+        ax[2][0].set_title(f"Opp Move Policy, pass: {pi_opp_pass:.2f}")
+        fig.colorbar(move_im, ax=ax[2][0])
+
+        if uf_after is not None and uf_after_after is not None:
+            next_state = uf_after.state
+            next_next_state = uf_after_after.state
+            diff = next_next_state - next_state
+            placed_stone_y, placed_stone_x = np.where(diff > 0)
+            removed_stones_y, removed_stones_x = np.where(diff < 0)
+            assert (
+                len(placed_stone_x) == len(placed_stone_y) and len(placed_stone_x) <= 1
+            ), "There should be only one or none stone placed"
+            # plot placed stone
+            color = "black" if is_white else "white"
+            ax[2][0].scatter(placed_stone_x, placed_stone_y, c=color, s=200, alpha=1)
+
+        fig.tight_layout()
+
         if save_image:
             plt.savefig(f"out/{save_path}")
             plt.close(fig)  # Close the figure to prevent display
