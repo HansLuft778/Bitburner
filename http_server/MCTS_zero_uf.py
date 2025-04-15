@@ -354,6 +354,7 @@ class MCTS:
             pruned_weight = min(wanted_weight, actual_weight)
 
             if pruned_weight < 1.0:
+                print(f"Pruning child {action} from {actual_weight:.3f} to {pruned_weight:.3f}")
                 pruned_weight = 0.0
 
             pruned_visit_counts[action] = pruned_weight
@@ -467,6 +468,7 @@ async def main() -> None:
         previous_move = -1
         start_time = time.time()
         while not done:
+            print(f"================================ {episode_length} ================================")
             before = time.time()
             pi_mcts = mcts.search(server.go.uf, is_white, previous_move)
             after = time.time()
