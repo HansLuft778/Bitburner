@@ -367,7 +367,7 @@ class MCTS:
         total_pruned_weight = 0.0
         for action, weight in pruned_visit_counts.items():
             if action is not None:
-                props[action] = weight
+                props[action] = float(weight)
                 total_pruned_weight += weight
 
         if total_pruned_weight > 1e-9:
