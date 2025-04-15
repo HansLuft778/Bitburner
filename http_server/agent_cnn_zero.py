@@ -620,10 +620,11 @@ class AlphaZeroAgent:
 
         mu_s = torch.sum(self.possible_scores * score_probs, dim=1, keepdim=True)  # shape [B, 1]
         variance_s = torch.sum(((self.possible_scores - mu_s) ** 2) * score_probs, dim=1, keepdim=True)  # shape [B, 1]
-        sigma_s = torch.sqrt(variance_s + epsilon)  # epsilon in case variance_s is 0
+        sigma_s = torch.sqrt(variance_s + epsilon).squeeze(1)  # epsilon in case variance_s is 0
 
-        score_mean_loss = F.huber_loss(mu_hat, score_batch, delta=10.0) * 0.02
-        score_std_loss = F.huber_loss(sigma_hat, sigma_s.detach(), delta=10.0) * 0.02
+        mu_s_squeezed = mu_s.squeeze(1)
+        score_mean_loss = F.huber_loss(mu_hat, mu_s_squeezed, delta=10.0) * 0.02
+        score_std_loss = F.huber_loss(sigma_hat, sigma_s, delta=10.0) * 0.02
 
         loss = (
             policy_loss_own
