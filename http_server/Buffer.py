@@ -17,12 +17,14 @@ class BufferElement:
         is_white: bool,
         pi_mcts: torch.Tensor,
         history: list[State],
+        valid_moves: np.ndarray[Any, np.dtype[np.bool_]],
         pi_mcts_response: torch.Tensor | None = None,
     ):
         self.uf = uf
         self.is_white = is_white
         self.pi_mcts = pi_mcts
         self.history = history
+        self.valid_moves = valid_moves
         self.pi_mcts_response = pi_mcts_response
 
 

@@ -97,11 +97,11 @@ class UnionFind:
         if not isinstance(other, UnionFind):
             return NotImplemented
         return (
-            (self.parent == other.parent).all()
-            and (self.colors == other.colors).all()
-            and (self.rank == other.rank).all()
-            and (self.stones == other.stones).all()
-            and (self.liberties == other.liberties).all()
+            np.array_equal(self.parent, other.parent)
+            and np.array_equal(self.colors, other.colors)
+            and np.array_equal(self.rank, other.rank)
+            and np.array_equal(self.stones, other.stones)
+            and np.array_equal(self.liberties, other.liberties)
         )
 
     def __str__(self):
@@ -767,6 +767,9 @@ class Go_uf:
         history: list[np.uint64] = [],
     ) -> np.ndarray[Any, np.dtype[np.bool_]]:
         player = 2 if is_white else 1
+
+        # if len(history) == 0:
+        #     history = self.hash_history
 
         legal_moves: np.ndarray[Any, np.dtype[np.bool_]] = np.zeros_like(uf.state, dtype=bool)
         empty_mask = uf.state == 0
