@@ -626,10 +626,11 @@ class AlphaZeroAgent:
         for i in range(len(batch)):
             current_group = group_list[i]
             uf = UnionFind.get_uf_from_state(current_group[:, :, GroupIdx.STATE].cpu().numpy(), None)
-            valid_moves = current_group[:, :, GroupIdx.VALID_MOVES]
+            valid_moves = current_group[:, :, GroupIdx.VALID_MOVES].cpu().numpy()
             history = current_group[:, :, GroupIdx.HISTORY :]
             history_list = [history[:, :, j] for j in range(self.history_length)]
 
+            valid_moves = np.array(valid_moves, dtype=np.bool_)
             t, v = self.preprocess_state(uf, history_list, valid_moves, is_white_list[i], device="cuda")
             state_tensor_list.append(t)
             game_info_vec_list.append(v)
