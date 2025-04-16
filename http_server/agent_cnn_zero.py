@@ -1,5 +1,6 @@
 import os
 from typing import Any
+from enum import IntEnum
 
 
 import numpy as np
@@ -201,10 +202,10 @@ class ResNet(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # x shape: [B, 1, board_width, board_height]
         # x_vector shape: [B, 5]
-        
+
         spatial_features = self.initialConvBlock(x)
         vector_features = self.vector_processor(x_vector)  # shape [B, num_hidden]
-        vector_bias_reshaped = vector_features.unsqueeze(-1).unsqueeze(-1) # shape [B, num_hidden, 1, 1]
+        vector_bias_reshaped = vector_features.unsqueeze(-1).unsqueeze(-1)  # shape [B, num_hidden, 1, 1]
 
         x = spatial_features + vector_bias_reshaped
 
@@ -238,8 +239,12 @@ class ResNet(nn.Module):
 
         return (own_policy_logits, opp_policy_logits, game_outcome, ownership_logits, score_logits)
 
-    def forward_mcts_eval(self, x: torch.Tensor):
-        x = self.initialConvBlock(x)
+    def forward_mcts_eval(self, x: torch.Tensor, x_vector: torch.Tensor):
+        spatial_features = self.initialConvBlock(x)
+        vector_features = self.vector_processor(x_vector)
+        vector_bias_reshaped = vector_features.unsqueeze(-1).unsqueeze(-1)
+
+        x = spatial_features + vector_bias_reshaped
         for block in self.feature_extractor:
             x = block(x)
 
@@ -276,6 +281,15 @@ class ResBlock(nn.Module):
         return x
 
 
+class GroupIdx(IntEnum):
+    STATE = 0
+    OWNERSHIP = 1
+    PI_OWN = 2
+    PI_OPP = 3
+    VALID_MOVES = 4
+    HISTORY = 5
+
+
 class AlphaZeroAgent:
     def __init__(
         self,
@@ -291,7 +305,7 @@ class AlphaZeroAgent:
         self.board_height = board_width
         self.plotter = plotter
         self.batch_size = batch_size
-        self.num_past_steps = num_past_steps
+        self.num_past_steps = num_past_steps + 1  # plus one for pass move evaluation
         self.checkpoint_dir = checkpoint_dir
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -378,15 +392,15 @@ class AlphaZeroAgent:
         pi_opp = pi_mcts_opp[: self.board_width * self.board_height].reshape(self.board_width, self.board_height)
         pi_res_pass = pi_mcts_opp[-1]
 
-        num_non_history_channels = 5  # state, ownership, pi_board, pi_opp, valid_moves
+        num_non_history_channels = GroupIdx.HISTORY  # state, ownership, pi_board, pi_opp, valid_moves
         grouped_tensor = torch.zeros(
             (self.board_width, self.board_height, num_non_history_channels + self.num_past_steps), device=self.device
         )
-        grouped_tensor[:, :, 0] = torch.as_tensor(uf.state, device=self.device)
-        grouped_tensor[:, :, 1] = torch.as_tensor(ownership, device=self.device)
-        grouped_tensor[:, :, 2] = torch.as_tensor(pi_board)
-        grouped_tensor[:, :, 3] = torch.as_tensor(pi_opp)
-        grouped_tensor[:, :, 4] = torch.as_tensor(valid_moves, device=self.device)
+        grouped_tensor[:, :, GroupIdx.STATE] = torch.as_tensor(uf.state, device=self.device)
+        grouped_tensor[:, :, GroupIdx.OWNERSHIP] = torch.as_tensor(ownership, device=self.device)
+        grouped_tensor[:, :, GroupIdx.PI_OWN] = torch.as_tensor(pi_board)
+        grouped_tensor[:, :, GroupIdx.PI_OPP] = torch.as_tensor(pi_opp)
+        grouped_tensor[:, :, GroupIdx.VALID_MOVES] = torch.as_tensor(valid_moves, device=self.device)
 
         padded_history = list(history)
         num_mising = self.num_past_steps - len(padded_history)
@@ -478,7 +492,12 @@ class AlphaZeroAgent:
         spacial_data_tensor = torch.zeros((1, num_channels, self.board_width, self.board_width), device=self.device)
         board_tensor = torch.as_tensor(uf.state, device=self.device)
         lib_count_tensor = torch.as_tensor(liberty_counts, device=self.device)
-        valid_moves_tensor = torch.as_tensor(valid_moves, device=self.device)
+
+        illegal_moves_tensor = torch.as_tensor(np.invert(valid_moves), device=self.device)
+        # mask black, white and disabled locations to only KO locations are included
+        illegal_moves_tensor[board_tensor == 1] = 0
+        illegal_moves_tensor[board_tensor == 2] = 0
+        illegal_moves_tensor[board_tensor == 3] = 0
 
         spacial_data_tensor[0, 0] = (board_tensor == 3).float()  # disabled
         if is_white:
@@ -492,10 +511,19 @@ class AlphaZeroAgent:
         spacial_data_tensor[0, 4] = (lib_count_tensor == 2).float()  # has two liberties
         spacial_data_tensor[0, 5] = (lib_count_tensor == 3).float()  # has three liberties
 
-        spacial_data_tensor[0, 6] = (valid_moves_tensor == 1).float()  # has three liberties
+        spacial_data_tensor[0, 6] = (illegal_moves_tensor == 1).float()  # has three liberties
 
-        # process history
-        for past_idx in range(min(self.num_past_steps, len(history))):
+        # process history from most recent to oldest
+        passes = np.zeros(5, dtype=np.int8)
+        # check if most recent state resulted from a pass move
+        if (uf.state == history[0]).all():
+            passes[0] = 1
+
+        for past_idx in range(min(self.num_past_steps, len(history)) - 1):
+            # pass move
+            if (history[past_idx] == history[past_idx + 1]).all():
+                passes[past_idx + 1] = 1
+
             past_step = torch.as_tensor(history[past_idx], device=self.device)
             if is_white:
                 spacial_data_tensor[0, 6 + past_idx * 2] = (past_step == 2).float()  # white
@@ -505,7 +533,7 @@ class AlphaZeroAgent:
                 spacial_data_tensor[0, 7 + past_idx * 2] = (past_step == 2).float()  # black
 
         # build game data vector
-        game_data_vector = torch.zeros(5, device=self.device)
+        game_data_vector = torch.as_tensor(passes, device=self.device).unsqueeze(0)  # shape [1, 5]
 
         return spacial_data_tensor, game_data_vector
 
@@ -534,10 +562,10 @@ class AlphaZeroAgent:
         """
         Select action deterministically for evaluation (no exploration).
         """
-        state_tensor = self.preprocess_state(uf, game_history, valid_moves, color_is_white)
+        state_tensor, game_data_vector = self.preprocess_state(uf, game_history, valid_moves, color_is_white)
 
         # Get logits
-        policy, outcome_logits = self.policy_net.forward_mcts_eval(state_tensor)
+        policy, outcome_logits = self.policy_net.forward_mcts_eval(state_tensor, game_data_vector)
         outcome = outcome_logits.squeeze(0)  # shape [2]
         return policy.squeeze(0), outcome[0].item()
 
@@ -567,19 +595,22 @@ class AlphaZeroAgent:
 
         # 2. Convert data into tensors
         state_tensor_list: list[torch.Tensor] = []
+        game_info_vec_list: list[torch.Tensor] = []
         ownership_list: list[torch.Tensor] = []
         for i in range(len(batch)):
             current_group = group_list[i]
-            uf = UnionFind.get_uf_from_state(current_group[:, :, 0].cpu().numpy(), None)
-            valid_moves = group_list[i][:, :, 4]
-            history = group_list[i][:, :, 5:]
+            uf = UnionFind.get_uf_from_state(current_group[:, :, GroupIdx.STATE].cpu().numpy(), None)
+            valid_moves = current_group[:, :, GroupIdx.VALID_MOVES]
+            history = current_group[:, :, GroupIdx.HISTORY :]
             history_list = [history[:, :, j] for j in range(self.num_past_steps)]
 
-            t = self.preprocess_state(uf, history_list, valid_moves, is_white_list[i])
+            t, v = self.preprocess_state(uf, history_list, valid_moves, is_white_list[i])
             state_tensor_list.append(t)
+            game_info_vec_list.append(v)
             ownership_list.append(current_group[:, :, 1])
 
         state_batch = torch.cat(state_tensor_list)  # shape [B, channels, W, H]
+        game_info_vec_batch = torch.cat(game_info_vec_list, dim=0)  # shape [B, 5]
         pi_batch = torch.stack(pi_list, dim=0).to(device=self.device)  # shape [B, 26]
         pi_opp_batch = torch.stack(pi_opp_list, dim=0).to(device=self.device)  # shape [B, 26]
         z_batch = torch.tensor(z_list, dtype=torch.float, device=self.device)  # [B]
@@ -602,7 +633,9 @@ class AlphaZeroAgent:
 
         # 3. feed states trough NN
         # logits shape [B, 26], values shape [B, 1] (assuming your net does that)
-        logits_own, logits_opp, outcome_logits, ownership_logits, score_logits = self.policy_net(state_batch)
+        logits_own, logits_opp, outcome_logits, ownership_logits, score_logits = self.policy_net(
+            state_batch, game_info_vec_batch
+        )
 
         # 4. Calculate losses
         policy_log_probs_own = F.log_softmax(logits_own, dim=1)  # shape [B, num_actions]
