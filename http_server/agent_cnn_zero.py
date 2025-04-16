@@ -336,8 +336,13 @@ class AlphaZeroAgent:
             device=self.device,
         ).unsqueeze(0)
 
-        self.liberty_kernel = (
+        self.liberty_kernel_cpu = (
             torch.tensor([[0, 1, 0], [1, 0, 1], [0, 1, 0]], device="cpu", dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+        )
+        self.liberty_kernel_gpu = (
+            torch.tensor([[0, 1, 0], [1, 0, 1], [0, 1, 0]], device=self.device, dtype=torch.float32)
+            .unsqueeze(0)
+            .unsqueeze(0)
         )
 
     def save_checkpoint(self, filename: str):
@@ -503,7 +508,8 @@ class AlphaZeroAgent:
         empty_mask = (board_tensor == 0).float().unsqueeze(0).unsqueeze(0)  # Shape [1, 1, H, W]
         stone_mask = (board_tensor == 1) | (board_tensor == 2)
 
-        neighbor_liberties = F.conv2d(empty_mask, self.liberty_kernel, padding=1).squeeze(0).squeeze(0)
+        kernel = self.liberty_kernel_cpu if device == "cpu" else self.liberty_kernel_gpu
+        neighbor_liberties = F.conv2d(empty_mask, kernel, padding=1).squeeze(0).squeeze(0)
         liberty_counts = neighbor_liberties * stone_mask
 
         # ko move tensor
