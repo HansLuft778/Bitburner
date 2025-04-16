@@ -13,6 +13,7 @@ from TreePlotter import TreePlot  # pyright: ignore
 from Buffer import BufferElement
 
 C_PUCT = 1.8
+NUM_EPISODES = 1000
 
 
 def get_puct_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) -> float:
@@ -450,7 +451,6 @@ async def main() -> None:
     # agent.load_checkpoint("checkpoint_126.pth")
     mcts = MCTS(server, agent, search_iterations=1000)
 
-    NUM_EPISODES = 1000
     outcome = 0
     for iter in range(NUM_EPISODES):
         is_white = False
@@ -483,7 +483,7 @@ async def main() -> None:
                 buffer[-1].pi_mcts_response = pi_mcts
 
             valid_moves = server.go.get_valid_moves(uf, is_white, server.go.hash_history)
-            buffer.append(BufferElement(uf, is_white, pi_mcts, game_history[: mcts.agent.num_past_steps], valid_moves))
+            buffer.append(BufferElement(uf, is_white, pi_mcts, game_history[: mcts.agent.history_length], valid_moves))
 
             # outcome is: 1 if black won, -1 is white won
             next_uf, outcome, done = await server.make_move(action, best_move, is_white)
@@ -545,7 +545,7 @@ async def main() -> None:
         len_buffer = len(buffer)
         for i in [0, 1, len_buffer // 2, len_buffer // 2 + 1, len_buffer - 2, len_buffer - 1]:
             be = buffer[i]
-            state_tensor, state_vector = agent.preprocess_state(be.uf, be.history, be.valid_moves, be.is_white)
+            state_tensor, state_vector = agent.preprocess_state(be.uf, be.history, be.valid_moves, be.is_white, "cpu")
             logits = agent.policy_net(state_tensor, state_vector)
             next_uf = buffer[i + 1].uf if i + 1 < len_buffer else None
             next_next_uf = buffer[i + 2].uf if i + 2 < len_buffer else None
