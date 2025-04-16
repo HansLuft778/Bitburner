@@ -534,9 +534,11 @@ class AlphaZeroAgent:
         if np.array_equal(uf.state, history[0]):
             passes[0] = 1
 
-        for past_idx in range(min(self.num_past_steps, len(history)) - 1):
+        for past_idx in range(min(self.num_past_steps, len(history))):
             # pass move
-            if np.array_equal(history[past_idx], history[past_idx + 1]):
+            if past_idx < min(self.num_past_steps, len(history)) and np.array_equal(
+                history[past_idx], history[past_idx + 1]
+            ):
                 passes[past_idx + 1] = 1
 
             past_step = torch.as_tensor(history[past_idx], device=device)
