@@ -505,8 +505,9 @@ async def main() -> None:
 
         assert outcome != 0, "outcome should not be 0 after a game ended"
 
-        mcts.agent.plotter.update_wins_white(1 if outcome == -1 else -1)
-        mcts.agent.plotter.update_wins_black(1 if outcome == 1 else -1)
+        mcts.agent.plotter.update_wins_white(1 if outcome == -1 else -1, draw=False)
+        mcts.agent.plotter.update_wins_black(1 if outcome == 1 else -1, draw=False)
+        mcts.agent.plotter.draw_and_flush()
 
         mcts.agent.policy_net.train()
 
