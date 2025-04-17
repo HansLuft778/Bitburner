@@ -660,7 +660,7 @@ class AlphaZeroAgent:
 
         # 3. feed states trough NN
         # logits shape [B, 26], values shape [B, 1] (assuming your net does that)
-        logits_own, logits_opp, outcome_logits, ownership_logits, score_logits = self.policy_net(
+        logits_own, logits_opp, outcome_logits, ownership_logits, score_logits, v_pooled = self.policy_net(
             state_batch, game_info_vec_batch
         )
 
@@ -689,7 +689,7 @@ class AlphaZeroAgent:
         ## score loss preparation
         score_onehot = torch.zeros((self.batch_size, NUM_POSSIBLE_SCORES), device=self.device)
         for i in range(self.batch_size):
-            score_idx = int(NUM_POSSIBLE_SCORES / 2) + torch.floor(score_batch[i])
+            score_idx = NUM_POSSIBLE_SCORES // 2 + torch.floor(score_batch[i])
             score_onehot[i, int(score_idx)] = 1.0
 
         # calculate losses
@@ -712,9 +712,12 @@ class AlphaZeroAgent:
         variance_s = torch.sum(((self.possible_scores - mu_s) ** 2) * score_probs, dim=1, keepdim=True)  # shape [B, 1]
         sigma_s = torch.sqrt(variance_s + epsilon).squeeze(1)  # epsilon in case variance_s is 0
 
-        mu_s_squeezed = mu_s.squeeze(1)
-        score_mean_loss = F.huber_loss(mu_hat, mu_s_squeezed, delta=10.0) * 0.004
+        score_mean_loss = F.huber_loss(mu_hat, mu_s.squeeze(1), delta=10.0) * 0.004
         score_std_loss = F.huber_loss(sigma_hat, sigma_s, delta=10.0) * 0.004
+
+        gamma_intermediate = F.relu(self.policy_net.score_head.scale_fc1(v_pooled))
+        gamma = self.policy_net.score_head.scale_fc2(gamma_intermediate)
+        score_scaling_penalty = 0.0005 * (gamma**2).mean()
 
         loss = (
             policy_loss_own
@@ -725,6 +728,7 @@ class AlphaZeroAgent:
             + score_cdf_loss
             + score_mean_loss
             + score_std_loss
+            + score_scaling_penalty
         )
 
         self.plotter.update_loss(loss.item(), draw=False)
