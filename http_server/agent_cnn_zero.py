@@ -542,7 +542,7 @@ class AlphaZeroAgent:
 
         for past_idx in range(min(self.num_past_steps, len(history))):
             # pass move
-            if past_idx < min(self.num_past_steps, len(history)) and np.array_equal(
+            if past_idx < min(self.num_past_steps, len(history)) - 1 and np.array_equal(
                 history[past_idx], history[past_idx + 1]
             ):
                 passes[past_idx + 1] = 1
