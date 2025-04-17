@@ -702,11 +702,11 @@ class AlphaZeroAgent:
 
         ownership_loss = -(o_target_flat * torch.log(ownership_hat_flat)).sum(dim=1).mean() * 0.06
 
-        score_pdf_loss = -(score_onehot * score_log_probs).sum(dim=1).mean() * 0.1
+        score_pdf_loss = -(score_onehot * score_log_probs).sum(dim=1).mean() * 0.02
 
         target_cdf = torch.cumsum(score_onehot, dim=1)  # shape [B, num_possible_scores]
         predicted_cdf = torch.cumsum(score_probs, dim=1)  # shape [B, num_possible_scores]
-        score_cdf_loss = torch.mean(torch.sum((target_cdf - predicted_cdf) ** 2, dim=1)) * 0.1
+        score_cdf_loss = torch.mean(torch.sum((target_cdf - predicted_cdf) ** 2, dim=1)) * 0.02
 
         mu_s = torch.sum(self.possible_scores * score_probs, dim=1, keepdim=True)  # shape [B, 1]
         variance_s = torch.sum(((self.possible_scores - mu_s) ** 2) * score_probs, dim=1, keepdim=True)  # shape [B, 1]
