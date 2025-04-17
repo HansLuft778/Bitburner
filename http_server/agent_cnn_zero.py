@@ -19,14 +19,17 @@ NUM_POSSIBLE_SCORES = int(30.5 * 2 + 1)
 
 
 class GlobalPoolingBias(nn.Module):
-    def __init__(self, channels_g: int, channels_x: int):
+    def __init__(self, channels_g: int, channels_x: int, board_width: int):
         super().__init__()  # pyright: ignore
-        # Pooling layer for G (mean + max)
-        pooled_g_features = 2 * channels_g
+        # Pooling layer for G (mean / linear / max)
+        pooled_g_features = 3 * channels_g  # TODO: make variable
         # Linear layer to transform pooled G into channel biases for X
         self.fc_bias = nn.Linear(pooled_g_features, channels_x)
         # Batch norm and ReLU applied *before* pooling G, as per Fig 2
         self.bn_g = nn.BatchNorm2d(channels_g)
+
+        self.board_width = board_width
+        self.b_avg = 0.5 * (self.board_width + self.board_width)
 
     def forward(self, x: torch.Tensor, g: torch.Tensor):
         # x is the tensor to be biased (P in policy head) - shape [B, Cx, H, W]
@@ -37,8 +40,9 @@ class GlobalPoolingBias(nn.Module):
 
         # Pool processed G
         g_mean = g_processed.mean(dim=(2, 3))  # [B, Cg]
+        g_mean_linear = g_mean * ((self.board_width - self.b_avg) / 10)  # [B, Cg]
         g_max = g_processed.amax(dim=(2, 3))  # [B, Cg]
-        g_pooled = torch.cat([g_mean, g_max], dim=1)  # [B, 2*Cg]
+        g_pooled = torch.cat([g_mean, g_mean_linear, g_max], dim=1)  # [B, 2*Cg]
 
         # Compute channel biases from pooled G
         channel_biases = self.fc_bias(g_pooled)  # [B, Cx]
@@ -59,14 +63,16 @@ class PolicyHead(nn.Module):
         self.conv_g = nn.Conv2d(num_hidden, policy_head_channels, kernel_size=1)
 
         # Global Pooling Bias structure
-        self.global_bias = GlobalPoolingBias(channels_g=policy_head_channels, channels_x=policy_head_channels)
+        self.global_bias = GlobalPoolingBias(
+            channels_g=policy_head_channels, channels_x=policy_head_channels, board_width=5
+        )
 
         # Layers after bias addition (applied to biased P)
         self.bn_p = nn.BatchNorm2d(policy_head_channels)
         self.final_conv = nn.Conv2d(policy_head_channels, 2, kernel_size=1)
 
         # Linear layer for pass logits (operates on pooled G)
-        pooled_g_features = 2 * policy_head_channels
+        pooled_g_features = 3 * policy_head_channels  # TODO: make variable
         self.pass_logit_fc = nn.Linear(pooled_g_features, 2)
 
     def forward(self, x: torch.Tensor):
@@ -144,10 +150,12 @@ class ResNet(nn.Module):
     def __init__(
         self,
         num_past_steps: int,
-        num_res_blocks: int = 2,
-        num_hidden: int = 32,
+        num_res_blocks: int,
+        num_pooling_blocks: int,
+        num_hidden: int,
     ) -> None:
         super().__init__()  # pyright: ignore
+
         self.initialConvBlock = nn.Sequential(
             nn.Conv2d(
                 in_channels=1  # disabled nodes
@@ -163,29 +171,40 @@ class ResNet(nn.Module):
             nn.ReLU(),
         )
 
+        # game info vector input
         vector_feature_size = num_past_steps  # Which of the previous moves were pass
         self.vector_processor = nn.Linear(vector_feature_size, num_hidden)
 
-        self.feature_extractor = nn.ModuleList([ResBlock(num_hidden) for _ in range(num_res_blocks)])
+        # spatial game data input
+        self.feature_extractor = nn.ModuleList()
+        indices = np.linspace(1, num_res_blocks - 2, num_pooling_blocks, dtype=int)
+        print(f"Using global pooling in ResBlocks at indices: {list(indices)}")
+
+        for i in range(num_res_blocks):
+            if i in indices:
+                self.feature_extractor.append(ResBlockGlobal(num_hidden, num_pool_channels=32))
+            else:
+                self.feature_extractor.append(ResBlock(num_hidden))  # Your original ResBlock
+
+        # --- Final Layer before Heads ---
         self.final_bn = nn.BatchNorm2d(num_hidden)
 
-        # --- policy head ---
+        # --- Policy head ---
         self.policy_head = PolicyHead(num_hidden, policy_head_channels=32)
 
-        # --- value head base ---
-        value_base_channels = 16
+        # --- Value head base ---
+        value_base_channels = 48
         self.vh_init_conv = nn.Conv2d(num_hidden, value_base_channels, kernel_size=1)
         # self.vh_global_pooling = GlobalPoolingBias(16, 16)
 
-        pooled_features_dim = 3 * value_base_channels  # mean + mean_linear + mean_quadratic
-
-        # --- value sub heads ---
-        value_head_intermediate_channels = 32
+        # --- Value sub heads ---
+        pooled_features_dim = 3 * value_base_channels  # mean / mean_linear / max # + mean_quadratic
+        value_head_intermediate_channels = 48
 
         self.game_outcome_head = nn.Sequential(
             nn.Linear(pooled_features_dim, value_head_intermediate_channels),
             nn.ReLU(),
-            nn.Linear(value_head_intermediate_channels, 4),
+            nn.Linear(value_head_intermediate_channels, 4),  # win / lose / score mean / score std dev
         )
 
         # output shape [B, 1, board_width, board_height]
@@ -199,7 +218,7 @@ class ResNet(nn.Module):
 
     def forward(
         self, x: torch.Tensor, x_vector: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         # x shape: [B, 1, board_width, board_height]
         # x_vector shape: [B, 5]
 
@@ -218,23 +237,23 @@ class ResNet(nn.Module):
         own_policy_logits, opp_policy_logits = self.policy_head(x)  # shape [B, 2, w, h]
 
         # value head
-        b_avg = 0.5 * 5
-        variance = (5 - b_avg) ** 2  # / 1 # only one board size for now, so there is no sum over different sizes
+        b_avg = 0.5 * (5 + 5)
+        # variance = (5 - b_avg) ** 2  # / 1 # only one board size for now, so there is no sum over different sizes
 
         v_base = self.vh_init_conv(x)  # shape [B, 16, w, h]
         v_mean = v_base.mean(dim=(2, 3))
-        v_mean_linear = v_base.mean(dim=(2, 3)) * ((5 - b_avg) / 10)  # shape [B, 16]
-        # v_max = v_base.amax(dim=(2, 3))  # shape [B, 16]
-        v_mean_quadratic = v_base.mean(dim=(2, 3)) * (((5 - b_avg) ** 2 - variance) / 100)  # shape [B, 16]
-        v_pooled = torch.cat([v_mean, v_mean_linear, v_mean_quadratic], dim=1)  # shape [B, 32]
+        v_mean_linear = v_base.mean(dim=(2, 3)) * ((5 - b_avg) / 10.0)  # shape [B, 16]
+        v_max = v_base.amax(dim=(2, 3))  # shape [B, 16]
+        # v_mean_quadratic = v_base.mean(dim=(2, 3)) * (((5 - b_avg) ** 2 - variance) / 100)  # shape [B, 16]
+        v_pooled = torch.cat([v_mean, v_mean_linear, v_max], dim=1)  # shape [B, 32]
 
         # --- game outcome head ---
         game_outcome_logits = self.game_outcome_head(v_pooled)  # shape [B, 4]
         outcome_distribution = torch.softmax(game_outcome_logits[:, 0:2], dim=1)  # shape [B, 2]
-        score_difference = game_outcome_logits[:, 2:3] * 20  # shape [B, 1]
+        score_mean = game_outcome_logits[:, 2:3] * 20  # shape [B, 1]
         score_std = F.softplus(game_outcome_logits[:, 3:4]) * 20  # shape [B, 1]
 
-        game_outcome = torch.cat([outcome_distribution, score_difference, score_std], dim=1)  # shape [B, 4]
+        game_outcome = torch.cat([outcome_distribution, score_mean, score_std], dim=1)  # shape [B, 4]
 
         # --- ownership head ---
         ownership_logits = self.ownership_head(x)  # shape [B, 1, board_width, board_height]
@@ -242,7 +261,7 @@ class ResNet(nn.Module):
         # --- score head ---
         score_logits = self.score_head(v_pooled)  # shape [B, num_possible_scores (-27.5, 27.5)]
 
-        return (own_policy_logits, opp_policy_logits, game_outcome, ownership_logits, score_logits)
+        return (own_policy_logits, opp_policy_logits, game_outcome, ownership_logits, score_logits, v_pooled)
 
     def forward_mcts_eval(self, x: torch.Tensor, x_vector: torch.Tensor):
         spatial_features = self.initialConvBlock(x)
@@ -259,12 +278,13 @@ class ResNet(nn.Module):
 
         # Compute Value Head Base and Game Outcome Head
         b_avg = 0.5 * 5
-        variance = (5 - b_avg) ** 2  # / 1 # only one board size for now, so there is no sum over different sizes
+        # variance = (5 - b_avg) ** 2  # / 1 # only one board size for now, so there is no sum over different sizes
         v_base = self.vh_init_conv(x)  # shape [B, 16, w, h]
         v_mean = v_base.mean(dim=(2, 3))
         v_mean_linear = v_base.mean(dim=(2, 3)) * ((5 - b_avg) / 10)  # shape [B, 16]
-        v_mean_quadratic = v_base.mean(dim=(2, 3)) * (((5 - b_avg) ** 2 - variance) / 100)  # shape [B, 16]
-        v_pooled = torch.cat([v_mean, v_mean_linear, v_mean_quadratic], dim=1)  # shape [B, 32]
+        v_max = v_base.amax(dim=(2, 3))  # shape [B, 16]
+        # v_mean_quadratic = v_base.mean(dim=(2, 3)) * (((5 - b_avg) ** 2 - variance) / 100)  # shape [B, 16]
+        v_pooled = torch.cat([v_mean, v_mean_linear, v_max], dim=1)  # shape [B, 32]
         game_outcome_head_output = self.game_outcome_head(v_pooled)
 
         outcome_distribution = torch.softmax(game_outcome_head_output[:, 0:2], dim=1)  # shape [B, 2]
@@ -287,6 +307,43 @@ class ResBlock(nn.Module):
         x = self.conv2(F.relu(self.bn2(x)))
         x += residual
         return x
+
+
+class ResBlockGlobal(nn.Module):
+    def __init__(self, num_hidden: int, num_pool_channels: int):
+        super().__init__()  # pyright: ignore
+        assert num_pool_channels > 0 and num_pool_channels < num_hidden
+
+        self.num_hidden = num_hidden
+        self.num_pool_channels = num_pool_channels
+        self.num_bias_channels = num_hidden - num_pool_channels
+
+        self.bn1 = nn.BatchNorm2d(num_hidden)
+        self.conv1 = nn.Conv2d(num_hidden, num_hidden, kernel_size=3, padding=1, bias=False)
+
+        self.global_bias = GlobalPoolingBias(
+            channels_g=self.num_pool_channels, channels_x=self.num_bias_channels, board_width=5
+        )
+
+        self.bn2 = nn.BatchNorm2d(num_hidden)
+        self.conv2 = nn.Conv2d(num_hidden, num_hidden, kernel_size=3, padding=1, bias=False)
+
+    def forward(self, x: torch.Tensor):
+        residual = x
+
+        intermediate = self.conv1(F.relu(self.bn1(x)))
+
+        g_channels = intermediate[:, : self.num_pool_channels, :, :]  # [B, C_pool, H, W]
+        x_channels_to_bias = intermediate[:, self.num_pool_channels :, :, :]  # [B, C_bias, H, W]
+
+        x_biased, _ = self.global_bias(x_channels_to_bias, g_channels)  # [B, C_bias, H, W]
+
+        intermediate_biased = torch.cat([g_channels, x_biased], dim=1)  # [B, C_hidden, H, W]
+
+        out = self.conv2(F.relu(self.bn2(intermediate_biased)))  # [B, C_hidden, H, W]
+        out += residual
+
+        return out
 
 
 class GroupIdx(IntEnum):
@@ -320,7 +377,12 @@ class AlphaZeroAgent:
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        self.policy_net = ResNet(num_past_steps, num_res_blocks=6, num_hidden=96).to(self.device)
+        self.policy_net = ResNet(
+            num_past_steps=num_past_steps,
+            num_res_blocks=6,
+            num_hidden=96,
+            num_pooling_blocks=2,
+        ).to(self.device)
         self.policy_net.eval()
 
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr, weight_decay=wheight_decay)
