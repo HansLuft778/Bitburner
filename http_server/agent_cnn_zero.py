@@ -149,17 +149,16 @@ class ResNet(nn.Module):
     ) -> None:
         super().__init__()  # pyright: ignore
 
+        self.num_input_channels = (
+            1  # disabled nodes
+            + 2  # current player, opponent
+            + 3  # liberties
+            + 1  # KO moves
+            + num_past_steps  # past moves, one-hot encoded
+        )
+
         self.initialConvBlock = nn.Sequential(
-            nn.Conv2d(
-                in_channels=1  # disabled nodes
-                + 2  # current player, opponent
-                + 3  # liberties
-                + 1  # KO moves 7+8=15
-                + num_past_steps * 2,  # past moves
-                out_channels=num_hidden,
-                kernel_size=3,
-                padding=1,
-            ),
+            nn.Conv2d(in_channels=self.num_input_channels, out_channels=num_hidden, kernel_size=3, padding=1),
             nn.BatchNorm2d(num_hidden),
             nn.ReLU(),
         )
@@ -347,7 +346,7 @@ class AlphaZeroAgent:
         plotter: Plotter,
         lr: float = 3e-4,
         batch_size: int = 128,
-        num_past_steps: int = 4,
+        num_past_steps: int = 5,
         wheight_decay: float = 2e-4,
         checkpoint_dir: str = "models/checkpoints",
     ):
@@ -355,12 +354,12 @@ class AlphaZeroAgent:
         self.board_height = board_width
         self.plotter = plotter
         self.batch_size = batch_size
+        self.checkpoint_dir = checkpoint_dir
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
         self.num_past_steps = num_past_steps
         # plus one for pass move evaluation, the difference between the past steps is checked. For n past steps, need to check n+1 boards
         self.history_length = num_past_steps + 1
-        self.checkpoint_dir = checkpoint_dir
-
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.policy_net = ResNet(
             num_past_steps=num_past_steps,
@@ -371,7 +370,6 @@ class AlphaZeroAgent:
         self.policy_net.eval()
 
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr, weight_decay=wheight_decay)
-
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=4000, eta_min=1e-5)
 
         self.train_buffer = TrainingBuffer()
@@ -526,10 +524,6 @@ class AlphaZeroAgent:
     ):
         """
         Convert the board (numpy array) into a float tensor of shape [1,8,w,h].
-        1 -> 1.0  Black
-        2 -> 1.0  White
-        3 -> 1.0  Channel 0
-        0 -> 0.0  (Empty)
 
         Channels:
         0: disabled
@@ -538,16 +532,16 @@ class AlphaZeroAgent:
         3: has one liberty
         4: has two liberties
         5: has three liberties
-        6: KO moves
+        6: KO illegal moves
 
         History:
-        4: current past moves
-        5: opponent past moves
-        6: ...
+        7: histroy action one-hot encoded at t-1
+        8: histroy action one-hot encoded at t-2
+        9: ...
         ...
         """
 
-        num_channels = 7 + 2 * (self.num_past_steps)
+        num_channels = 7 + self.num_past_steps
         spacial_data_tensor = torch.zeros((1, num_channels, self.board_width, self.board_width), device=device)
         board_tensor = torch.as_tensor(uf.state, device=device)
 
@@ -582,36 +576,38 @@ class AlphaZeroAgent:
 
         # process history from most recent to oldest
         passes = np.zeros(self.num_past_steps, dtype=np.int8)
-        # check if most recent state resulted from a pass move
-        # if (uf.state == history[0]).all():
+        num_non_history_channels = self.policy_net.num_input_channels - self.num_past_steps
+
+        # process t and t-1
         if np.array_equal(uf.state, history[0]):
             passes[0] = 1
+        else:
+            diff = history[0] - uf.state
+            placed_mask = diff < 0
+            spacial_data_tensor[0, num_non_history_channels][placed_mask] = 1
 
-        for past_idx in range(min(self.num_past_steps, len(history))):
-            # pass move
-            if past_idx < min(self.num_past_steps, len(history)) - 1 and np.array_equal(
-                history[past_idx], history[past_idx + 1]
-            ):
-                passes[past_idx + 1] = 1
+        # process history from t-1 to t-k
+        for history_idx in range(1, min(self.num_past_steps, len(history))):
+            if np.array_equal(history[history_idx - 1], history[history_idx]):
+                passes[history_idx] = 1
+                # pass at this location cannot have move, skip histroy check
+                continue
 
-            past_step = torch.as_tensor(history[past_idx], device=device)
-            if is_white:
-                spacial_data_tensor[0, 7 + past_idx * 2] = (past_step == 2).float()  # white
-                spacial_data_tensor[0, 8 + past_idx * 2] = (past_step == 1).float()  # black
-            else:
-                spacial_data_tensor[0, 7 + past_idx * 2] = (past_step == 1).float()  # black
-                spacial_data_tensor[0, 8 + past_idx * 2] = (past_step == 2).float()  # black
+            # values < 1 are placed stones, values > 1 are captured stones, equal to 0 are no change
+            diff = history[history_idx] - history[history_idx - 1]
+            placed_mask = diff < 0
+            spacial_data_tensor[0, num_non_history_channels + history_idx][placed_mask] = 1
 
         # build game data vector
         game_data_vector = torch.as_tensor(passes, device=self.device).unsqueeze(0).float()  # shape [1, num_pass]
 
         return spacial_data_tensor.to(self.device), game_data_vector
 
-    def deprocess_state(self, state: torch.Tensor, is_white: bool) -> State:
+    def deprocess_state(self, state: torch.Tensor, is_white: bool) -> torch.Tensor:
         """
         Deprocess the state tensor into a numpy array.
         """
-        new_state = np.zeros((5, 5), dtype=np.int8)
+        new_state = torch.zeros((5, 5), dtype=torch.int8, device=state.device)
         new_state[state[0] == 1] = 3  # disabled stones
         if is_white:
             new_state[state[1] == 1] = 2  # own stones
