@@ -44,7 +44,7 @@ class TreePlot:
             idx = len(self.nodes)
             self.nodes.append(node)
             self.labels.append(
-                f"win: {node.win_sum}<br>visit: {node.visit_cnt}<br>white: {node.is_white}<br>{rotate_and_beatify(node.uf.state)}"
+                f"win util: {node.win_utility}<br>score util: {node.score_utility}<br>visit: {node.visit_cnt}<br>white: {node.is_white}<br>{rotate_and_beatify(node.uf.state)}"
             )
             if parent_idx is not None:
                 self.edges.append((parent_idx, idx))
