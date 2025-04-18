@@ -522,8 +522,6 @@ async def main() -> None:
         mcts.agent.plotter.update_wins_black(1 if outcome == 1 else -1, draw=False)
         mcts.agent.plotter.draw_and_flush()
 
-        mcts.agent.policy_net.train()
-
         ownership_mask = np.zeros((board_size, board_size), dtype=np.int8)
         black_territory = np.zeros((board_size, board_size), dtype=np.int8)
         black_stones = np.zeros((board_size, board_size), dtype=np.int8)
@@ -590,6 +588,7 @@ async def main() -> None:
             print("Skipping training")
             continue
 
+        mcts.agent.policy_net.train()
         train_steps = 15
         print(f"Game length: {episode_length}, performing {train_steps} training steps")
         for _ in range(train_steps):
