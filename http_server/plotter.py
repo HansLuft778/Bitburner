@@ -5,12 +5,35 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import math
+import os
+from zipfile import ZipFile
 
 from Go.Go_uf import UnionFind
-from Buffer import BufferElement
 from gameserver_local_uf import GameServerGo
 
 NUM_POSSIBLE_SCORES = int(30.5 * 2 + 1)
+
+
+def cleanup_out_folder(out_folder: str):
+    """Zips every png file from the out folder into a zip and removes them from the folder.
+    Args:
+        out_folder (str): Absolute path to the folder containing the png files.
+    """
+    content = os.listdir(out_folder)
+
+    zips = [f for f in content if f.endswith(".zip")]
+    run_id = (
+        int(max(zips, key=lambda x: int(x.split("_")[1].split(".")[0])).split("_")[1].split(".")[0]) if zips else -1
+    )
+
+    images = [f for f in content if f.endswith(".png")]
+
+    zip_path = os.path.join(out_folder, f"run_{run_id + 1}.zip")
+    with ZipFile(zip_path, "w") as myzip:
+        for img in images:
+            full_path = os.path.join(out_folder, img)
+            myzip.write(full_path, arcname=img)
+            os.remove(full_path)
 
 
 class Plot:
@@ -89,6 +112,7 @@ class Plotter:
         """Draw and flush all plot updates at once"""
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
+        plt.tight_layout()
 
     # Legacy methods for backward compatibility
     def update_wins_black(self, new_reward: float, draw=True):
@@ -129,7 +153,7 @@ class ModelOverlay:
             current_backend = plt.get_backend()
             plt.switch_backend("Agg")
 
-        pi, pi_opp, game_outcome_tensor, ownership, score_logits = model_output
+        pi, pi_opp, game_outcome_tensor, ownership, score_logits, v_pooled = model_output
 
         win_prob_pred = game_outcome_tensor[0][0].item()
         mu_score = game_outcome_tensor[0][2].item()
