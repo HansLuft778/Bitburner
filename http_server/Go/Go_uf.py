@@ -768,9 +768,6 @@ class Go_uf:
     ) -> np.ndarray[Any, np.dtype[np.bool_]]:
         player = 2 if is_white else 1
 
-        # if len(history) == 0:
-        #     history = self.hash_history
-
         legal_moves: np.ndarray[Any, np.dtype[np.bool_]] = np.zeros_like(uf.state, dtype=bool)
         empty_mask = uf.state == 0
         empty_positions = np.where(empty_mask)

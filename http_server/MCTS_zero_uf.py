@@ -66,10 +66,9 @@ class Node:
         agent: AlphaZeroAgent,
         parent: Union["Node", None] = None,
         action: int | None = None,
-        prior: float = 0,
+        prior: float = 0.0,
         visit_count: int = 0,
     ):
-        # self.state = state
         self.uf: UnionFind = uf
         self.parent = parent
         self.action = action
@@ -201,9 +200,11 @@ class Node:
         assert best[0] is not None
         return best[0]
 
-    def expand(self, q_values: torch.Tensor) -> None:
+    def expand(self, policy: torch.Tensor) -> None:
+        assert self.policy is not None, "Policy must be predicted before expansion"
+
         board_size = self.agent.board_width * self.agent.board_height
-        policy_cpu: np.ndarray[Any, np.dtype[np.float32]] = q_values.cpu().numpy()  # type: ignore
+        policy_cpu: np.ndarray[Any, np.dtype[np.float32]] = policy.cpu().numpy()  # type: ignore
         for action in range(board_size + 1):
             if action == board_size:
                 next_uf = self.uf.copy()
