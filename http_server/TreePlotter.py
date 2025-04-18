@@ -1,10 +1,13 @@
 import plotly.graph_objects as go  # type: ignore
 from igraph import EdgeSeq, Graph  # type: ignore
+from typing import TYPE_CHECKING, Any
+import numpy as np
 
-# from MCTS_zero import Node
+if TYPE_CHECKING:
+    from MCTS_zero_uf import Node
 
 
-def rotate_state(state: list[str]) -> list[str]:
+def rotate_state(state: np.ndarray[Any, np.dtype[np.int8]]) -> list[str]:
     rotated_state: list[str] = []
 
     for i in range(len(state)):
@@ -17,7 +20,7 @@ def rotate_state(state: list[str]) -> list[str]:
     return rotated_state
 
 
-def beatify_state(state: list[str], delim="<br>") -> str:
+def beatify_state(state: list[str], delim: str = "<br>") -> str:
     beautified_state: str = ""
     for i in range(len(state)):
         for j in range(len(state)):
@@ -26,20 +29,21 @@ def beatify_state(state: list[str], delim="<br>") -> str:
     return beautified_state
 
 
-def rotate_and_beatify(state: list[str], delim: str = "<br>") -> str:
+def rotate_and_beatify(state: np.ndarray[Any, np.dtype[np.int8]], delim: str = "<br>") -> str:
     return beatify_state(rotate_state(state), delim)
 
 
 class TreePlot:
-    def __init__(self, root):
+    def __init__(self, root: Node):
         self.root = root
-        self.nodes = []
-        self.edges = []
-        self.labels = []
+        self.nodes: list[Node] = []
+        self.edges: list[tuple[int, int]] = []
+        self.labels: list[str] = []
 
     def create_tree(self):
         num_nodes = 1
-        def traverse(node, parent_idx=None):
+
+        def traverse(node: Node, parent_idx: int | None = None):
             nonlocal num_nodes
             idx = len(self.nodes)
             self.nodes.append(node)
@@ -58,20 +62,20 @@ class TreePlot:
 
     def create_plot(self):
         G = Graph(edges=self.edges, directed=True)
-        lay = G.layout_reingold_tilford(root=[0], mode="out")
+        lay = G.layout_reingold_tilford(root=[0], mode="out")  # type: ignore
         # Convert positions to Plotly points
         Xn, Yn, Xe, Ye = [], [], [], []
-        for i, pos in enumerate(lay):
-            Xn.append(pos[0])
-            Yn.append(pos[1])
+        for i, pos in enumerate(lay):  # type: ignore
+            Xn.append(pos[0])  # type: ignore
+            Yn.append(pos[1])  # type: ignore
 
-        for e in G.es:
-            Xe += [lay[e.source][0], lay[e.target][0], None]
-            Ye += [lay[e.source][1], lay[e.target][1], None]
+        for e in G.es:  # type: ignore
+            Xe += [lay[e.source][0], lay[e.target][0], None]  # type: ignore
+            Ye += [lay[e.source][1], lay[e.target][1], None]  # type: ignore
 
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=Xe, y=Ye, mode="lines"))
-        fig.add_trace(
+        fig.add_trace(go.Scatter(x=Xe, y=Ye, mode="lines"))  # type: ignore
+        fig.add_trace(  # type: ignore
             go.Scatter(
                 x=Xn,
                 y=Yn,
@@ -88,17 +92,5 @@ class TreePlot:
                 ),
             )
         )
-        fig.update_yaxes(autorange="reversed")
-        fig.show()
-
-
-# if __name__ == "__main__":
-#     root = Node()
-#     child1 = Node(root)
-#     child2 = Node(root)
-#     root.children = [child1, child2]
-#     grandchild = Node(child1)
-#     child1.children = [grandchild]
-
-#     tp = TreePlot(root)
-#     tp.create_tree()
+        fig.update_yaxes(autorange="reversed")  # type: ignore
+        fig.show()  # type: ignore
