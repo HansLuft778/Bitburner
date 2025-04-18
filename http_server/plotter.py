@@ -27,6 +27,8 @@ def cleanup_out_folder(out_folder: str):
     )
 
     images = [f for f in content if f.endswith(".png")]
+    if len(images) == 0:
+        return
 
     zip_path = os.path.join(out_folder, f"run_{run_id + 1}.zip")
     with ZipFile(zip_path, "w") as myzip:
