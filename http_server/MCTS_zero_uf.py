@@ -11,9 +11,11 @@ from Go.Go_uf import Go_uf, UnionFind
 from plotter import Plotter, ModelOverlay, cleanup_out_folder  # type: ignore
 from TreePlotter import TreePlot  # pyright: ignore
 from Buffer import BufferElement
+from LookupTable import LookupTable
 
 C_PUCT = 1.8
 NUM_EPISODES = 1000
+C_SCORE = 0.5
 
 
 def get_puct_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) -> float:
@@ -25,7 +27,7 @@ def get_puct_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) 
     if child.visit_cnt == 0:
         q_value = 0.0
     else:
-        q_value = -(child.win_sum / child.visit_cnt)
+        q_value = -(child.utility_sum / child.visit_cnt)
     u_value = c_puct * child.prior * parent_visit_count**0.5 / (1 + child.visit_cnt)
     return q_value + u_value
 
@@ -80,12 +82,17 @@ class Node:
 
         self.children: list[Node] = []
         self.policy: torch.Tensor | None = None
-        self.value: float | None = None
+
+        self.win_utility: float | None = None
+        self.score_utility: float | None = None
+
+        self.mu_s: float | None = None
+        self.sigma_s: float | None = None
 
         self.done: bool | None = None
 
         self.visit_cnt = visit_count
-        self.win_sum = 0.0
+        self.utility_sum = 0.0
 
     def is_fully_expanded(self):
         # enough to check for childs > 0 since we expand to all possible states at once
@@ -93,51 +100,68 @@ class Node:
 
     def get_valid_moves(self) -> np.ndarray[Any, np.dtype[np.bool_]]:
         if self.valid_moves is None:
-            if self.parent is not None:
-                history = self.get_hash_history()
-                self.valid_moves = self.server.request_valid_moves(self.is_white, self.uf, history)
-            else:
-                self.valid_moves = self.server.request_valid_moves(self.is_white, self.uf)
+            history_hashes = self.get_hash_history()
+            self.valid_moves = self.server.request_valid_moves(self.is_white, self.uf, history_hashes)
         return self.valid_moves
 
-    # returns score based on current node
-    def get_score(self) -> float:
+    def get_predictions(self, table: LookupTable, x_0: float) -> tuple[torch.Tensor, float, float, float]:
+        if self.policy is None:
+            assert self.mu_s is None and self.sigma_s is None and not self.done
+            history_states = self.get_history_ref()
+            history_states.extend(self.server.get_game_history())
+            valid_moves = self.get_valid_moves()
+            policy, value, mu, sigma = self.agent.predict_eval(self.uf, history_states, valid_moves, self.is_white)
+
+            self.policy = policy
+            self.win_utility = value
+            self.mu_s = mu
+            self.sigma_s = sigma
+
+            self.score_utility = table.get_expected_uscore(mu=mu, sigma=sigma, x_0=x_0).item()
+
+        assert self.win_utility is not None and self.mu_s is not None and self.sigma_s is not None
+        return self.policy, self.win_utility, self.mu_s, self.sigma_s
+
+    def get_win_utility(self, score_white: float, score_black: float) -> float:
+        outcome = 1.0 if score_black > score_white else -1.0
+        return -outcome if self.is_white else outcome
+
+    def get_score_utility(self, score_white: float, score_black: float, c_score: float) -> float:
+        score_diff = (score_white - score_black) if self.is_white else (score_black - score_white)
+        return c_score * ((2 / np.pi) * np.arctan(score_diff / self.server.go.board_width))
+
+    def get_utility(self) -> tuple[float, float]:
         score: dict[str, dict[str, float]] = self.server.get_score(self.uf)
         score_white = score["white"]["sum"]
         score_black = score["black"]["sum"]
-        diff = score_white - score_black
 
-        # normalize score, so
-        max_score = self.agent.board_width * self.agent.board_height
-        normalized = diff / max_score
+        u_win = self.get_win_utility(score_white, score_black)
+        u_score = self.get_score_utility(score_white, score_black, C_SCORE)
 
-        return normalized if self.is_white else -normalized
+        return u_win, u_score
 
-    def has_game_ended(self) -> tuple[bool, float]:
+    def has_game_ended(self) -> bool:
         board_size = self.agent.board_width * self.agent.board_height
         # both pass back-to-back
-        if (
-            self.action
-            and self.parent
-            and self.parent.action
-            and self.action == board_size
-            and self.parent.action == board_size
-        ):
-            return (True, self.get_score())
+        if self.action == board_size and self.parent is not None and self.parent.action == board_size:
+            return True
+
+        # # board full (technically not needed?)
+        # space_available = np.any(self.uf.state == 0)
+        # if not space_available:
+        #     return True
 
         # one pass, next player has no valid moves
-        if self.parent:
-            valid_moves = np.sum(self.get_valid_moves())
-            if self.parent.action == board_size and valid_moves == 0:
-                print(f"node.parent.action: {self.parent.action}, valid_moves: {valid_moves}")
-                return (True, self.get_score())
+        if self.parent is not None and self.parent.action == board_size:
+            if self.valid_moves is not None:
+                has_valid = np.any(self.valid_moves)
+            else:
+                history_hashes = self.get_hash_history()
+                has_valid = self.server.go.has_any_valid_moves(self.uf, self.is_white, history_hashes)
+            if not has_valid:
+                return True
 
-        # board full
-        space_available = np.any(self.uf.state == 0)
-        if not space_available:
-            return (True, self.get_score())
-
-        return (False, 0)
+        return False
 
     def get_history_ref(self) -> list[State]:
         history: list[State] = []
@@ -210,21 +234,17 @@ class Node:
 
     def backprop(self, score: float):
         self.visit_cnt += 1
-        self.win_sum += score
+        self.utility_sum += score
 
         if self.parent:
             self.parent.backprop(-score)
 
 
 class MCTS:
-    def __init__(
-        self,
-        server: GameServerGo,
-        agent: AlphaZeroAgent,
-        search_iterations: int,
-    ):
+    def __init__(self, server: GameServerGo, agent: AlphaZeroAgent, search_iterations: int, table: LookupTable):
         self.search_iterations = search_iterations
         self.server = server
+        self.table = table
 
         self.agent = agent
         self.timing_stats: defaultdict[str, float] = defaultdict(float)
@@ -244,9 +264,15 @@ class MCTS:
         self.iterations_stats.clear()
         search_start = time.time()
 
+        self.root.get_predictions(self.table, 0.0)
+        x_0 = self.root.mu_s
+        assert self.root.mu_s is not None and self.root.sigma_s is not None and x_0 is not None
+        self.root.score_utility = self.table.get_expected_uscore(self.root.mu_s, self.root.sigma_s, x_0).item()
+
         for iter in range(self.search_iterations):  # type: ignore
             node = self.root
-            # selection
+
+            # selection with forced playouts
             select_start = time.time()
             while node.is_fully_expanded():
                 next_node = None
@@ -268,25 +294,20 @@ class MCTS:
             # expansion
             end_check_start = time.time()
             if node.done is None:
-                node.done, node.value = node.has_game_ended()
-            assert node.value is not None, "Value should not be None"
-            value = node.value
+                node.done = node.has_game_ended()
+            assert node.done is not None
 
-            self.timing_stats["end_check"] += time.time() - end_check_start
-
-            if not node.done:
-                prep_start = time.time()
-                valid_moves = node.get_valid_moves()
-                history = node.get_history_ref()
-                history.extend(self.server.get_game_history())
-                self.timing_stats["move_prep"] += time.time() - prep_start
+            if node.done:
+                node.win_utility, node.score_utility = node.get_utility()
+                assert node.win_utility is not None and node.score_utility is not None, "Values should not be None"
+                self.timing_stats["end_check"] += time.time() - end_check_start
+            else:
+                self.timing_stats["end_check"] += time.time() - end_check_start
 
                 inference_start = time.time()
                 if node.policy is None:
-                    raw_logits, raw_value = self.agent.get_actions_eval(node.uf, history, valid_moves, node.is_white)
-                    valid_mask = torch.tensor(valid_moves, device=self.agent.device, dtype=torch.bool)
-                    raw_logits[~valid_mask] = -1e9
-                    final_probs = torch.softmax(raw_logits, dim=0)
+                    # This sets leaf_node.win_utility and leaf_node.score_utility
+                    final_probs, _, _, _ = node.get_predictions(self.table, x_0)
 
                     # Apply dirichlet noise
                     if node.parent is None and not eval_mode:
@@ -299,17 +320,17 @@ class MCTS:
                         # Renormalize
                         final_probs = final_probs / torch.sum(final_probs)
                     node.policy = final_probs
-                    node.value = raw_value
 
                 policy = node.policy
-                assert node.value is not None, "Value should not be None"
-                value = node.value
+                assert node.win_utility is not None and node.score_utility is not None, "Values should not be None"
 
                 self.timing_stats["nn_inference"] += time.time() - inference_start
                 self.iterations_stats["nn_inference"] += 1
 
                 if iter == 0:
-                    print(f"Value estimate: {value:.3f} (from {'white' if node.is_white else 'black'}'s perspective)")
+                    print(
+                        f"Value estimate: {node.win_utility:.3f} (from {'white' if node.is_white else 'black'}'s perspective)"
+                    )
 
                 expand_start = time.time()
                 node.expand(policy)
@@ -317,8 +338,10 @@ class MCTS:
 
             # backpropagation
             backprop_start = time.time()
-            node.backprop(value)
+            assert node.win_utility is not None and node.score_utility is not None
+            node.backprop(node.win_utility + node.score_utility)
             self.timing_stats["backprop"] += time.time() - backprop_start
+
             # plot tree from root node for debugging
             # if iter == 999:
             #     TreePlot(self.root).create_tree()
@@ -340,7 +363,7 @@ class MCTS:
                 continue
 
             n_orig = float(c.visit_cnt)
-            wins = c.win_sum
+            wins = c.utility_sum
             prior = c.prior
 
             # set visit count to 0 if c has no visits
@@ -416,8 +439,9 @@ def find_child_index(root_node: Node, chosen_action: int) -> int:
 async def main() -> None:
     # torch.manual_seed(0)  # pyright: ignore
     # np.random.seed(0)
-
     board_size = 5
+    table = LookupTable(board_size, C_SCORE)
+
     server = GameServerGo(board_size)
     await server.wait()
     print("GameServer ready and client connected")
@@ -460,7 +484,7 @@ async def main() -> None:
 
     agent = AlphaZeroAgent(board_size, plotter)
     # agent.load_checkpoint("checkpoint_55.pth")
-    mcts = MCTS(server, agent, search_iterations=1000)
+    mcts = MCTS(server, agent, search_iterations=1000, table=table)
 
     print("Done! Starting MCTS...")
 
@@ -597,8 +621,8 @@ async def main() -> None:
 
 
 async def main_eval():
-
     board_size = 5
+    table = LookupTable(board_size, C_SCORE)
     server = GameServerGo(board_size)
     await server.wait()
     print("GameServer ready and client connected")
@@ -606,7 +630,7 @@ async def main_eval():
     plotter = Plotter()
     agent = AlphaZeroAgent(board_size, plotter, checkpoint_dir="models")
     agent.load_checkpoint("checkpoint_129_katago_v1.pth")
-    mcts = MCTS(server, agent, search_iterations=1000)
+    mcts = MCTS(server, agent, search_iterations=1000, table=table)
 
     plotter.add_plot(  # type: ignore
         "cumulative_reward_black",

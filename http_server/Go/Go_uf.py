@@ -788,6 +788,32 @@ class Go_uf:
 
         return legal_moves
 
+    def has_any_valid_moves(
+        self,
+        uf: UnionFind,
+        is_white: bool,
+        history: list[np.uint64] = [],
+    ) -> bool:
+        player = 2 if is_white else 1
+
+        legal_moves: np.ndarray[Any, np.dtype[np.bool_]] = np.zeros_like(uf.state, dtype=bool)
+        empty_mask = uf.state == 0
+        empty_positions = np.where(empty_mask)
+        for x, y in zip(empty_positions[0], empty_positions[1]):
+            action = self.encode_action(int(x), int(y))
+            is_legal, undo = self.simulate_move(
+                uf,
+                action,
+                player,
+                history,
+            )
+            if is_legal:  # only needs to undo if legal, since illegal moves are not persisted
+                uf.undo_move_changes(undo, self.zobrist)
+                legal_moves[x][y] = True
+                return True
+
+        return False
+
     def has_game_ended(
         self,
         action: int,
