@@ -274,8 +274,10 @@ class ResNet(nn.Module):
         game_outcome_head_output = self.game_outcome_head(v_pooled)
 
         outcome_distribution = torch.softmax(game_outcome_head_output[:, 0:2], dim=1)  # shape [B, 2]
+        mu = game_outcome_head_output[:, 2:3] * 20  # shape [B, 1]
+        sigma = F.softplus(game_outcome_head_output[:, 3:4]) * 20
 
-        return own_policy_logits, outcome_distribution[:, 0:1].item()
+        return own_policy_logits, outcome_distribution, mu, sigma
 
 
 class ResBlock(nn.Module):
@@ -626,8 +628,33 @@ class AlphaZeroAgent:
         valid_moves: np.ndarray[Any, np.dtype[np.bool_]],
         color_is_white: bool,
     ) -> tuple[torch.Tensor, float]:
-        """
-        Select action deterministically for evaluation (no exploration).
+        valid_moves_reshaped = valid_moves[:-1].reshape((self.board_width, self.board_height))
+        state_tensor, game_data_vector = self.preprocess_state(
+            uf, game_history, valid_moves_reshaped, color_is_white, "cpu"
+        )
+
+        # Get logits
+        policy, outcome, _, _ = self.policy_net.forward_mcts_eval(state_tensor, game_data_vector)
+        return policy.squeeze(0), outcome.item()
+
+    @torch.no_grad()  # pyright: ignore
+    def predict_eval(
+        self,
+        uf: UnionFind,
+        game_history: list[State],
+        valid_moves: np.ndarray[Any, np.dtype[np.bool_]],
+        color_is_white: bool,
+    ) -> tuple[torch.Tensor, float, float, float]:
+        """Given a nodes data, predict the policy and value.
+
+        Args:
+            uf (UnionFind)
+            game_history (list[State]): History of the entire game, most recent move at index 0.
+            valid_moves (np.ndarray[Any, np.dtype[np.bool_]]): Flat numpy array of valid moves, including pass move.
+            color_is_white (bool)
+
+        Returns:
+            tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
         """
         valid_moves_reshaped = valid_moves[:-1].reshape((self.board_width, self.board_height))
         state_tensor, game_data_vector = self.preprocess_state(
@@ -635,8 +662,14 @@ class AlphaZeroAgent:
         )
 
         # Get logits
-        policy, outcome = self.policy_net.forward_mcts_eval(state_tensor, game_data_vector)
-        return policy.squeeze(0), outcome
+        policy_logits, outcome, mu, sigma = self.policy_net.forward_mcts_eval(state_tensor, game_data_vector)
+        policy_logits_squeezed = policy_logits.squeeze()
+        # mask invalid moves and convert to probabilities
+        valid_mask = torch.tensor(valid_moves.squeeze(), device=self.device, dtype=torch.bool)
+        policy_logits_squeezed[~valid_mask] = -1e9
+        final_probs = torch.softmax(policy_logits_squeezed, dim=0)
+
+        return final_probs, outcome.squeeze()[0].item(), mu.item(), sigma.item()
 
     def decode_action(self, action_idx: int) -> tuple[int, int]:
         """
