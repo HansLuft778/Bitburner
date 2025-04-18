@@ -565,8 +565,8 @@ class AlphaZeroAgent:
             spacial_data_tensor[0, 1] = (board_tensor == 2).float()  # white
             spacial_data_tensor[0, 2] = (board_tensor == 1).float()  # black
         else:
-            spacial_data_tensor[0, 2] = (board_tensor == 1).float()  # black
-            spacial_data_tensor[0, 1] = (board_tensor == 2).float()  # white
+            spacial_data_tensor[0, 1] = (board_tensor == 1).float()  # black
+            spacial_data_tensor[0, 2] = (board_tensor == 2).float()  # white
 
         spacial_data_tensor[0, 3] = (liberty_counts == 1).float()  # has one liberty
         spacial_data_tensor[0, 4] = (liberty_counts == 2).float()  # has two liberties
@@ -579,24 +579,25 @@ class AlphaZeroAgent:
         num_non_history_channels = self.policy_net.num_input_channels - self.num_past_steps
 
         # process t and t-1
-        if np.array_equal(uf.state, history[0]):
-            passes[0] = 1
-        else:
-            diff = history[0] - uf.state
-            placed_mask = diff < 0
-            spacial_data_tensor[0, num_non_history_channels][placed_mask] = 1
+        if len(history) > 0:
+            if np.array_equal(uf.state, history[0]):
+                passes[0] = 1
+            else:
+                diff = history[0] - uf.state
+                placed_mask = diff < 0
+                spacial_data_tensor[0, num_non_history_channels][placed_mask] = 1
 
-        # process history from t-1 to t-k
-        for history_idx in range(1, min(self.num_past_steps, len(history))):
-            if np.array_equal(history[history_idx - 1], history[history_idx]):
-                passes[history_idx] = 1
-                # pass at this location cannot have move, skip histroy check
-                continue
+            # process history from t-1 to t-k
+            for history_idx in range(1, min(self.num_past_steps, len(history))):
+                if np.array_equal(history[history_idx - 1], history[history_idx]):
+                    passes[history_idx] = 1
+                    # pass at this location cannot have move, skip histroy check
+                    continue
 
-            # values < 1 are placed stones, values > 1 are captured stones, equal to 0 are no change
-            diff = history[history_idx] - history[history_idx - 1]
-            placed_mask = diff < 0
-            spacial_data_tensor[0, num_non_history_channels + history_idx][placed_mask] = 1
+                # values < 1 are placed stones, values > 1 are captured stones, equal to 0 are no change
+                diff = history[history_idx] - history[history_idx - 1]
+                placed_mask = diff < 0
+                spacial_data_tensor[0, num_non_history_channels + history_idx][placed_mask] = 1
 
         # build game data vector
         game_data_vector = torch.as_tensor(passes, device=self.device).unsqueeze(0).float()  # shape [1, num_pass]
@@ -670,7 +671,7 @@ class AlphaZeroAgent:
             uf = UnionFind.get_uf_from_state(current_group[:, :, GroupIdx.STATE].cpu().numpy(), None)
             valid_moves = current_group[:, :, GroupIdx.VALID_MOVES].cpu().numpy()
             history = current_group[:, :, GroupIdx.HISTORY :]
-            history_list = [history[:, :, j] for j in range(self.history_length)]
+            history_list = [history[:, :, j].cpu().numpy() for j in range(self.history_length)]
 
             valid_moves = np.array(valid_moves, dtype=np.bool_)
             t, v = self.preprocess_state(uf, history_list, valid_moves, is_white_list[i], device="cuda")

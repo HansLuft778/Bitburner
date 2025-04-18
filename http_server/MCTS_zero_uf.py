@@ -141,25 +141,31 @@ class Node:
 
     def get_history_ref(self) -> list[State]:
         history: list[State] = []
-        current = self
+        if self.parent is None:
+            return history
+
+        current = self.parent
         while current:
             history.append(current.uf.state)
             if current.parent is not None:
                 current = current.parent
             else:
                 break
-        return history[::-1]  # Reverse for chronological order
+        return history
 
     def get_hash_history(self) -> list[np.uint64]:
         history: list[np.uint64] = []
-        current = self
+        if self.parent is None:
+            return history
+
+        current = self.parent
         while current:
             history.append(current.uf.hash)
             if current.parent is not None:
                 current = current.parent
             else:
                 break
-        return history[::-1]  # Reverse for chronological order
+        return history
 
     def next(self) -> "Node":
         best: tuple[Node | None, float] = (None, -99999)
@@ -315,7 +321,7 @@ class MCTS:
             self.timing_stats["backprop"] += time.time() - backprop_start
             # plot tree from root node for debugging
             # if iter == 999:
-            #     TreePlot(root).create_tree()
+            #     TreePlot(self.root).create_tree()
 
         # calculate final policy distribution
         final_policy_start = time.time()
