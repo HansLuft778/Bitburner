@@ -743,13 +743,13 @@ class Go_uf:
         assert uf_after_move is not None, "Illegal move"
         game_ended = self.has_game_ended(action, is_white, self.uf)
 
-        self.uf = uf_after_move
-        self.current_player = 3 - self.current_player
-
         # update history and prev action
         self.history.append(self.uf.state.copy())
         self.hash_history.append(self.uf.hash)
         self.previous_action = action
+
+        self.uf = uf_after_move
+        self.current_player = 3 - self.current_player
 
         # outcome is 1 black won, -1 white won, 0 not ended
         outcome = 0
@@ -812,7 +812,7 @@ class Go_uf:
         return False
 
     def get_history(self) -> list[State]:
-        return self.history
+        return self.history[::-1]
 
     def get_hash_history(self) -> list[np.uint64]:
         return self.hash_history
