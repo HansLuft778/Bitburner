@@ -8,7 +8,7 @@ import torch
 from agent_cnn_zero import AlphaZeroAgent, State
 from gameserver_local_uf import GameServerGo
 from Go.Go_uf import Go_uf, UnionFind
-from plotter import Plotter, ModelOverlay  # type: ignore
+from plotter import Plotter, ModelOverlay, cleanup_out_folder  # type: ignore
 from TreePlotter import TreePlot  # pyright: ignore
 from Buffer import BufferElement
 
@@ -421,7 +421,10 @@ async def main() -> None:
     server = GameServerGo(board_size)
     await server.wait()
     print("GameServer ready and client connected")
+    print("initializing MCTS...")
+
     plotter = Plotter(4, 3)
+    cleanup_out_folder("D:/AProgramming/Bitburner/bb-external-editor/http_server/out")
     plotter.add_plot(  # type: ignore
         "cumulative_reward_black",
         plotter.axes[0, 0],  # type: ignore
@@ -438,6 +441,8 @@ async def main() -> None:
         "Cumulative Wins",
         label="White",
     )
+    plotter.update_wins_black(0, draw=False)
+    plotter.update_wins_white(0, draw=False)
     plotter.add_plot("loss", plotter.axes[0, 1], "Training Loss Over Time", "Updates", "Loss")  # type: ignore
     plotter.add_plot("depth", plotter.axes[0, 2], "MCTS Depth", "Iteration", "Depth", label="tree depth")  # type: ignore
     plotter.add_plot("episode_length", plotter.axes[0, 2], "Episode Length", "Iteration", "Length", label="episode length")  # type: ignore
@@ -454,8 +459,10 @@ async def main() -> None:
     plotter.add_plot("score_std_loss", plotter.axes[3, 2], "Score Std Dev Loss Over Time", "Updates", "Score Std Dev Loss")  # type: ignore
 
     agent = AlphaZeroAgent(board_size, plotter)
-    # agent.load_checkpoint("checkpoint_126.pth")
+    # agent.load_checkpoint("checkpoint_55.pth")
     mcts = MCTS(server, agent, search_iterations=1000)
+
+    print("Done! Starting MCTS...")
 
     outcome = 0
     for iter in range(NUM_EPISODES):
@@ -548,9 +555,12 @@ async def main() -> None:
         white_score = np.count_nonzero(white_stones) + np.count_nonzero(white_territory) + komi
         score = black_score - white_score  # black leads with
 
+        print("saving model overlay...")
         mo = ModelOverlay()
         len_buffer = len(buffer)
-        for i in [0, 1, len_buffer // 2, len_buffer // 2 + 1, len_buffer - 2, len_buffer - 1]:
+        buffer_indices = [0, 1, len_buffer // 2, len_buffer // 2 + 1, len_buffer - 2, len_buffer - 1]
+        # buffer_indices = range(len_buffer)  # for testing
+        for i in buffer_indices:
             be = buffer[i]
             state_tensor, state_vector = agent.preprocess_state(be.uf, be.history, be.valid_moves, be.is_white, "cpu")
             logits = agent.policy_net(state_tensor, state_vector)
@@ -567,6 +577,7 @@ async def main() -> None:
                 True,
                 f"model_overlay_ep_{iter}_{i}.png",
             )
+        print("done!")
 
         for be in buffer:
             # Flip if the outcome from neutrals perspective to players perspective
