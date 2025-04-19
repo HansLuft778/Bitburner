@@ -199,12 +199,16 @@ class ModelOverlay:
         ax[0][1].plot(predicted_cdf.detach().cpu().numpy(), label="Predicted CDF")
         ax[0][1].plot(target_cdf.numpy(), label="Target CDF")
         ax[0][1].set_title("score CDF prediction")
+        ax[0][1].legend()
 
         # score pdf plot
         ax[1][1].bar(
             self.possible_scores, score_probs.detach().cpu().numpy(), label="Predicted PDF", alpha=0.5, width=0.8
         )
+
+        ax[1][1].vline(mu_score, (0, max(score_probs).item()), "red", "dashed", label=r"$\mu$")
         ax[1][1].set_title("score PDF prediction")
+        ax[1][1].legend()
 
         pi_props = torch.softmax(pi.squeeze(), dim=0).detach().cpu().squeeze().numpy()
         pi_opp_props = torch.softmax(pi_opp.squeeze(), dim=0).detach().cpu().squeeze().numpy()
