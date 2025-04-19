@@ -53,7 +53,7 @@ class GameServerGo:
         history: list[np.uint64] = [],
     ) -> np.ndarray[Any, np.dtype[np.bool_]]:
         v = self.go.get_valid_moves(uf, is_white, history)
-        return np.append(v, True)
+        return v
 
     async def make_move(self, action: tuple[int, int], action_idx: int, is_white: bool) -> tuple[UnionFind, int, bool]:
         # make move in bitburner
