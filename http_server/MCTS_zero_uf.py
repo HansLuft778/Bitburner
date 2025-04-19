@@ -105,7 +105,7 @@ class Node:
 
     def get_predictions(self, table: LookupTable, x_0: float) -> tuple[torch.Tensor, float, float, float]:
         if self.policy is None:
-            assert self.mu_s is None and self.sigma_s is None and not self.done
+            assert self.mu_s is None and self.sigma_s is None
             history_states = self.get_history_ref()
             history_states.extend(self.server.get_game_history())
             valid_moves = self.get_valid_moves()
@@ -349,6 +349,34 @@ class MCTS:
 
         # calculate final policy distribution
         final_policy_start = time.time()
+
+        # Handles case where the root is terminal / no expansion occurred
+        if not self.root.children or len(self.root.children) == 0:
+            print("WARNING: MCTS root has no children after search. Likely a terminal state. Returning uniform policy.")
+
+            # return policy based purely on root's NN eval if available, else uniform
+            if self.root.policy is not None:
+                props = self.root.policy.clone()
+            else:  # Need a fallback if NN wasn't even run
+                props = torch.ones(
+                    self.agent.board_height * self.agent.board_height + 1,
+                    device=self.agent.device,
+                    dtype=torch.float32,
+                ) / (self.agent.board_height * self.agent.board_height + 1)
+
+            self.timing_stats["final_policy"] += time.time() - final_policy_start
+            total_time = time.time() - search_start
+            self.timing_stats["total"] = total_time
+
+            print("\nMCTS Timing Statistics:")
+            print(f"Total search time: {total_time:.3f}s")
+            for key, val in self.timing_stats.items():
+                if key != "total":
+                    percentage = (val / total_time) * 100
+                    avg_time = val / float(self.iterations_stats.get(key, self.search_iterations))
+                    print(f"{key}: {val:.3f}s ({percentage:.1f}%) - Avg: {avg_time*1000:.2f}ms")
+
+            return props
 
         # policy target pruning
         c_star = max(self.root.children, key=lambda c: c.visit_cnt)
