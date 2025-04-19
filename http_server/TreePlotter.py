@@ -1,4 +1,4 @@
-import plotly.graph_objects as go  # type: ignore
+import plotly.graph_objects as go
 from igraph import EdgeSeq, Graph  # type: ignore
 from typing import TYPE_CHECKING, Any
 import numpy as np
@@ -34,16 +34,16 @@ def rotate_and_beatify(state: np.ndarray[Any, np.dtype[np.int8]], delim: str = "
 
 
 class TreePlot:
-    def __init__(self, root: Node):
+    def __init__(self, root: "Node"):
         self.root = root
-        self.nodes: list[Node] = []
+        self.nodes: list["Node"] = []
         self.edges: list[tuple[int, int]] = []
         self.labels: list[str] = []
 
     def create_tree(self):
         num_nodes = 1
 
-        def traverse(node: Node, parent_idx: int | None = None):
+        def traverse(node: "Node", parent_idx: int | None = None):
             nonlocal num_nodes
             idx = len(self.nodes)
             self.nodes.append(node)
@@ -77,8 +77,8 @@ class TreePlot:
         fig.add_trace(go.Scatter(x=Xe, y=Ye, mode="lines"))  # type: ignore
         fig.add_trace(  # type: ignore
             go.Scatter(
-                x=Xn,
-                y=Yn,
+                x=Xn,  # type: ignore
+                y=Yn,  # type: ignore
                 mode="markers",
                 text=self.labels,
                 hoverinfo="text",
@@ -92,5 +92,6 @@ class TreePlot:
                 ),
             )
         )
-        fig.update_yaxes(autorange="reversed")  # type: ignore
-        fig.show()  # type: ignore
+        fig.update_yaxes(autorange="reversed")
+        # fig.show()
+        fig.write_html(f"out/plot{1}.html")  # type: ignore
