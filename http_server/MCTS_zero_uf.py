@@ -254,7 +254,10 @@ class MCTS:
 
     @torch.no_grad()  # pyright: ignore
     def search(self, uf: UnionFind, is_white: bool, best_move: int, eval_mode: bool = False) -> torch.Tensor:
-        if best_move == -1:
+        search_init_start = time.time()
+        if best_move == -1 or (
+            best_move == self.agent.board_width * self.agent.board_width and len(self.root.children) == 0
+        ):
             self.root = Node(uf, self.server, is_white, self.agent)
         else:
             child_idx = find_child_index(self.root, best_move)
@@ -263,13 +266,14 @@ class MCTS:
 
         self.timing_stats.clear()
         self.iterations_stats.clear()
-        search_start = time.time()
 
         self.root.get_predictions(self.table, 0.0)
         x_0 = self.root.mu_s
         assert self.root.mu_s is not None and self.root.sigma_s is not None and x_0 is not None
         self.root.score_utility = self.table.get_expected_uscore(self.root.mu_s, self.root.sigma_s, x_0).item()
 
+        self.timing_stats["search_init"] += time.time() - search_init_start
+        search_start = time.time()
         for iter in range(self.search_iterations):  # type: ignore
             node = self.root
 
