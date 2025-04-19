@@ -112,7 +112,7 @@ class Node:
             policy, value, mu, sigma = self.agent.predict_eval(self.uf, history_states, valid_moves, self.is_white)
 
             self.policy = policy
-            self.win_utility = value
+            self.win_utility = value * 2 - 1
             self.mu_s = mu
             self.sigma_s = sigma
 
@@ -125,17 +125,17 @@ class Node:
         outcome = 1.0 if score_black > score_white else -1.0
         return -outcome if self.is_white else outcome
 
-    def get_score_utility(self, score_white: float, score_black: float, c_score: float) -> float:
+    def get_score_utility(self, score_white: float, score_black: float, x_0: float, c_score: float) -> float:
         score_diff = (score_white - score_black) if self.is_white else (score_black - score_white)
-        return c_score * ((2 / np.pi) * np.arctan(score_diff / self.server.go.board_width))
+        return c_score * ((2 / np.pi) * np.arctan((score_diff - x_0) / self.server.go.board_width))
 
-    def get_utility(self) -> tuple[float, float]:
+    def get_utility(self, x_0: float) -> tuple[float, float]:
         score: dict[str, dict[str, float]] = self.server.get_score(self.uf)
         score_white = score["white"]["sum"]
         score_black = score["black"]["sum"]
 
         u_win = self.get_win_utility(score_white, score_black)
-        u_score = self.get_score_utility(score_white, score_black, C_SCORE)
+        u_score = self.get_score_utility(score_white, score_black, x_0, C_SCORE)
 
         return u_win, u_score
 
@@ -299,13 +299,13 @@ class MCTS:
             assert node.done is not None
 
             if node.done:
-                node.win_utility, node.score_utility = node.get_utility()
+                node.win_utility, node.score_utility = node.get_utility(x_0)
                 assert node.win_utility is not None and node.score_utility is not None, "Values should not be None"
                 self.timing_stats["end_check"] += time.time() - end_check_start
             else:
                 self.timing_stats["end_check"] += time.time() - end_check_start
-
                 inference_start = time.time()
+
                 if node.policy is None:
                     # This sets leaf_node.win_utility and leaf_node.score_utility
                     final_probs, _, _, _ = node.get_predictions(self.table, x_0)
