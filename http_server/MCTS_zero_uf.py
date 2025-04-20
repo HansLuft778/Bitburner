@@ -13,7 +13,7 @@ from TreePlotter import TreePlot  # pyright: ignore
 from Buffer import BufferElement
 from LookupTable import LookupTable
 
-C_PUCT = 1.8
+C_PUCT = 1.1
 NUM_EPISODES = 1000
 C_SCORE = 0.5
 
@@ -112,7 +112,7 @@ class Node:
             policy, value, mu, sigma = self.agent.predict_eval(self.uf, history_states, valid_moves, self.is_white)
 
             self.policy = policy
-            self.win_utility = value * 2 - 1
+            self.win_utility = value * 2.0 - 1.0
             self.mu_s = mu
             self.sigma_s = sigma
 
