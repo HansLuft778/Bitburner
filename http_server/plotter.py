@@ -206,7 +206,7 @@ class ModelOverlay:
             self.possible_scores, score_probs.detach().cpu().numpy(), label="Predicted PDF", alpha=0.5, width=0.8
         )
 
-        ax[1][1].vline(mu_score, (0, max(score_probs).item()), "red", "dashed", label=r"$\mu$")
+        ax[1][1].vlines(mu_score, 0, max(score_probs).item(), "red", "dashed", label=r"$\mu$")
         ax[1][1].set_title("score PDF prediction")
         ax[1][1].legend()
 
