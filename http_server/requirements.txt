@@ -7,3 +7,6 @@ torchvision==0.21.0+cu126
 websockets==14.2
 scipy
 numpy
+plotly-stubs
+scipy-stubs
+scikit-learn  

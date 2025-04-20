@@ -12,7 +12,7 @@ class LookupTable:
         self.board_width = board_width
         self.c_score = c_score
 
-        max_sigma = 24
+        max_sigma = 30
         min_mu = -30.5
         max_mu = 30.5
         max_p1 = (min_mu - max_mu) / board_width
@@ -28,7 +28,7 @@ class LookupTable:
         self.create_table()
         print("Table precomputation done!")
 
-        self.interpolator = RegularGridInterpolator((self.p1_range, self.p2_range), self.table, bounds_error=False)
+        self.interpolator = RegularGridInterpolator((self.p1_range, self.p2_range), self.table)
 
     def _u_score_normalized(
         self, x: np.ndarray[Any, np.dtype[np.float32]], p1: float, p2: float, c_score: float

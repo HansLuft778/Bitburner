@@ -145,3 +145,4 @@ checkpoints/
 __pycache__/
 
 *.pth
+*.ipynb

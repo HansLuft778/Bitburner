@@ -182,8 +182,8 @@ class UnionFind:
                 )
                 # place: 0 -> 1, revert means, remove 1
                 # capture: 1 -> 0, revert means, add 1
-                self.hash = zobrist.update_hash(self.hash, action.position, self.state[x][y], action.value)
-                self.state[x][y] = action.value
+                self.hash = zobrist.update_hash(self.hash, action.position, self.state[x, y], action.value)
+                self.state[x, y] = action.value
             else:
                 # Let the UF handle other undo actions
                 if action.action_type == UndoActionType.SET_PARENT:
@@ -217,27 +217,27 @@ class UnionFind:
         for x in range(width):
             for y in range(width):
                 idx = x * width + y
-                if state[x][y] == 3:
+                if state[x, y] == 3:
                     continue
-                if state[x][y] == 0:
+                if state[x, y] == 0:
                     # check if the empty cell is a liberty
                     for dx, dy in [(0, -1), (-1, 0)]:
                         nx, ny = x + dx, y + dy
                         if 0 <= nx < width and 0 <= ny < width:
                             nidx = nx * width + ny
-                            if state[nx][ny] in (1, 2):
+                            if state[nx, ny] in (1, 2):
                                 n_root = uf.find(nidx)
                                 add_stone_to_group(liberties, n_root, idx)
                     continue
 
                 parent[idx] = idx
-                colors[idx] = state[x][y]
+                colors[idx] = state[x, y]
                 stones[idx] = 0
                 add_stone_to_group(stones, idx, idx)
                 liberties[idx] = 0
                 rank[idx] = 0
 
-                color = state[x][y]
+                color = state[x, y]
                 enemy = 3 - color
                 idx_root = idx
                 for dx, dy in [(0, -1), (-1, 0)]:
@@ -245,7 +245,7 @@ class UnionFind:
                     if 0 <= nx < width and 0 <= ny < width:
                         nidx = nx * width + ny
                         # neighbor is empty
-                        if state[nx][ny] == 0:
+                        if state[nx, ny] == 0:
                             add_stone_to_group(liberties, idx_root, nidx)
                         # neighbor is same color
                         elif colors[nidx] == color:
@@ -362,13 +362,13 @@ class Go_uf:
         for i, row_str in enumerate(state):
             for j, char in enumerate(row_str):
                 if char == ".":
-                    transformed[i][j] = 0
+                    transformed[i, j] = 0
                 elif char == "X":
-                    transformed[i][j] = 1
+                    transformed[i, j] = 1
                 elif char == "O":
-                    transformed[i][j] = 2
+                    transformed[i, j] = 2
                 elif char == "#":
-                    transformed[i][j] = 3
+                    transformed[i, j] = 3
         return transformed
 
     def decode_state(self, state: State) -> list[str]:
@@ -379,7 +379,7 @@ class Go_uf:
         for i in range(state.shape[0]):
             tmp = ""
             for j in range(state.shape[1]):
-                val = state[i][j]
+                val = state[i, j]
                 if val == 0:
                     tmp += "."
                 elif val == 1:
@@ -522,7 +522,7 @@ class Go_uf:
         """
         Returns a set of all liberties the color at (x, y) has and the territory
         """
-        color: int = state[x][y]
+        color: int = state[x, y]
         if color in [0, 3]:
             raise ValueError("Empty Cell or Disabled Cell cannot have liberties")
 
@@ -539,17 +539,17 @@ class Go_uf:
             visited.add((cx, cy))
 
             # If same color -> stone of the group
-            if state[cx][cy] == color:
+            if state[cx, cy] == color:
                 stones.add((cx, cy))
                 # Check neighbors
                 for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
                     nx, ny = cx + dx, cy + dy
                     if 0 <= nx < self.board_width and 0 <= ny < self.board_height:
-                        if state[nx][ny] == color:
+                        if state[nx, ny] == color:
                             if (nx, ny) not in visited:
                                 queue.append((nx, ny))
                         # If its empty (a libery) save it
-                        elif state[nx][ny] == 0:
+                        elif state[nx, ny] == 0:
                             liberties.add((nx, ny))
 
         return liberties, stones
@@ -565,14 +565,14 @@ class Go_uf:
             return True, []
 
         x, y = self.decode_action(action)
-        if uf.state[x][y] != 0:
+        if uf.state[x, y] != 0:
             return False, []
 
         undo_stack: list[UndoAction] = []
 
-        undo_stack.append(UndoAction(UndoActionType.SET_STATE, action, uf.state[x][y]))
+        undo_stack.append(UndoAction(UndoActionType.SET_STATE, action, uf.state[x, y]))
         uf.hash = self.zobrist.add_stone(uf.hash, action, color)
-        uf.state[x][y] = color
+        uf.state[x, y] = color
 
         # color = 1 => enemy = 2; color = 2 => ememy = 1
         enemy = 3 - color
@@ -598,7 +598,7 @@ class Go_uf:
             if 0 <= nx < self.board_width and 0 <= ny < self.board_height:
                 nidx = self.encode_action(nx, ny)
                 # neighbor is empty
-                if uf.state[nx][ny] == 0:
+                if uf.state[nx, ny] == 0:
                     undo_stack.append(UndoAction(UndoActionType.SET_LIBERTIES, action_root, uf.liberties[action_root]))
                     add_stone_to_group(uf.liberties, action_root, nidx)
                 # neighbor is same color
@@ -641,9 +641,9 @@ class Go_uf:
                         for stone in stone_indices:
                             sx, sy = self.decode_action(stone)
                             # Record original state value
-                            undo_stack.append(UndoAction(UndoActionType.SET_STATE, stone, uf.state[sx][sy]))
-                            uf.hash = self.zobrist.remove_stone(uf.hash, stone, uf.state[sx][sy])
-                            uf.state[sx][sy] = 0
+                            undo_stack.append(UndoAction(UndoActionType.SET_STATE, stone, uf.state[sx, sy]))
+                            uf.hash = self.zobrist.remove_stone(uf.hash, stone, uf.state[sx, sy])
+                            uf.state[sx, sy] = 0
 
                             # Record original stone properties
                             undo_stack.append(UndoAction(UndoActionType.SET_COLOR, stone, uf.colors[stone]))
@@ -701,8 +701,8 @@ class Go_uf:
             for y in range(self.board_height):
                 idx = self.encode_action(x, y)
                 root = uf.find_no_compression(idx)
-                if state[x][y] in [1, 2]:  # Stone exists
-                    if uf.colors[idx] != state[x][y]:
+                if state[x, y] in [1, 2]:  # Stone exists
+                    if uf.colors[idx] != state[x, y]:
                         return False
                     elif uf.parent[idx] == -1:
                         return False
@@ -719,7 +719,7 @@ class Go_uf:
         # check parent consistency
         for x in range(self.board_width):
             for y in range(self.board_height):
-                if state[x][y] not in [1, 2]:
+                if state[x, y] not in [1, 2]:
                     continue
                 idx = self.encode_action(x, y)
                 root = uf.find_no_compression(idx)
@@ -769,6 +769,7 @@ class Go_uf:
         player = 2 if is_white else 1
 
         legal_moves: np.ndarray[Any, np.dtype[np.bool_]] = np.zeros_like(uf.state, dtype=bool)
+        # legal_moves: np.ndarray[Any, np.dtype[np.bool_]] = np.zeros(self.board_size + 1, dtype=bool)
         empty_mask = uf.state == 0
         empty_positions = np.where(empty_mask)
         for x, y in zip(empty_positions[0], empty_positions[1]):
@@ -781,7 +782,7 @@ class Go_uf:
             )
             if is_legal:  # only needs to undo if legal, since illegal moves are not persisted
                 uf.undo_move_changes(undo, self.zobrist)
-                legal_moves[x][y] = True
+                legal_moves[x, y] = True
 
         return legal_moves
 
@@ -793,7 +794,6 @@ class Go_uf:
     ) -> bool:
         player = 2 if is_white else 1
 
-        legal_moves: np.ndarray[Any, np.dtype[np.bool_]] = np.zeros_like(uf.state, dtype=bool)
         empty_mask = uf.state == 0
         empty_positions = np.where(empty_mask)
         for x, y in zip(empty_positions[0], empty_positions[1]):
@@ -806,7 +806,6 @@ class Go_uf:
             )
             if is_legal:  # only needs to undo if legal, since illegal moves are not persisted
                 uf.undo_move_changes(undo, self.zobrist)
-                legal_moves[x][y] = True
                 return True
 
         return False
@@ -821,16 +820,19 @@ class Go_uf:
         # double pass
         if self.previous_action == action == self.board_width * self.board_height:
             return True
+        
+        # technically, passing is always legal, so these two are not needed? 
+        # when the board is full, you can still pass
 
         # previous pass, current has no valid moves
-        valid = self.get_valid_moves(uf, is_white, additional_history)
-        if self.previous_action == self.board_width * self.board_height and np.sum(valid) == 0:
-            return True
+        # valid = self.get_valid_moves(uf, is_white, additional_history)
+        # if self.previous_action == self.board_width * self.board_height and np.count_nonzero(valid) == 0:
+        #     return True
 
-        # board is full
-        has_empty_node = np.any(uf.state == 0)
-        if has_empty_node:
-            return False
+        # # board is full
+        # has_empty_node = np.any(uf.state == 0)
+        # if has_empty_node:
+        #     return False
 
         return False
 
