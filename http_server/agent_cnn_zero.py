@@ -372,7 +372,7 @@ class AlphaZeroAgent:
         self.policy_net.eval()
 
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=lr, weight_decay=wheight_decay)
-        self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=4000, eta_min=1e-5)
+        self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, T_max=10000, eta_min=1e-5)
 
         self.train_buffer = TrainingBuffer()
 
