@@ -196,8 +196,8 @@ class ModelOverlay:
         score_probs = F.softmax(score_logits.squeeze(), dim=0)
         predicted_cdf: torch.Tensor = torch.cumsum(score_probs, dim=0)
 
-        ax[0][1].plot(predicted_cdf.detach().cpu().numpy(), label="Predicted CDF")
-        ax[0][1].plot(target_cdf.numpy(), label="Target CDF")
+        ax[0][1].plot(self.possible_scores, predicted_cdf.detach().cpu().numpy(), label="Predicted CDF")
+        ax[0][1].plot(self.possible_scores, target_cdf.numpy(), label="Target CDF")
         ax[0][1].set_title("score CDF prediction")
         ax[0][1].legend()
 
