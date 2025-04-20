@@ -145,20 +145,23 @@ class Node:
         if self.action == board_size and self.parent is not None and self.parent.action == board_size:
             return True
 
+        # technically, passing is always legal, so these two are not needed?
+        # when the board is full, you can still pass
+
         # # board full (technically not needed?)
         # space_available = np.any(self.uf.state == 0)
         # if not space_available:
         #     return True
 
         # one pass, next player has no valid moves
-        if self.parent is not None and self.parent.action == board_size:
-            if self.valid_moves is not None:
-                has_valid = np.any(self.valid_moves)
-            else:
-                history_hashes = self.get_hash_history()
-                has_valid = self.server.go.has_any_valid_moves(self.uf, self.is_white, history_hashes)
-            if not has_valid:
-                return True
+        # if self.parent is not None and self.parent.action == board_size:
+        #     if self.valid_moves is not None:
+        #         has_valid = np.any(self.valid_moves)
+        #     else:
+        #         history_hashes = self.get_hash_history()
+        #         has_valid = self.server.go.has_any_valid_moves(self.uf, self.is_white, history_hashes)
+        #     if not has_valid:
+        #         return True
 
         return False
 

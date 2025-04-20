@@ -822,16 +822,19 @@ class Go_uf:
         # double pass
         if self.previous_action == action == self.board_width * self.board_height:
             return True
+        
+        # technically, passing is always legal, so these two are not needed? 
+        # when the board is full, you can still pass
 
         # previous pass, current has no valid moves
-        valid = self.get_valid_moves(uf, is_white, additional_history)
-        if self.previous_action == self.board_width * self.board_height and np.sum(valid) == 0:
-            return True
+        # valid = self.get_valid_moves(uf, is_white, additional_history)
+        # if self.previous_action == self.board_width * self.board_height and np.count_nonzero(valid) == 0:
+        #     return True
 
-        # board is full
-        has_empty_node = np.any(uf.state == 0)
-        if has_empty_node:
-            return False
+        # # board is full
+        # has_empty_node = np.any(uf.state == 0)
+        # if has_empty_node:
+        #     return False
 
         return False
 
