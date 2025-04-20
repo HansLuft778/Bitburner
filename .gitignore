@@ -144,5 +144,8 @@ build/
 checkpoints/
 __pycache__/
 
+# custom files
 *.pth
 *.ipynb
+*.pkl
+*.prof
