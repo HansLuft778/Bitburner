@@ -284,18 +284,22 @@ class MCTS:
             # selection with forced playouts
             select_start = time.time()
             while node.is_fully_expanded():
-                next_node = None
-                if node.parent is None:
-                    for c in node.children:
-                        if c.visit_cnt < get_num_forced_playouts(c) and (
-                            next_node is None or c.prior > next_node.prior
-                        ):
-                            next_node = c
-                if next_node is None:
+                if eval_mode:
                     node = node.next()
                     self.max_depth = max(self.max_depth, node.depth)
                 else:
-                    node = next_node
+                    next_node = None
+                    if node.parent is None:
+                        for c in node.children:
+                            if c.visit_cnt < get_num_forced_playouts(c) and (
+                                next_node is None or c.prior > next_node.prior
+                            ):
+                                next_node = c
+                    if next_node is None:
+                        node = node.next()
+                        self.max_depth = max(self.max_depth, node.depth)
+                    else:
+                        node = next_node
 
             self.timing_stats["selection"] += time.time() - select_start
             self.iterations_stats["selection"] += 1
@@ -358,19 +362,14 @@ class MCTS:
         # calculate final policy distribution
         final_policy_start = time.time()
 
-        # Handles case where the root is terminal / no expansion occurred
-        if not self.root.children or len(self.root.children) == 0:
-            print("WARNING: MCTS root has no children after search. Likely a terminal state. Returning uniform policy.")
-
-            # return policy based purely on root's NN eval if available, else uniform
-            if self.root.policy is not None:
-                props = self.root.policy.clone()
-            else:  # Need a fallback if NN wasn't even run
-                props = torch.ones(
-                    self.agent.board_height * self.agent.board_height + 1,
-                    device=self.agent.device,
-                    dtype=torch.float32,
-                ) / (self.agent.board_height * self.agent.board_height + 1)
+        if eval_mode:
+            props = torch.zeros(
+                self.agent.board_height * self.agent.board_height + 1,
+                device=self.agent.device,
+                dtype=torch.float32,
+            )
+            for c in self.root.children:
+                props[c.action] = c.visit_cnt
 
             self.timing_stats["final_policy"] += time.time() - final_policy_start
             total_time = time.time() - search_start
