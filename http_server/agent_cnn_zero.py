@@ -447,6 +447,7 @@ class AlphaZeroAgent:
         history = be.history
         valid_moves = be.valid_moves
         was_white = be.is_white
+        full_search = be.full_search
         pi_mcts_opp = be.pi_mcts_response
         assert pi_mcts_opp is not None, "pi_mcts_response must be provided for augmentation."
 
@@ -479,7 +480,7 @@ class AlphaZeroAgent:
                 final_history_list[i], device=self.device
             )
 
-        self.train_buffer.push(pi_mcts, pi_mcts_opp, outcome, was_white, grouped_tensor, score)
+        self.train_buffer.push(pi_mcts, pi_mcts_opp, outcome, was_white, grouped_tensor, score, full_search)
 
         # rotate state
         for rot in range(1, 4):
@@ -491,7 +492,9 @@ class AlphaZeroAgent:
             rotated_pi = torch.cat([rotated_pi_board.flatten(), pi_pass.unsqueeze(0)])
             rotated_opp = torch.cat([rotated_opp_board.flatten(), pi_res_pass.unsqueeze(0)])
 
-            self.train_buffer.push(rotated_pi, rotated_opp, outcome, was_white, rotated_grouped_tensor, score)
+            self.train_buffer.push(
+                rotated_pi, rotated_opp, outcome, was_white, rotated_grouped_tensor, score, full_search
+            )
 
         # mirror state
         mirrored_grouped_tensor = torch.fliplr(grouped_tensor)
@@ -501,7 +504,9 @@ class AlphaZeroAgent:
         mirrored_pi_response_board = torch.fliplr(pi_opp)
         mirrored_pi_response = torch.cat([mirrored_pi_response_board.flatten(), pi_res_pass.unsqueeze(0)])
 
-        self.train_buffer.push(mirrored_pi, mirrored_pi_response, outcome, was_white, mirrored_grouped_tensor, score)
+        self.train_buffer.push(
+            mirrored_pi, mirrored_pi_response, outcome, was_white, mirrored_grouped_tensor, score, full_search
+        )
 
         for rot in range(1, 4):
             mirrored_rotated_group = torch.rot90(mirrored_grouped_tensor, rot)
@@ -513,7 +518,13 @@ class AlphaZeroAgent:
             mirrored_rotated_response = torch.cat([mirrored_rotated_res_board.flatten(), pi_res_pass.unsqueeze(0)])
 
             self.train_buffer.push(
-                mirrored_rotated_pi, mirrored_rotated_response, outcome, was_white, mirrored_rotated_group, score
+                mirrored_rotated_pi,
+                mirrored_rotated_response,
+                outcome,
+                was_white,
+                mirrored_rotated_group,
+                score,
+                full_search,
             )
 
     def preprocess_state(
@@ -693,7 +704,7 @@ class AlphaZeroAgent:
         batch = self.train_buffer.sample(self.batch_size)
 
         # tuple[torch.Tensor, torch.Tensor, int, bool, torch.Tensor]
-        (pi_list, pi_opp_list, z_list, is_white_list, group_list, score_list) = zip(*batch)
+        (pi_list, pi_opp_list, z_list, is_white_list, group_list, score_list, full_search_list) = zip(*batch)
 
         # 2. Convert data into tensors
         state_tensor_list: list[torch.Tensor] = []
@@ -734,6 +745,9 @@ class AlphaZeroAgent:
 
         score_batch = torch.tensor(score_list, device=self.device)  # shape [B]
 
+        full_search_mask = torch.tensor(full_search_list, dtype=torch.bool, device=self.device)  # shape [B]
+        full_search_mask_float = full_search_mask.float()
+
         # 3. feed states trough NN
         # logits shape [B, 26], values shape [B, 1] (assuming your net does that)
         logits_own, logits_opp, outcome_logits, ownership_logits, score_logits, v_pooled = self.policy_net(
@@ -770,8 +784,13 @@ class AlphaZeroAgent:
 
         # calculate losses
         # pi_batch is shape [B, num_actions]
-        policy_loss_own = -(pi_batch * policy_log_probs_own).sum(dim=1).mean()  # cross entropy loss
-        policy_loss_opp = -(pi_opp_batch * policy_log_probs_opp).sum(dim=1).mean() * 0.15  # cross entropy loss
+        num_full_search_samples = torch.clamp(full_search_mask_float.sum(), min=1.0)  # Avoid division by zero
+
+        raw_policy_loss_own = -(pi_batch * policy_log_probs_own).sum(dim=1)  # shape [B]
+        raw_policy_loss_opp = -(pi_opp_batch * policy_log_probs_opp).sum(dim=1)  # shape [B]
+
+        policy_loss_own = (raw_policy_loss_own * full_search_mask).sum() / num_full_search_samples
+        policy_loss_opp = ((raw_policy_loss_opp * full_search_mask).sum() / num_full_search_samples) * 0.15
 
         # game_outcome_value_loss = -(z_batch_transformed * z_hat).sum(dim=1).mean() * 1.5
         game_outcome_value_loss = F.cross_entropy(outcome_logits[:, :2], z_class_indices) * 1.5
