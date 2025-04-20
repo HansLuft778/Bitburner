@@ -270,7 +270,8 @@ class MCTS:
         self.timing_stats.clear()
         self.iterations_stats.clear()
 
-        self.root.get_predictions(self.table, 0.0)
+        if self.root.policy is None:
+            self.root.get_predictions(self.table, 0.0)
         x_0 = self.root.mu_s
         assert self.root.mu_s is not None and self.root.sigma_s is not None and x_0 is not None
         self.root.score_utility = self.table.get_expected_uscore(self.root.mu_s, self.root.sigma_s, x_0).item()
@@ -459,9 +460,12 @@ class MCTS:
         return props
 
 
-def choose_action(pi: torch.Tensor, episode_length: int) -> int:
+def choose_action_temperature(pi: torch.Tensor, episode_length: int, temperature: float = 0.8) -> int:
     if episode_length < 4:
-        return int(np.random.choice(torch.nonzero(pi[:-1]).flatten().cpu()))
+        pi_temp = pi[:-1] ** (1 / temperature)
+        pi_temp /= pi_temp.sum()
+        chosen = np.random.choice(len(pi_temp), p=pi_temp.cpu().numpy())  # type: ignore
+        return chosen
     return int(torch.argmax(pi).item())
 
 
@@ -546,7 +550,7 @@ async def main() -> None:
             print(f"TOOK: {after-before}s")
             print(pi_mcts)
             # best_move = int(torch.argmax(pi_mcts).item())
-            best_move = choose_action(pi_mcts, episode_length)
+            best_move = choose_action_temperature(pi_mcts, episode_length)
             print(f"{best_move}, {pi_mcts[best_move]}")
             action = mcts.agent.decode_action(best_move)
             print(f"make move: {action}")
