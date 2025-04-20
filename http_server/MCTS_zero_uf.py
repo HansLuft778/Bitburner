@@ -475,6 +475,10 @@ def find_child_index(root_node: Node, chosen_action: int) -> int:
     raise RuntimeError(f"No child found with action={chosen_action}")
 
 
+def temperature_decay(temperature: float, decay_rate: float = 0.95) -> float:
+    return temperature * decay_rate
+
+
 async def main() -> None:
     # torch.manual_seed(0)  # pyright: ignore
     # np.random.seed(0)
@@ -526,6 +530,8 @@ async def main() -> None:
     mcts = MCTS(server, agent, search_iterations=1000, table=table)
 
     print("Done! Starting MCTS...")
+    
+    temperature = 0.8
 
     outcome = 0
     for iter in range(NUM_EPISODES):
@@ -549,7 +555,9 @@ async def main() -> None:
             print(f"TOOK: {after-before}s")
             print(pi_mcts)
             # best_move = int(torch.argmax(pi_mcts).item())
-            best_move = choose_action_temperature(pi_mcts, episode_length)
+            best_move = choose_action_temperature(pi_mcts, episode_length, temperature)
+            temperature = temperature_decay(temperature)
+            
             print(f"{best_move}, {pi_mcts[best_move]}")
             action = mcts.agent.decode_action(best_move)
             print(f"make move: {action}")
