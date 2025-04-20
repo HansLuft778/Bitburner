@@ -768,8 +768,8 @@ class Go_uf:
     ) -> np.ndarray[Any, np.dtype[np.bool_]]:
         player = 2 if is_white else 1
 
-        # legal_moves: np.ndarray[Any, np.dtype[np.bool_]] = np.zeros_like(uf.state, dtype=bool)
-        legal_moves: np.ndarray[Any, np.dtype[np.bool_]] = np.zeros(self.board_size + 1, dtype=bool)
+        legal_moves: np.ndarray[Any, np.dtype[np.bool_]] = np.zeros_like(uf.state, dtype=bool)
+        # legal_moves: np.ndarray[Any, np.dtype[np.bool_]] = np.zeros(self.board_size + 1, dtype=bool)
         empty_mask = uf.state == 0
         empty_positions = np.where(empty_mask)
         for x, y in zip(empty_positions[0], empty_positions[1]):
@@ -794,7 +794,6 @@ class Go_uf:
     ) -> bool:
         player = 2 if is_white else 1
 
-        legal_moves: np.ndarray[Any, np.dtype[np.bool_]] = np.zeros_like(uf.state, dtype=bool)
         empty_mask = uf.state == 0
         empty_positions = np.where(empty_mask)
         for x, y in zip(empty_positions[0], empty_positions[1]):
@@ -807,7 +806,6 @@ class Go_uf:
             )
             if is_legal:  # only needs to undo if legal, since illegal moves are not persisted
                 uf.undo_move_changes(undo, self.zobrist)
-                legal_moves[x, y] = True
                 return True
 
         return False
