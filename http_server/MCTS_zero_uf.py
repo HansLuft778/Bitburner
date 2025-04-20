@@ -712,8 +712,9 @@ async def main_eval():
 
         assert outcome != 0, "outcome should not be 0 after a game ended"
 
-        mcts.agent.plotter.update_wins_white(1 if outcome == -1 else -1)
-        mcts.agent.plotter.update_wins_black(1 if outcome == 1 else -1)
+        if mcts.agent.plotter is not None:
+            mcts.agent.plotter.update_wins_white(1 if outcome == -1 else -1)
+            mcts.agent.plotter.update_wins_black(1 if outcome == 1 else -1)
 
 
 # Run the main coroutine
