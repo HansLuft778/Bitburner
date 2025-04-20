@@ -345,7 +345,7 @@ class AlphaZeroAgent:
     def __init__(
         self,
         board_width: int,
-        plotter: Plotter,
+        plotter: Plotter | None,
         lr: float = 3e-4,
         batch_size: int = 128,
         num_past_steps: int = 5,
@@ -807,16 +807,17 @@ class AlphaZeroAgent:
             + score_scaling_penalty
         )
 
-        self.plotter.update_loss(loss.item(), draw=False)
-        self.plotter.update_policy_loss(policy_loss_own.item(), draw=False)
-        self.plotter.update_value_loss(game_outcome_value_loss.item(), draw=False)
-        self.plotter.update_stat("policy_loss_opp", policy_loss_opp.item(), draw=False)  # type: ignore
-        self.plotter.update_stat("ownership_loss", ownership_loss.item(), draw=False)  # type: ignore
-        self.plotter.update_stat("score_pdf_loss", score_pdf_loss.item(), draw=False)  # type: ignore
-        self.plotter.update_stat("score_cdf_loss", score_cdf_loss.item(), draw=False)  # type: ignore
-        self.plotter.update_stat("score_mean_loss", score_mean_loss.item(), draw=False)  # type: ignore
-        self.plotter.update_stat("score_std_loss", score_std_loss.item(), draw=False)  # type: ignore
-        self.plotter.draw_and_flush()
+        if self.plotter is not None:
+            self.plotter.update_loss(loss.item(), draw=False)
+            self.plotter.update_policy_loss(policy_loss_own.item(), draw=False)
+            self.plotter.update_value_loss(game_outcome_value_loss.item(), draw=False)
+            self.plotter.update_stat("policy_loss_opp", policy_loss_opp.item(), draw=False)  # type: ignore
+            self.plotter.update_stat("ownership_loss", ownership_loss.item(), draw=False)  # type: ignore
+            self.plotter.update_stat("score_pdf_loss", score_pdf_loss.item(), draw=False)  # type: ignore
+            self.plotter.update_stat("score_cdf_loss", score_cdf_loss.item(), draw=False)  # type: ignore
+            self.plotter.update_stat("score_mean_loss", score_mean_loss.item(), draw=False)  # type: ignore
+            self.plotter.update_stat("score_std_loss", score_std_loss.item(), draw=False)  # type: ignore
+            self.plotter.draw_and_flush()
 
         # 5. Optimize the policy_net
         self.optimizer.zero_grad()

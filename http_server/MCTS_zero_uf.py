@@ -578,9 +578,10 @@ async def main() -> None:
 
         assert outcome != 0, "outcome should not be 0 after a game ended"
 
-        mcts.agent.plotter.update_wins_white(1 if outcome == -1 else -1, draw=False)
-        mcts.agent.plotter.update_wins_black(1 if outcome == 1 else -1, draw=False)
-        mcts.agent.plotter.draw_and_flush()
+        if mcts.agent.plotter is not None:
+            mcts.agent.plotter.update_wins_white(1 if outcome == -1 else -1, draw=False)
+            mcts.agent.plotter.update_wins_black(1 if outcome == 1 else -1, draw=False)
+            mcts.agent.plotter.draw_and_flush()
 
         ownership_mask = np.zeros((board_size, board_size), dtype=np.int8)
         black_territory = np.zeros((board_size, board_size), dtype=np.int8)
