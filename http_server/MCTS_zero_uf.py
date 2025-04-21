@@ -17,6 +17,10 @@ C_PUCT = 1.1
 NUM_EPISODES = 1000
 C_SCORE = 0.5
 
+INITIAL_TEMPERATURE = 1.0
+FINAL_TEMPERATURE = 0.1
+TEMPERATURE_DECAY_MOVES = 6
+
 
 def get_puct_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) -> float:
     """
@@ -295,6 +299,7 @@ class MCTS:
             is_full_search = np.random.rand() < self.full_seach_prop
             playout_cap = self.full_search_iterations if is_full_search else self.fast_search_iterations
             disable_exploration_features = False
+        print(f"starting {"full" if is_full_search else "fast"} search...")
 
         # reset stats
         self.timing_stats.clear()
@@ -489,13 +494,27 @@ class MCTS:
         return props, is_full_search
 
 
-def choose_action_temperature(pi: torch.Tensor, episode_length: int, temperature: float = 0.8) -> int:
-    if episode_length < 4:
-        pi_temp = pi[:-1] ** (1 / temperature)
-        pi_temp /= pi_temp.sum()
-        chosen = np.random.choice(len(pi_temp), p=pi_temp.cpu().numpy())  # type: ignore
-        return chosen
-    return int(torch.argmax(pi).item())
+def choose_action_temperature(pi: torch.Tensor, temperature: float) -> int:
+    safe_temperature = max(temperature, 1e-6)
+
+    if abs(safe_temperature - 0.0) < 1e-6:
+        return int(torch.argmax(pi).item())
+    else:
+        pi_temp = pi ** (1.0 / safe_temperature)
+        pi_temp_sum = pi_temp.sum()
+        # Handle edge case where sum is zero (e.g., pi was all zeros)
+        if pi_temp_sum < 1e-9:
+            print("Warning: Sum of temperature-scaled probabilities is near zero. Falling back to argmax.")
+            return int(torch.argmax(pi).item())
+
+        pi_temp /= pi_temp_sum
+        pi_np = pi_temp.cpu().numpy().astype(np.float64)  # type: ignore
+
+        pi_np = np.maximum(pi_np, 0)
+        pi_np /= pi_np.sum()
+
+        chosen = np.random.choice(len(pi_np), p=pi_np)
+        return int(chosen)
 
 
 def find_child_index(root_node: Node, chosen_action: int) -> int:
@@ -505,8 +524,15 @@ def find_child_index(root_node: Node, chosen_action: int) -> int:
     raise RuntimeError(f"No child found with action={chosen_action}")
 
 
-def temperature_decay(temperature: float, decay_rate: float = 0.95) -> float:
-    return temperature * decay_rate
+def temperature_decay(episode_length: int) -> float:
+    if episode_length < TEMPERATURE_DECAY_MOVES:
+        # Linear decay
+        current_temp = INITIAL_TEMPERATURE + (FINAL_TEMPERATURE - INITIAL_TEMPERATURE) * (
+            episode_length / TEMPERATURE_DECAY_MOVES
+        )
+        return max(current_temp, FINAL_TEMPERATURE)
+    else:
+        return FINAL_TEMPERATURE
 
 
 async def main() -> None:
@@ -556,7 +582,7 @@ async def main() -> None:
     plotter.add_plot("score_std_loss", plotter.axes[3, 2], "Score Std Dev Loss Over Time", "Updates", "Score Std Dev Loss")  # type: ignore
 
     agent = AlphaZeroAgent(board_size, plotter)
-    # agent.load_checkpoint("checkpoint_55.pth")
+    # agent.load_checkpoint("checkpoint_37.pth")
     mcts = MCTS(
         server, agent, full_search_iterations=1000, fast_search_iterations=200, full_seach_prop=0.25, table=table
     )
@@ -587,8 +613,8 @@ async def main() -> None:
             print(f"TOOK: {after-before}s")
             print(pi_mcts)
             # best_move = int(torch.argmax(pi_mcts).item())
-            best_move = choose_action_temperature(pi_mcts, episode_length, temperature)
-            temperature = temperature_decay(temperature)
+            best_move = choose_action_temperature(pi_mcts, temperature)
+            temperature = temperature_decay(episode_length)
 
             print(f"{best_move}, {pi_mcts[best_move]}")
             action = mcts.agent.decode_action(best_move)
@@ -667,6 +693,8 @@ async def main() -> None:
         buffer_indices = [0, 1, len_buffer // 2, len_buffer // 2 + 1, len_buffer - 2, len_buffer - 1]
         # buffer_indices = range(len_buffer)  # for testing
         for i in buffer_indices:
+            if i >= len_buffer:
+                continue
             be = buffer[i]
             state_tensor, state_vector = agent.preprocess_state(be.uf, be.history, be.valid_moves, be.is_white, "cpu")
             logits = agent.policy_net(state_tensor, state_vector)
