@@ -17,6 +17,10 @@ C_PUCT = 1.1
 NUM_EPISODES = 1000
 C_SCORE = 0.5
 
+INITIAL_TEMPERATURE = 1.0
+FINAL_TEMPERATURE = 0.1
+TEMPERATURE_DECAY_MOVES = 6
+
 
 def get_puct_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) -> float:
     """
@@ -245,10 +249,24 @@ class Node:
 
 
 class MCTS:
-    def __init__(self, server: GameServerGo, agent: AlphaZeroAgent, search_iterations: int, table: LookupTable):
-        self.search_iterations = search_iterations
+    def __init__(
+        self,
+        server: GameServerGo,
+        agent: AlphaZeroAgent,
+        full_search_iterations: int,
+        fast_search_iterations: int,
+        full_seach_prop: float,
+        table: LookupTable,
+        eval_mode: bool = False,
+    ):
         self.server = server
         self.table = table
+
+        self.full_search_iterations = full_search_iterations
+        self.fast_search_iterations = fast_search_iterations
+        self.full_seach_prop = full_seach_prop
+
+        self.eval_mode = eval_mode
 
         self.agent = agent
         self.timing_stats: defaultdict[str, float] = defaultdict(float)
@@ -256,17 +274,34 @@ class MCTS:
         self.max_depth = 0
 
     @torch.no_grad()  # pyright: ignore
-    def search(self, uf: UnionFind, is_white: bool, best_move: int, eval_mode: bool = False) -> torch.Tensor:
+    def search(
+        self,
+        uf: UnionFind,
+        is_white: bool,
+        best_move: int,
+    ) -> tuple[torch.Tensor, bool]:
         search_init_start = time.time()
-        if best_move == -1 or (
-            best_move == self.agent.board_width * self.agent.board_width and len(self.root.children) == 0
-        ):
+        # tree reuse
+        # or (best_move == self.agent.board_width * self.agent.board_width and len(self.root.children) == 0)
+        if best_move == -1:
             self.root = Node(uf, self.server, is_white, self.agent)
         else:
             child_idx = find_child_index(self.root, best_move)
             self.root = self.root.children[child_idx]
             self.root.parent = None
 
+        # playout cap
+        if self.eval_mode:
+            is_full_search = True
+            playout_cap = self.full_search_iterations
+            disable_exploration_features = True
+        else:
+            is_full_search = np.random.rand() < self.full_seach_prop
+            playout_cap = self.full_search_iterations if is_full_search else self.fast_search_iterations
+            disable_exploration_features = False
+        print(f"starting {"full" if is_full_search else "fast"} search...")
+
+        # reset stats
         self.timing_stats.clear()
         self.iterations_stats.clear()
 
@@ -278,13 +313,13 @@ class MCTS:
 
         self.timing_stats["search_init"] += time.time() - search_init_start
         search_start = time.time()
-        for iter in range(self.search_iterations):  # type: ignore
+        for iter in range(playout_cap):  # type: ignore
             node = self.root
 
             # selection with forced playouts
             select_start = time.time()
             while node.is_fully_expanded():
-                if eval_mode:
+                if disable_exploration_features:
                     node = node.next()
                     self.max_depth = max(self.max_depth, node.depth)
                 else:
@@ -323,7 +358,7 @@ class MCTS:
                     final_probs, _, _, _ = node.get_predictions(self.table, x_0)
 
                     # Apply dirichlet noise
-                    if node.parent is None and not eval_mode:
+                    if node.parent is None and not disable_exploration_features:
                         alpha = 0.2
                         dir_noise = np.random.dirichlet([alpha] * len(final_probs))
                         dir_noise_tensor = torch.tensor(dir_noise, device=final_probs.device, dtype=final_probs.dtype)
@@ -362,7 +397,7 @@ class MCTS:
         # calculate final policy distribution
         final_policy_start = time.time()
 
-        if eval_mode:
+        if disable_exploration_features:
             props = torch.zeros(
                 self.agent.board_height * self.agent.board_height + 1,
                 device=self.agent.device,
@@ -380,10 +415,10 @@ class MCTS:
             for key, val in self.timing_stats.items():
                 if key != "total":
                     percentage = (val / total_time) * 100
-                    avg_time = val / float(self.iterations_stats.get(key, self.search_iterations))
+                    avg_time = val / float(self.iterations_stats.get(key, playout_cap))
                     print(f"{key}: {val:.3f}s ({percentage:.1f}%) - Avg: {avg_time*1000:.2f}ms")
 
-            return props
+            return props, is_full_search
 
         # policy target pruning
         c_star = max(self.root.children, key=lambda c: c.visit_cnt)
@@ -453,19 +488,33 @@ class MCTS:
         for key, val in self.timing_stats.items():
             if key != "total":
                 percentage = (val / total_time) * 100
-                avg_time = val / float(self.iterations_stats.get(key, self.search_iterations))
+                avg_time = val / float(self.iterations_stats.get(key, playout_cap))
                 print(f"{key}: {val:.3f}s ({percentage:.1f}%) - Avg: {avg_time*1000:.2f}ms")
 
-        return props
+        return props, is_full_search
 
 
-def choose_action_temperature(pi: torch.Tensor, episode_length: int, temperature: float = 0.8) -> int:
-    if episode_length < 4:
-        pi_temp = pi[:-1] ** (1 / temperature)
-        pi_temp /= pi_temp.sum()
-        chosen = np.random.choice(len(pi_temp), p=pi_temp.cpu().numpy())  # type: ignore
-        return chosen
-    return int(torch.argmax(pi).item())
+def choose_action_temperature(pi: torch.Tensor, temperature: float) -> int:
+    safe_temperature = max(temperature, 1e-6)
+
+    if abs(safe_temperature - 0.0) < 1e-6:
+        return int(torch.argmax(pi).item())
+    else:
+        pi_temp = pi ** (1.0 / safe_temperature)
+        pi_temp_sum = pi_temp.sum()
+        # Handle edge case where sum is zero (e.g., pi was all zeros)
+        if pi_temp_sum < 1e-9:
+            print("Warning: Sum of temperature-scaled probabilities is near zero. Falling back to argmax.")
+            return int(torch.argmax(pi).item())
+
+        pi_temp /= pi_temp_sum
+        pi_np = pi_temp.cpu().numpy().astype(np.float64)  # type: ignore
+
+        pi_np = np.maximum(pi_np, 0)
+        pi_np /= pi_np.sum()
+
+        chosen = np.random.choice(len(pi_np), p=pi_np)
+        return int(chosen)
 
 
 def find_child_index(root_node: Node, chosen_action: int) -> int:
@@ -475,8 +524,15 @@ def find_child_index(root_node: Node, chosen_action: int) -> int:
     raise RuntimeError(f"No child found with action={chosen_action}")
 
 
-def temperature_decay(temperature: float, decay_rate: float = 0.95) -> float:
-    return temperature * decay_rate
+def temperature_decay(episode_length: int) -> float:
+    if episode_length < TEMPERATURE_DECAY_MOVES:
+        # Linear decay
+        current_temp = INITIAL_TEMPERATURE + (FINAL_TEMPERATURE - INITIAL_TEMPERATURE) * (
+            episode_length / TEMPERATURE_DECAY_MOVES
+        )
+        return max(current_temp, FINAL_TEMPERATURE)
+    else:
+        return FINAL_TEMPERATURE
 
 
 async def main() -> None:
@@ -526,11 +582,13 @@ async def main() -> None:
     plotter.add_plot("score_std_loss", plotter.axes[3, 2], "Score Std Dev Loss Over Time", "Updates", "Score Std Dev Loss")  # type: ignore
 
     agent = AlphaZeroAgent(board_size, plotter)
-    # agent.load_checkpoint("checkpoint_55.pth")
-    mcts = MCTS(server, agent, search_iterations=1000, table=table)
+    # agent.load_checkpoint("checkpoint_37.pth")
+    mcts = MCTS(
+        server, agent, full_search_iterations=1000, fast_search_iterations=200, full_seach_prop=0.25, table=table
+    )
 
     print("Done! Starting MCTS...")
-    
+
     temperature = 0.8
 
     outcome = 0
@@ -550,14 +608,14 @@ async def main() -> None:
         while not done:
             print(f"================================ {episode_length} ================================")
             before = time.time()
-            pi_mcts = mcts.search(server.go.uf, is_white, previous_move)
+            pi_mcts, is_full_search = mcts.search(server.go.uf, is_white, previous_move)
             after = time.time()
             print(f"TOOK: {after-before}s")
             print(pi_mcts)
             # best_move = int(torch.argmax(pi_mcts).item())
-            best_move = choose_action_temperature(pi_mcts, episode_length, temperature)
-            temperature = temperature_decay(temperature)
-            
+            best_move = choose_action_temperature(pi_mcts, temperature)
+            temperature = temperature_decay(episode_length)
+
             print(f"{best_move}, {pi_mcts[best_move]}")
             action = mcts.agent.decode_action(best_move)
             print(f"make move: {action}")
@@ -567,7 +625,11 @@ async def main() -> None:
                 buffer[-1].pi_mcts_response = pi_mcts
 
             valid_moves = server.go.get_valid_moves(uf, is_white, server.go.hash_history)
-            buffer.append(BufferElement(uf, is_white, pi_mcts, game_history[: mcts.agent.history_length], valid_moves))
+            buffer.append(
+                BufferElement(
+                    uf, is_white, pi_mcts, game_history[: mcts.agent.history_length], valid_moves, is_full_search
+                )
+            )
 
             # outcome is: 1 if black won, -1 is white won
             next_uf, outcome, done = await server.make_move(action, best_move, is_white)
@@ -631,6 +693,8 @@ async def main() -> None:
         buffer_indices = [0, 1, len_buffer // 2, len_buffer // 2 + 1, len_buffer - 2, len_buffer - 1]
         # buffer_indices = range(len_buffer)  # for testing
         for i in buffer_indices:
+            if i >= len_buffer:
+                continue
             be = buffer[i]
             state_tensor, state_vector = agent.preprocess_state(be.uf, be.history, be.valid_moves, be.is_white, "cpu")
             logits = agent.policy_net(state_tensor, state_vector)
@@ -678,7 +742,7 @@ async def main_eval():
     plotter = Plotter()
     agent = AlphaZeroAgent(board_size, plotter, checkpoint_dir="models")
     agent.load_checkpoint("checkpoint_129_katago_v1.pth")
-    mcts = MCTS(server, agent, search_iterations=1000, table=table)
+    mcts = MCTS(server, agent, 1000, 100, 0.25, table=table, eval_mode=True)
 
     plotter.add_plot(  # type: ignore
         "cumulative_reward_black",
@@ -707,7 +771,7 @@ async def main_eval():
         done = False
         mcts.agent.policy_net.eval()
         while not done:
-            pi_mcts = mcts.search(server.go.uf, is_white, -1, eval_mode=True)
+            pi_mcts, _ = mcts.search(server.go.uf, is_white, -1)
             print(pi_mcts)
             best_move = int(torch.argmax(pi_mcts).item())
             print(f"{best_move}, {pi_mcts[best_move]}")
