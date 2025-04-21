@@ -164,7 +164,7 @@ class ResNet(nn.Module):
         )
 
         # game info vector input
-        vector_feature_size = num_past_steps  # Which of the previous moves were pass
+        vector_feature_size = num_past_steps + 3  # Which of the previous moves were pass
         self.vector_processor = nn.Linear(vector_feature_size, num_hidden)
 
         # spatial game data input
@@ -486,8 +486,8 @@ class AlphaZeroAgent:
         for rot in range(1, 4):
             rotated_grouped_tensor = torch.rot90(grouped_tensor, rot)
 
-            rotated_pi_board = rotated_grouped_tensor[:, :, 2]
-            rotated_opp_board = rotated_grouped_tensor[:, :, 3]
+            rotated_pi_board = rotated_grouped_tensor[:, :, GroupIdx.PI_OWN]
+            rotated_opp_board = rotated_grouped_tensor[:, :, GroupIdx.PI_OPP]
 
             rotated_pi = torch.cat([rotated_pi_board.flatten(), pi_pass.unsqueeze(0)])
             rotated_opp = torch.cat([rotated_opp_board.flatten(), pi_res_pass.unsqueeze(0)])
@@ -499,9 +499,10 @@ class AlphaZeroAgent:
         # mirror state
         mirrored_grouped_tensor = torch.fliplr(grouped_tensor)
 
-        mirrored_pi_board = torch.fliplr(pi_board)
+        mirrored_pi_board = mirrored_grouped_tensor[:, :, GroupIdx.PI_OWN]
+        mirrored_pi_response_board = mirrored_grouped_tensor[:, :, GroupIdx.PI_OPP]
+
         mirrored_pi = torch.cat([mirrored_pi_board.flatten(), pi_pass.unsqueeze(0)])
-        mirrored_pi_response_board = torch.fliplr(pi_opp)
         mirrored_pi_response = torch.cat([mirrored_pi_response_board.flatten(), pi_res_pass.unsqueeze(0)])
 
         self.train_buffer.push(
@@ -511,10 +512,10 @@ class AlphaZeroAgent:
         for rot in range(1, 4):
             mirrored_rotated_group = torch.rot90(mirrored_grouped_tensor, rot)
 
-            mirrored_rotated_pi_board = torch.rot90(mirrored_pi_board, rot)
-            mirrored_rotated_pi = torch.cat([mirrored_rotated_pi_board.flatten(), pi_pass.unsqueeze(0)])
+            mirrored_rotated_pi_board = mirrored_rotated_group[:, :, GroupIdx.PI_OWN]
+            mirrored_rotated_res_board = mirrored_rotated_group[:, :, GroupIdx.PI_OPP]
 
-            mirrored_rotated_res_board = torch.rot90(mirrored_pi_response_board, rot)
+            mirrored_rotated_pi = torch.cat([mirrored_rotated_pi_board.flatten(), pi_pass.unsqueeze(0)])
             mirrored_rotated_response = torch.cat([mirrored_rotated_res_board.flatten(), pi_res_pass.unsqueeze(0)])
 
             self.train_buffer.push(
@@ -588,7 +589,7 @@ class AlphaZeroAgent:
         spacial_data_tensor[0, 6] = (illegal_moves_tensor == 1).float()  # has three liberties
 
         # process history from most recent to oldest
-        passes = np.zeros(self.num_past_steps, dtype=np.int8)
+        passes = torch.zeros(self.num_past_steps, dtype=torch.int8, device=device)
         num_non_history_channels = self.policy_net.num_input_channels - self.num_past_steps
 
         # process t and t-1
@@ -613,9 +614,21 @@ class AlphaZeroAgent:
                 spacial_data_tensor[0, num_non_history_channels + history_idx][placed_mask] = 1
 
         # build game data vector
-        game_data_vector = torch.as_tensor(passes, device=self.device).unsqueeze(0).float()  # shape [1, num_pass]
+        if is_white:
+            num_own_stones = (board_tensor == 2).count_nonzero().float()
+            num_opp_stones = (board_tensor == 1).count_nonzero().float()
+        else:
+            num_own_stones = (board_tensor == 1).count_nonzero().float()
+            num_opp_stones = (board_tensor == 2).count_nonzero().float()
 
-        return spacial_data_tensor.to(self.device), game_data_vector
+        num_empty_locations = (board_tensor == 0).count_nonzero().float()
+
+        # game_data_vector = torch.as_tensor(passes, device=self.device).unsqueeze(0).float()  # shape [1, num_pass]
+        game_data_vector = torch.cat(
+            [passes.float(), num_own_stones.unsqueeze(0), num_opp_stones.unsqueeze(0), num_empty_locations.unsqueeze(0)]
+        )
+
+        return spacial_data_tensor.to(self.device), game_data_vector.to(self.device)
 
     def deprocess_state(self, state: torch.Tensor, is_white: bool) -> torch.Tensor:
         """
@@ -724,7 +737,7 @@ class AlphaZeroAgent:
             ownership_list.append(current_group[:, :, 1])
 
         state_batch = torch.cat(state_tensor_list)  # shape [B, channels, W, H]
-        game_info_vec_batch = torch.cat(game_info_vec_list, dim=0)  # shape [B, 5]
+        game_info_vec_batch = torch.stack(game_info_vec_list, dim=0)  # shape [B, 5]
         pi_batch = torch.stack(pi_list, dim=0).to(device=self.device)  # shape [B, 26]
         pi_opp_batch = torch.stack(pi_opp_list, dim=0).to(device=self.device)  # shape [B, 26]
         z_batch = torch.tensor(z_list, dtype=torch.float, device=self.device)  # [B]
@@ -826,18 +839,6 @@ class AlphaZeroAgent:
             + score_scaling_penalty
         )
 
-        if self.plotter is not None:
-            self.plotter.update_loss(loss.item(), draw=False)
-            self.plotter.update_policy_loss(policy_loss_own.item(), draw=False)
-            self.plotter.update_value_loss(game_outcome_value_loss.item(), draw=False)
-            self.plotter.update_stat("policy_loss_opp", policy_loss_opp.item(), draw=False)  # type: ignore
-            self.plotter.update_stat("ownership_loss", ownership_loss.item(), draw=False)  # type: ignore
-            self.plotter.update_stat("score_pdf_loss", score_pdf_loss.item(), draw=False)  # type: ignore
-            self.plotter.update_stat("score_cdf_loss", score_cdf_loss.item(), draw=False)  # type: ignore
-            self.plotter.update_stat("score_mean_loss", score_mean_loss.item(), draw=False)  # type: ignore
-            self.plotter.update_stat("score_std_loss", score_std_loss.item(), draw=False)  # type: ignore
-            self.plotter.draw_and_flush()
-
         # 5. Optimize the policy_net
         self.optimizer.zero_grad()
         loss.backward()  # type: ignore
@@ -845,6 +846,19 @@ class AlphaZeroAgent:
         self.scheduler.step()
 
         current_lr = self.scheduler.get_last_lr()[0]
+
+        if self.plotter is not None:
+            if policy_loss_opp != 0:
+                self.plotter.update_loss(loss.item(), draw=False)
+                self.plotter.update_policy_loss(policy_loss_own.item(), draw=False)
+                self.plotter.update_value_loss(game_outcome_value_loss.item(), draw=False)
+            self.plotter.update_stat("policy_loss_opp", policy_loss_opp.item(), draw=False)  # type: ignore
+            self.plotter.update_stat("ownership_loss", ownership_loss.item(), draw=False)  # type: ignore
+            self.plotter.update_stat("score_pdf_loss", score_pdf_loss.item(), draw=False)  # type: ignore
+            self.plotter.update_stat("score_cdf_loss", score_cdf_loss.item(), draw=False)  # type: ignore
+            self.plotter.update_stat("score_mean_loss", score_mean_loss.item(), draw=False)  # type: ignore
+            self.plotter.update_stat("score_std_loss", score_std_loss.item(), draw=False)  # type: ignore
+            self.plotter.draw_and_flush()
         print(
             f"Training step: loss={loss}, policy_loss={policy_loss_own}, value_loss={game_outcome_value_loss}, lr={current_lr}"
         )
