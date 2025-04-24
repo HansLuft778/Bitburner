@@ -4,9 +4,7 @@ import numpy as np
 from typing import Any
 from collections import deque
 import random
-
-
-State = np.ndarray[Any, np.dtype[np.int8]]
+from go_types import State
 
 
 # UnionFind, bool, torch.Tensor, list[State], torch.Tensor | None

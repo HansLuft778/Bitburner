@@ -8,7 +8,8 @@ import websockets
 # from Go.Go import Go
 from Go.Go_uf import Go_uf, UnionFind
 
-State = np.ndarray[Any, np.dtype[np.int8]]
+from plotter import GameStatePlotter
+from go_types import State
 
 
 class GameServerGo:

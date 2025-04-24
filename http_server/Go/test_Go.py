@@ -1,9 +1,7 @@
 import unittest
 from Go_uf import Go_uf
 import numpy as np
-from typing import Any
-
-State = np.ndarray[Any, np.dtype[np.int8]]
+from go_types import State
 
 
 def encode_state(state: list[str]) -> State:

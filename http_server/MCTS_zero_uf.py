@@ -12,6 +12,7 @@ from plotter import Plotter, ModelOverlay, cleanup_out_folder  # type: ignore
 from TreePlotter import TreePlot  # pyright: ignore
 from Buffer import BufferElement
 from LookupTable import LookupTable
+from go_types import State
 
 C_PUCT = 1.1
 NUM_EPISODES = 1000

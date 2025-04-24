@@ -7,9 +7,13 @@ import torch.nn.functional as F
 import math
 import os
 from zipfile import ZipFile
+from typing import TYPE_CHECKING
 
 from Go.Go_uf import UnionFind
-from gameserver_local_uf import GameServerGo
+from go_types import State
+
+if TYPE_CHECKING:
+    from gameserver_local_uf import GameServerGo
 
 NUM_POSSIBLE_SCORES = int(30.5 * 2 + 1)
 

@@ -12,8 +12,7 @@ from Go.Go_uf import UnionFind
 
 from plotter import Plotter  # type: ignore
 from Buffer import BufferElement, TrainingBuffer
-
-State = np.ndarray[Any, np.dtype[np.int8]]
+from go_types import State
 
 NUM_POSSIBLE_SCORES = int(30.5 * 2 + 1)
 

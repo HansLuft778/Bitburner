@@ -8,8 +8,7 @@ import numba  # type: ignore
 import numpy as np
 
 from Go.Zobrist_hash import ZobristHash
-
-State = np.ndarray[Any, np.dtype[np.int8]]
+from go_types import State
 
 
 class UndoActionType(Enum):
