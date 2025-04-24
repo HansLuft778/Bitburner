@@ -665,23 +665,6 @@ class AlphaZeroAgent:
         return new_state
 
     @torch.no_grad()  # pyright: ignore
-    def get_actions_eval(
-        self,
-        uf: UnionFind,
-        game_history: list[State],
-        valid_moves: np.ndarray[Any, np.dtype[np.bool_]],
-        color_is_white: bool,
-    ) -> tuple[torch.Tensor, float]:
-        valid_moves_reshaped = valid_moves[:-1].reshape((self.board_width, self.board_height))
-        state_tensor, game_data_vector = self.preprocess_state(
-            uf, game_history, valid_moves_reshaped, color_is_white, "cpu"
-        )
-
-        # Get logits
-        policy, outcome, _, _ = self.policy_net.forward_mcts_eval(state_tensor, game_data_vector)
-        return policy.squeeze(0), outcome.item()
-
-    @torch.no_grad()  # pyright: ignore
     def predict_eval(
         self,
         uf: UnionFind,
