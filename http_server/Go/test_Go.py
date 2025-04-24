@@ -52,16 +52,16 @@ class TestGo(unittest.TestCase):
     def test_get_score(self):
         for board, expected in self.test_boards:
             enc = encode_state(board)
-            go = Go_uf(5, enc, 5.5)
-            score = go.get_score(go.uf, 5.5)
+            go = Go_uf(5, enc, 5.5, False)
+            score = go.get_score(go.uf)
             self.assertEqual(score["black"]["sum"], expected["black"])
             self.assertEqual(score["white"]["sum"], expected["white"])
 
     def test_score_components(self):
         for board, _ in self.test_boards:
             enc = encode_state(board)
-            go = Go_uf(5, enc, 5.5)
-            score = go.get_score(go.uf, 5.5)
+            go = Go_uf(5, enc, 5.5, False)
+            score = go.get_score(go.uf)
 
             # Test that components add up correctly
             black_sum = score["black"]["pieces"] + score["black"]["territory"]

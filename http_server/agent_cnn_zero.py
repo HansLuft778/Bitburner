@@ -163,7 +163,7 @@ class ResNet(nn.Module):
         )
 
         # game info vector input
-        vector_feature_size = num_past_steps + 3  # Which of the previous moves were pass
+        vector_feature_size = num_past_steps + 4  # Where pass + num own + num opp + num empty locations + you started
         self.vector_processor = nn.Linear(vector_feature_size, num_hidden)
 
         # spatial game data input
@@ -437,6 +437,7 @@ class AlphaZeroAgent:
         outcome: int,
         ownership: np.ndarray[Any, np.dtype[np.int8]],
         score: float,
+        white_started: bool,
     ):
         """
         creates 7 augmented versions of the provided state, and pushes all 8 versions into the training buffer.
@@ -445,7 +446,8 @@ class AlphaZeroAgent:
         pi_mcts = be.pi_mcts
         history = be.history
         valid_moves = be.valid_moves
-        was_white = be.is_white
+        is_white = be.is_white
+
         full_search = be.full_search
         pi_mcts_opp = be.pi_mcts_response
         assert pi_mcts_opp is not None, "pi_mcts_response must be provided for augmentation."
@@ -479,7 +481,9 @@ class AlphaZeroAgent:
                 final_history_list[i], device=self.device
             )
 
-        self.train_buffer.push(pi_mcts, pi_mcts_opp, outcome, was_white, grouped_tensor, score, full_search)
+        self.train_buffer.push(
+            pi_mcts, pi_mcts_opp, outcome, is_white, grouped_tensor, score, full_search, white_started
+        )
 
         # rotate state
         for rot in range(1, 4):
@@ -492,7 +496,7 @@ class AlphaZeroAgent:
             rotated_opp = torch.cat([rotated_opp_board.flatten(), pi_res_pass.unsqueeze(0)])
 
             self.train_buffer.push(
-                rotated_pi, rotated_opp, outcome, was_white, rotated_grouped_tensor, score, full_search
+                rotated_pi, rotated_opp, outcome, is_white, rotated_grouped_tensor, score, full_search, white_started
             )
 
         # mirror state
@@ -505,7 +509,14 @@ class AlphaZeroAgent:
         mirrored_pi_response = torch.cat([mirrored_pi_response_board.flatten(), pi_res_pass.unsqueeze(0)])
 
         self.train_buffer.push(
-            mirrored_pi, mirrored_pi_response, outcome, was_white, mirrored_grouped_tensor, score, full_search
+            mirrored_pi,
+            mirrored_pi_response,
+            outcome,
+            is_white,
+            mirrored_grouped_tensor,
+            score,
+            full_search,
+            white_started,
         )
 
         for rot in range(1, 4):
@@ -521,10 +532,11 @@ class AlphaZeroAgent:
                 mirrored_rotated_pi,
                 mirrored_rotated_response,
                 outcome,
-                was_white,
+                is_white,
                 mirrored_rotated_group,
                 score,
                 full_search,
+                white_started,
             )
 
     def preprocess_state(
@@ -533,6 +545,7 @@ class AlphaZeroAgent:
         history: list[State],
         valid_moves: np.ndarray[Any, np.dtype[np.bool_]],
         is_white: bool,
+        white_started: bool,
         device: str,
     ):
         """
@@ -622,9 +635,17 @@ class AlphaZeroAgent:
 
         num_empty_locations = (board_tensor == 0).count_nonzero().float()
 
+        you_started = torch.tensor(white_started == is_white, device=device).float()
+
         # game_data_vector = torch.as_tensor(passes, device=self.device).unsqueeze(0).float()  # shape [1, num_pass]
         game_data_vector = torch.cat(
-            [passes.float(), num_own_stones.unsqueeze(0), num_opp_stones.unsqueeze(0), num_empty_locations.unsqueeze(0)]
+            [
+                passes.float(),
+                num_own_stones.unsqueeze(0),
+                num_opp_stones.unsqueeze(0),
+                num_empty_locations.unsqueeze(0),
+                you_started.unsqueeze(0),
+            ]
         )
 
         return spacial_data_tensor.to(self.device), game_data_vector.to(self.device)
@@ -667,6 +688,7 @@ class AlphaZeroAgent:
         game_history: list[State],
         valid_moves: np.ndarray[Any, np.dtype[np.bool_]],
         color_is_white: bool,
+        white_started: bool,
     ) -> tuple[torch.Tensor, float, float, float]:
         """Given a nodes data, predict the policy and value.
 
@@ -681,7 +703,7 @@ class AlphaZeroAgent:
         """
         valid_moves_reshaped = valid_moves[:-1].reshape((self.board_width, self.board_height))
         state_tensor, game_data_vector = self.preprocess_state(
-            uf, game_history, valid_moves_reshaped, color_is_white, "cpu"
+            uf, game_history, valid_moves_reshaped, color_is_white, white_started, "cpu"
         )
 
         # Get logits
@@ -716,7 +738,9 @@ class AlphaZeroAgent:
         batch = self.train_buffer.sample(self.batch_size)
 
         # tuple[torch.Tensor, torch.Tensor, int, bool, torch.Tensor]
-        (pi_list, pi_opp_list, z_list, is_white_list, group_list, score_list, full_search_list) = zip(*batch)
+        (pi_list, pi_opp_list, z_list, is_white_list, group_list, score_list, full_search_list, white_started_list) = (
+            zip(*batch)
+        )
 
         # 2. Convert data into tensors
         state_tensor_list: list[torch.Tensor] = []
@@ -730,13 +754,15 @@ class AlphaZeroAgent:
             history_list = [history[:, :, j].cpu().numpy() for j in range(self.history_length)]
 
             valid_moves = np.array(valid_moves, dtype=np.bool_)
-            t, v = self.preprocess_state(uf, history_list, valid_moves, is_white_list[i], device="cuda")
+            t, v = self.preprocess_state(
+                uf, history_list, valid_moves, is_white_list[i], white_started_list[i], device="cuda"
+            )
             state_tensor_list.append(t)
             game_info_vec_list.append(v)
             ownership_list.append(current_group[:, :, 1])
 
         state_batch = torch.cat(state_tensor_list)  # shape [B, channels, W, H]
-        game_info_vec_batch = torch.stack(game_info_vec_list, dim=0)  # shape [B, 5]
+        game_info_vec_batch = torch.stack(game_info_vec_list, dim=0)  # shape [B, num past steps + 4]
         pi_batch = torch.stack(pi_list, dim=0).to(device=self.device)  # shape [B, 26]
         pi_opp_batch = torch.stack(pi_opp_list, dim=0).to(device=self.device)  # shape [B, 26]
         z_batch = torch.tensor(z_list, dtype=torch.float, device=self.device)  # [B]

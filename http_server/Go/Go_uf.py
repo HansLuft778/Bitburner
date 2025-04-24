@@ -298,7 +298,7 @@ def rotate_and_beatify(state: list[str], delim: str = "<br>") -> str:
 
 
 class Go_uf:
-    def __init__(self, board_width: int, state: State, komi: float):
+    def __init__(self, board_width: int, state: State, komi: float, white_starts: bool):
 
         self.board_width = board_width
         self.board_height = board_width
@@ -307,8 +307,12 @@ class Go_uf:
         self.previous_action = -1
 
         # self.state: State = state
-        self.current_player = 1  # black starts
+        # self.current_player = 1  # black starts
+        self.current_player = 2 if white_starts else 1
         self.komi = komi
+        self.white_starts = white_starts
+        self.komi_white = 0.0 if white_starts else komi
+        self.komi_black = komi if white_starts else 0.0
 
         # union find data structure
         size = board_width * board_width
@@ -465,14 +469,15 @@ class Go_uf:
         # Otherwise its disputed or belongs to no one
         return None, territory
 
-    def get_territory_scores(self, state: State) -> tuple[int, int]:
+    def get_territory_scores(self, state: State) -> tuple[State, State]:
         """
         Finds how many empty intersections belong to black or white via territory.
         Returns (white_territory, black_territory).
         """
         visited: np.ndarray[Any, np.dtype[np.bool_]] = np.zeros((self.board_width, self.board_height), dtype=np.bool_)
-        white_territory = 0
-        black_territory = 0
+
+        white_territory_mask = np.zeros((self.board_width, self.board_width), dtype=np.int8)
+        black_territory_mask = np.zeros((self.board_width, self.board_width), dtype=np.int8)
 
         for x in range(self.board_width):
             for y in range(self.board_height):
@@ -480,13 +485,13 @@ class Go_uf:
                 if not visited[x, y] and state[x, y] == 0:
                     color_owner, territory = self.flood_fill_territory(state, x, y, visited)
                     if color_owner == 1:  # black
-                        black_territory += np.count_nonzero(territory)
+                        black_territory_mask = np.logical_or(black_territory_mask, territory)
                     elif color_owner == 2:  # white
-                        white_territory += np.count_nonzero(territory)
+                        white_territory_mask = np.logical_or(white_territory_mask, territory)
 
-        return white_territory, black_territory
+        return white_territory_mask, black_territory_mask
 
-    def get_score(self, uf: UnionFind, komi: float) -> dict[str, dict[str, float]]:
+    def get_score(self, uf: UnionFind) -> dict[str, dict[str, float]]:
         """
         Computes the score for white and black, including komi for white.
         - Each stone on the board counts as 1 point
@@ -499,20 +504,56 @@ class Go_uf:
         # Get territory counts
         white_territory, black_territory = self.get_territory_scores(uf.state)
 
-        white_sum = white_pieces + white_territory + komi
-        black_sum = black_pieces + black_territory
+        white_territory_cnt = np.count_nonzero(white_territory)
+        black_territory_cnt = np.count_nonzero(black_territory)
+
+        white_sum = white_pieces + white_territory_cnt + self.komi_white
+        black_sum = black_pieces + black_territory_cnt + self.komi_black
+
+        return {
+            "white": {
+                "pieces": white_pieces,
+                "territory": white_territory_cnt,
+                "komi": self.komi_white,
+                "sum": white_sum,
+            },
+            "black": {
+                "pieces": black_pieces,
+                "territory": black_territory_cnt,
+                "komi": self.komi_black,
+                "sum": black_sum,
+            },
+        }
+
+    def get_score_details(self, uf: UnionFind) -> dict[str, dict[str, float | State]]:
+        """
+        Computes the score for white and black, including komi for white.
+        - Each stone on the board counts as 1 point
+        - Each empty node fully surrounded by one color also counts as territory
+        """
+        # Count stones directly
+        black_pieces = np.count_nonzero(uf.state == 1)
+        white_pieces = np.count_nonzero(uf.state == 2)
+
+        # Get territory counts
+        white_territory, black_territory = self.get_territory_scores(uf.state)
+        white_territory_cnt = np.count_nonzero(white_territory)
+        black_territory_cnt = np.count_nonzero(black_territory)
+
+        white_sum = white_pieces + white_territory_cnt + self.komi_white
+        black_sum = black_pieces + black_territory_cnt + self.komi_black
 
         return {
             "white": {
                 "pieces": white_pieces,
                 "territory": white_territory,
-                "komi": komi,
+                "komi": self.komi_white,
                 "sum": white_sum,
             },
             "black": {
                 "pieces": black_pieces,
                 "territory": black_territory,
-                "komi": 0,
+                "komi": self.komi_black,
                 "sum": black_sum,
             },
         }
@@ -753,7 +794,7 @@ class Go_uf:
         # outcome is 1 black won, -1 white won, 0 not ended
         outcome = 0
         if game_ended:
-            score = self.get_score(self.uf, self.komi)
+            score = self.get_score(self.uf)
             print(f"score: {score}")
             outcome = 1 if score["black"]["sum"] > score["white"]["sum"] else -1
 
@@ -819,8 +860,8 @@ class Go_uf:
         # double pass
         if self.previous_action == action == self.board_width * self.board_height:
             return True
-        
-        # technically, passing is always legal, so these two are not needed? 
+
+        # technically, passing is always legal, so these two are not needed?
         # when the board is full, you can still pass
 
         # previous pass, current has no valid moves
@@ -852,7 +893,7 @@ if __name__ == "__main__":
             [0, 0, 0, 0, 0],
         ]
     )
-    go = Go_uf(5, decoded_board, 5.5)
+    go = Go_uf(5, decoded_board, 5.5, False)
     print(go.get_liberties(decoded_board, 0, 2, set()))
 
     # go = Go_uf(5, decoded_board, 5.5)

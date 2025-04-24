@@ -5,10 +5,11 @@ from typing import Any, Union
 import numpy as np
 import torch
 
-from agent_cnn_zero import AlphaZeroAgent, State
+from agent_cnn_zero import AlphaZeroAgent
 from gameserver_local_uf import GameServerGo
 from Go.Go_uf import Go_uf, UnionFind
-from plotter import Plotter, ModelOverlay, cleanup_out_folder  # type: ignore
+from Go.Go_state_generator import GoStateGenerator
+from plotter import Plotter, ModelOverlay, GameStatePlotter, cleanup_out_folder  # type: ignore
 from TreePlotter import TreePlot  # pyright: ignore
 from Buffer import BufferElement
 from LookupTable import LookupTable
@@ -114,7 +115,7 @@ class Node:
             history_states = self.get_history_ref()
             history_states.extend(self.server.get_game_history())
             valid_moves = self.get_valid_moves()
-            policy, value, mu, sigma = self.agent.predict_eval(self.uf, history_states, valid_moves, self.is_white)
+            policy, value, mu, sigma = self.agent.predict_eval(self.uf, history_states, valid_moves, self.is_white, self.server.go.white_starts)
 
             self.policy = policy
             self.win_utility = value * 2.0 - 1.0
@@ -536,14 +537,13 @@ def temperature_decay(episode_length: int) -> float:
         return FINAL_TEMPERATURE
 
 
-async def main() -> None:
+def main() -> None:
     # torch.manual_seed(0)  # pyright: ignore
     # np.random.seed(0)
     board_size = 5
     table = LookupTable(board_size, C_SCORE)
 
     server = GameServerGo(board_size)
-    await server.wait()
     print("GameServer ready and client connected")
     print("initializing MCTS...")
 
@@ -588,16 +588,24 @@ async def main() -> None:
         server, agent, full_search_iterations=1000, fast_search_iterations=200, full_seach_prop=0.25, table=table
     )
 
+    game_state_plotter = GameStatePlotter(board_size)
+    generator = GoStateGenerator(board_size)
+
     print("Done! Starting MCTS...")
 
     temperature = 0.8
+    komi = 5.5
 
     outcome = 0
     for iter in range(NUM_EPISODES):
-        is_white = False
-        state, komi = await server.reset_game("No AI", is_white)
+        white_starts = iter % 2 == 0  # white even, black odd
+        white_komi = 0 if white_starts else komi
+        black_komi = komi if white_starts else 0
+
+        # state, komi = await server.reset_game("No AI", is_white)
+        state = generator.convert_state_to_MCTS(generator.generate_board_state())
         uf = UnionFind.get_uf_from_state(state, server.go.zobrist)
-        server.go = Go_uf(board_size, state, komi)
+        server.go = Go_uf(board_size, state, komi, white_starts)
 
         buffer: list[BufferElement] = []
         done = False
@@ -605,6 +613,7 @@ async def main() -> None:
         mcts.agent.policy_net.eval()
         episode_length = 0
         previous_move = -1
+        is_white = white_starts
         start_time = time.time()
         while not done:
             print(f"================================ {episode_length} ================================")
@@ -633,7 +642,7 @@ async def main() -> None:
             )
 
             # outcome is: 1 if black won, -1 is white won
-            next_uf, outcome, done = await server.make_move(action, best_move, is_white)
+            next_uf, outcome, done = server.make_move_local(best_move, is_white, game_state_plotter)
             game_history.insert(0, next_uf.state)
 
             is_white = not is_white
@@ -684,8 +693,8 @@ async def main() -> None:
                     ownership_mask[x, y] = -1
                     visited[x, y] = True
 
-        black_score = np.count_nonzero(black_stones) + np.count_nonzero(black_territory)
-        white_score = np.count_nonzero(white_stones) + np.count_nonzero(white_territory) + komi
+        black_score = np.count_nonzero(black_stones) + np.count_nonzero(black_territory) + black_komi
+        white_score = np.count_nonzero(white_stones) + np.count_nonzero(white_territory) + white_komi
         score = black_score - white_score  # black leads with
 
         print("saving model overlay...")
@@ -697,7 +706,9 @@ async def main() -> None:
             if i >= len_buffer:
                 continue
             be = buffer[i]
-            state_tensor, state_vector = agent.preprocess_state(be.uf, be.history, be.valid_moves, be.is_white, "cpu")
+            state_tensor, state_vector = agent.preprocess_state(
+                be.uf, be.history, be.valid_moves, be.is_white, white_starts, "cpu"
+            )
             logits = agent.policy_net(state_tensor, state_vector)
             next_uf = buffer[i + 1].uf if i + 1 < len_buffer else None
             next_next_uf = buffer[i + 2].uf if i + 2 < len_buffer else None
@@ -719,9 +730,9 @@ async def main() -> None:
             z = outcome if not be.is_white else -outcome
             ownership_corrected = ownership_mask * (-1 if be.is_white else 1)
             score_corrected = score * (-1 if be.is_white else 1)
-            mcts.agent.augment_state(be, z, ownership_corrected, score_corrected)
+            mcts.agent.augment_state(be, z, ownership_corrected, score_corrected, white_starts)
 
-        if iter < 12:
+        if iter < 12 or iter % 2 == 0:
             print("Skipping training")
             continue
 
@@ -766,7 +777,7 @@ async def main_eval():
     outcome = 0
     for _ in range(NUM_EPISODES):
         state, komi = await server.reset_game("Slum Snakes")
-        server.go = Go_uf(board_size, state, komi)
+        server.go = Go_uf(board_size, state, komi, False)
 
         is_white = False
         done = False
@@ -792,6 +803,7 @@ async def main_eval():
 
 # Run the main coroutine
 if __name__ == "__main__":
-    import asyncio
+    # import asyncio
 
-    asyncio.run(main())
+    # asyncio.run(main())
+    main()
