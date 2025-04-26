@@ -65,7 +65,6 @@ def get_explore_selection_value_inverse(
 class Node:
     def __init__(
         self,
-        # state: State,
         uf: UnionFind,
         server: GameServerGo,
         is_white: bool,
@@ -77,15 +76,16 @@ class Node:
     ):
         self.uf: UnionFind = uf
         self.parent = parent
-        self.action = action
+        self.action = action  # Action that led to this node
         self.server = server
-        self.is_white = is_white
+        self.is_white = is_white  # Player *to move* from this node
         self.agent = agent
         self.prior = prior
-        self.valid_moves: np.ndarray[Any, np.dtype[np.bool_]] | None = None
+        self._valid_moves: np.ndarray[Any, np.dtype[np.bool_]] | None = None
         self.depth: int = 0 if parent is None else parent.depth + 1
 
-        self.children: list[Node] = []
+        # self.children: list[Node] = []
+        self.children: dict[int, Node] = {}
         self.policy: torch.Tensor | None = None
 
         self.win_utility: float | None = None
@@ -100,14 +100,21 @@ class Node:
         self.utility_sum = 0.0
 
     def is_fully_expanded(self):
-        # enough to check for childs > 0 since we expand to all possible states at once
-        return len(self.children) > 0
+        # node is fully expanded, if every valid move has a child
+        valid = self.get_valid_moves()
+        num_valid = np.count_nonzero(valid)
+
+        return num_valid == len(self.children)
 
     def get_valid_moves(self) -> np.ndarray[Any, np.dtype[np.bool_]]:
-        if self.valid_moves is None:
+        """returns the valid moves including pass (always legal) in shape `(board_size ** 2 + 1,)`
+        Returns:
+            np.ndarray[Any, np.dtype[np.bool_]]: the valid moves
+        """
+        if self._valid_moves is None:
             history_hashes = self.get_hash_history()
-            self.valid_moves = self.server.request_valid_moves(self.is_white, self.uf, history_hashes)
-        return self.valid_moves
+            self._valid_moves = self.server.request_valid_moves(self.is_white, self.uf, history_hashes)
+        return self._valid_moves
 
     def get_predictions(self, table: LookupTable, x_0: float) -> tuple[torch.Tensor, float, float, float]:
         if self.policy is None:
@@ -153,24 +160,6 @@ class Node:
         if self.action == board_size and self.parent is not None and self.parent.action == board_size:
             return True
 
-        # technically, passing is always legal, so these two are not needed?
-        # when the board is full, you can still pass
-
-        # # board full (technically not needed?)
-        # space_available = np.any(self.uf.state == 0)
-        # if not space_available:
-        #     return True
-
-        # one pass, next player has no valid moves
-        # if self.parent is not None and self.parent.action == board_size:
-        #     if self.valid_moves is not None:
-        #         has_valid = np.any(self.valid_moves)
-        #     else:
-        #         history_hashes = self.get_hash_history()
-        #         has_valid = self.server.go.has_any_valid_moves(self.uf, self.is_white, history_hashes)
-        #     if not has_valid:
-        #         return True
-
         return False
 
     def get_history_ref(self) -> list[State]:
@@ -203,7 +192,7 @@ class Node:
 
     def next(self) -> "Node":
         best: tuple[Node | None, float] = (None, -99999)
-        for c in self.children:
+        for c in self.children.values():
             score = get_puct_value(c, self.visit_cnt, c_puct=C_PUCT)
             if score > best[1]:
                 best = (c, score)
@@ -211,38 +200,38 @@ class Node:
         assert best[0] is not None
         return best[0]
 
-    def expand(self, policy: torch.Tensor) -> None:
+    def get_child_if_exists(self, action: int) -> "Node | None":
+        return self.children.get(action)
+
+    def create_child(self, action: int) -> "Node":
         assert self.policy is not None, "Policy must be predicted before expansion"
 
-        board_size = self.agent.board_width * self.agent.board_height
-        policy_cpu: np.ndarray[Any, np.dtype[np.float32]] = policy.cpu().numpy()  # type: ignore
-        for action in range(board_size + 1):
-            if action == board_size:
-                next_uf = self.uf.copy()
-                # Penalize passing if board is mostly empty
-                # empty_cells = np.sum(self.uf.state == 0)
-                # empty_percentage = empty_cells / board_size
-                # if empty_percentage > 0.5:
-                #     policy_cpu[action] *= (1.0 - empty_percentage) * 0.5
-            else:
-                color = 2 if self.is_white else 1
-                is_legal, undo = self.server.go.simulate_move(self.uf, action, color, self.get_hash_history())
-                if not is_legal:
-                    continue
+        board_size = self.server.go.board_size
+        policy_cpu = self.policy.cpu().numpy()  # type: ignore
 
-                next_uf = self.uf.copy()
-                self.uf.undo_move_changes(undo, self.server.go.zobrist)
+        if action == board_size:
+            next_uf = self.uf.copy()
+        else:
+            # simulate the move to retrieve the resulting board state
+            color = 2 if self.is_white else 1
+            is_legal, undo = self.server.go.simulate_move(self.uf, action, color, self.get_hash_history())
+            assert is_legal, "Illegal move cannot be lazily expanded"
 
-            child = Node(
-                next_uf,
-                self.server,
-                not self.is_white,
-                self.agent,
-                self,
-                action,
-                policy_cpu[action],
-            )
-            self.children.append(child)
+            next_uf = self.uf.copy()
+            self.uf.undo_move_changes(undo, self.server.go.zobrist)
+
+        child = Node(
+            next_uf,
+            self.server,
+            not self.is_white,
+            self.agent,
+            self,
+            action,
+            prior=policy_cpu[action],
+        )
+        self.children[action] = child
+
+        return child
 
     def backprop(self, score: float):
         self.visit_cnt += 1
@@ -277,6 +266,8 @@ class MCTS:
         self.iterations_stats: defaultdict[str, int] = defaultdict(int)
         self.max_depth = 0
 
+        self.root: Node | None = None
+
     @torch.no_grad()  # pyright: ignore
     def search(
         self,
@@ -284,17 +275,20 @@ class MCTS:
         is_white: bool,
         best_move: int,
     ) -> tuple[torch.Tensor, bool]:
+        # ------------------------------------------------ init ------------------------------------------------
         search_init_start = time.time()
         # tree reuse
-        # or (best_move == self.agent.board_width * self.agent.board_width and len(self.root.children) == 0)
-        if best_move == -1:
+        if self.root is None or best_move == -1:  # case first search iteration
             self.root = Node(uf, self.server, is_white, self.agent)
         else:
-            child_idx = find_child_index(self.root, best_move)
-            self.root = self.root.children[child_idx]
-            self.root.parent = None
+            next_root = self.root.children.get(best_move)
+            if next_root is None:
+                self.root = Node(uf, self.server, is_white, self.agent)
+            else:
+                self.root = next_root
+                self.root.parent = None
 
-        # playout cap
+        # playout cap randomization
         if self.eval_mode:
             is_full_search = True
             playout_cap = self.full_search_iterations
@@ -309,41 +303,72 @@ class MCTS:
         self.timing_stats.clear()
         self.iterations_stats.clear()
 
+        # get x0 for MCTS score target
         if self.root.policy is None:
             self.root.get_predictions(self.table, 0.0)
         x_0 = self.root.mu_s
         assert self.root.mu_s is not None and self.root.sigma_s is not None and x_0 is not None
+        assert self.root.policy is not None
+
         self.root.score_utility = self.table.get_expected_uscore(self.root.mu_s, self.root.sigma_s, x_0).item()
 
+        # Apply dirichlet noise
+        if not self.eval_mode and self.root.visit_cnt == 0:
+            alpha = 0.2
+            dir_noise = np.random.dirichlet([alpha] * len(self.root.policy))
+            dir_noise_tensor = torch.tensor(dir_noise, device=self.root.policy.device, dtype=self.root.policy.dtype)
+            epsilon = 0.25
+            self.root.policy = (1 - epsilon) * self.root.policy + epsilon * dir_noise_tensor
+            self.root.policy /= torch.sum(self.root.policy)
+
+        # ------------------------------------------------ start search ------------------------------------------------
         self.timing_stats["search_init"] += time.time() - search_init_start
         search_start = time.time()
-        for iter in range(playout_cap):  # type: ignore
+        for iter in range(playout_cap):
             node = self.root
 
-            # selection with forced playouts
+            # selection with forced playouts and lazy expand
             select_start = time.time()
-            while node.is_fully_expanded():
-                if disable_exploration_features:
-                    node = node.next()
-                    self.max_depth = max(self.max_depth, node.depth)
-                else:
-                    next_node = None
-                    if node.parent is None:
-                        for c in node.children:
-                            if c.visit_cnt < get_num_forced_playouts(c) and (
-                                next_node is None or c.prior > next_node.prior
-                            ):
-                                next_node = c
-                    if next_node is None:
-                        node = node.next()
-                        self.max_depth = max(self.max_depth, node.depth)
+
+            while node.is_fully_expanded() and not node.done:
+                current_node = node
+                valid = current_node.get_valid_moves()
+                only_valid = np.where(valid == True)[0]
+
+                assert current_node.policy is not None
+                policy = current_node.policy
+
+                best_action = -1
+                best_value = -float("inf")
+                for action in only_valid:
+                    child = current_node.get_child_if_exists(action)
+
+                    if child is not None:
+                        q_value = 0.0 if child.visit_cnt == 0 else -(child.utility_sum / child.visit_cnt)
+                        u_value = C_PUCT * policy[action] * current_node.visit_cnt**0.5 / (1 + child.visit_cnt)
                     else:
-                        node = next_node
+                        q_value = 0.0
+                        u_value = C_PUCT * policy[action] * current_node.visit_cnt**0.5  # / (1 + 0)
+                    puct_value = q_value + u_value
+                    if puct_value > best_value:
+                        best_value = puct_value
+                        best_action = action
 
-            self.timing_stats["selection"] += time.time() - select_start
-            self.iterations_stats["selection"] += 1
+                assert best_action != -1
+                self.timing_stats["selection"] += time.time() - select_start
+                self.iterations_stats["selection"] += 1
 
-            # expansion
+                chosen_child = current_node.get_child_if_exists(best_action)
+                if chosen_child is not None:
+                    node = chosen_child
+                else:  # expand lazily
+                    expand_start = time.time()
+                    new_child = current_node.create_child(best_action)
+                    node = new_child
+                    self.timing_stats["expansion"] += time.time() - expand_start
+                    break
+
+            # fill child with data
             end_check_start = time.time()
             if node.done is None:
                 node.done = node.has_game_ended()
@@ -360,17 +385,6 @@ class MCTS:
                 if node.policy is None:
                     # This sets leaf_node.win_utility and leaf_node.score_utility
                     final_probs, _, _, _ = node.get_predictions(self.table, x_0)
-
-                    # Apply dirichlet noise
-                    if node.parent is None and not disable_exploration_features:
-                        alpha = 0.2
-                        dir_noise = np.random.dirichlet([alpha] * len(final_probs))
-                        dir_noise_tensor = torch.tensor(dir_noise, device=final_probs.device, dtype=final_probs.dtype)
-                        epsilon = 0.25
-                        final_probs = (1 - epsilon) * final_probs + epsilon * dir_noise_tensor
-
-                        # Renormalize
-                        final_probs = final_probs / torch.sum(final_probs)
                     node.policy = final_probs
 
                 policy = node.policy
@@ -384,9 +398,9 @@ class MCTS:
                         f"Value estimate: {node.win_utility:.3f} (from {'white' if node.is_white else 'black'}'s perspective)"
                     )
 
-                expand_start = time.time()
-                node.expand(policy)
-                self.timing_stats["expansion"] += time.time() - expand_start
+                # expand_start = time.time()
+                # node.expand(policy)
+                # self.timing_stats["expansion"] += time.time() - expand_start
 
             # backpropagation
             backprop_start = time.time()
@@ -407,7 +421,7 @@ class MCTS:
                 device=self.agent.device,
                 dtype=torch.float32,
             )
-            for c in self.root.children:
+            for c in self.root.children.values():
                 props[c.action] = c.visit_cnt
 
             self.timing_stats["final_policy"] += time.time() - final_policy_start
@@ -425,13 +439,13 @@ class MCTS:
             return props, is_full_search
 
         # policy target pruning
-        c_star = max(self.root.children, key=lambda c: c.visit_cnt)
+        c_star = max(self.root.children.values(), key=lambda c: c.visit_cnt)
         assert c_star.parent is not None, "c_start must have a parent"
         c_star_puct = get_puct_value(c_star, c_star.parent.visit_cnt, c_puct=C_PUCT)
         explore_scaling = C_PUCT * self.root.visit_cnt**0.5
-        pruned_visit_counts = {c.action: float(c.visit_cnt) for c in self.root.children}
+        pruned_visit_counts = {c.action: float(c.visit_cnt) for c in self.root.children.values()}
 
-        for c in self.root.children:
+        for c in self.root.children.values():
             action = c.action
             # use action to differentiate between c and c_star, since action is unique for every child
             if action is None or action == c_star.action:
@@ -519,13 +533,6 @@ def choose_action_temperature(pi: torch.Tensor, temperature: float) -> int:
 
         chosen = np.random.choice(len(pi_np), p=pi_np)
         return int(chosen)
-
-
-def find_child_index(root_node: Node, chosen_action: int) -> int:
-    for i, child in enumerate(root_node.children):
-        if child.action == chosen_action:
-            return i
-    raise RuntimeError(f"No child found with action={chosen_action}")
 
 
 def temperature_decay(episode_length: int) -> float:
