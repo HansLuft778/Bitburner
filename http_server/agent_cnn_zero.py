@@ -12,8 +12,7 @@ from Go.Go_uf import UnionFind
 
 from plotter import Plotter  # type: ignore
 from Buffer import BufferElement, TrainingBuffer
-
-State = np.ndarray[Any, np.dtype[np.int8]]
+from go_types import State
 
 NUM_POSSIBLE_SCORES = int(30.5 * 2 + 1)
 
@@ -164,7 +163,7 @@ class ResNet(nn.Module):
         )
 
         # game info vector input
-        vector_feature_size = num_past_steps + 3  # Which of the previous moves were pass
+        vector_feature_size = num_past_steps + 4  # Where pass + num own + num opp + num empty locations + you started
         self.vector_processor = nn.Linear(vector_feature_size, num_hidden)
 
         # spatial game data input
@@ -195,7 +194,9 @@ class ResNet(nn.Module):
         self.game_outcome_head = nn.Sequential(
             nn.Linear(pooled_features_dim, value_head_intermediate_channels),
             nn.ReLU(),
-            nn.Linear(value_head_intermediate_channels, 4),  # win / lose / score mean / score std dev
+            nn.Linear(
+                value_head_intermediate_channels, 3
+            ),  # who wins, score mean, score std # win / lose / score mean / score std dev
         )
 
         # output shape [B, 1, board_width, board_height]
@@ -237,11 +238,12 @@ class ResNet(nn.Module):
 
         # --- game outcome head ---
         game_outcome_logits = self.game_outcome_head(v_pooled)  # shape [B, 4]
-        outcome_distribution = torch.softmax(game_outcome_logits[:, 0:2], dim=1)  # shape [B, 2]
-        score_mean = game_outcome_logits[:, 2:3] * 20  # shape [B, 1]
-        score_std = F.softplus(game_outcome_logits[:, 3:4]) * 20  # shape [B, 1]
+        # outcome_distribution = torch.softmax(game_outcome_logits[:, 0:2], dim=1)  # shape [B, 2]
+        value_output = torch.tanh(game_outcome_logits[:, 0:1])  # NEW, shape [B, 1]
+        score_mean = game_outcome_logits[:, 1:2] * 20  # shape [B, 1]
+        score_std = F.softplus(game_outcome_logits[:, 2:3]) * 20  # shape [B, 1]
 
-        game_outcome = torch.cat([outcome_distribution, score_mean, score_std], dim=1)  # shape [B, 4]
+        game_outcome = torch.cat([value_output, score_mean, score_std], dim=1)  # shape [B, 3]
 
         # --- ownership head ---
         ownership_logits = self.ownership_head(x)  # shape [B, 1, board_width, board_height]
@@ -273,11 +275,12 @@ class ResNet(nn.Module):
         v_pooled = torch.cat([v_mean, v_max, v_std], dim=1)  # shape [B, c_val]
         game_outcome_head_output = self.game_outcome_head(v_pooled)
 
-        outcome_distribution = torch.softmax(game_outcome_head_output[:, 0:2], dim=1)  # shape [B, 2]
-        mu = game_outcome_head_output[:, 2:3] * 20  # shape [B, 1]
-        sigma = F.softplus(game_outcome_head_output[:, 3:4]) * 20
+        # outcome_distribution = torch.softmax(game_outcome_head_output[:, 0:2], dim=1)  # shape [B, 2]
+        value_output = torch.tanh(game_outcome_head_output[:, 0:1])  # NEW, shape [B, 1]
+        mu = game_outcome_head_output[:, 1:2] * 20  # shape [B, 1]
+        sigma = F.softplus(game_outcome_head_output[:, 2:3]) * 20
 
-        return own_policy_logits, outcome_distribution, mu, sigma
+        return own_policy_logits, value_output, mu, sigma
 
 
 class ResBlock(nn.Module):
@@ -435,9 +438,10 @@ class AlphaZeroAgent:
     def augment_state(
         self,
         be: BufferElement,
-        outcome: int,
+        perspective_adj_outcome: int,
         ownership: np.ndarray[Any, np.dtype[np.int8]],
         score: float,
+        white_started: bool,
     ):
         """
         creates 7 augmented versions of the provided state, and pushes all 8 versions into the training buffer.
@@ -446,7 +450,8 @@ class AlphaZeroAgent:
         pi_mcts = be.pi_mcts
         history = be.history
         valid_moves = be.valid_moves
-        was_white = be.is_white
+        is_white = be.is_white
+
         full_search = be.full_search
         pi_mcts_opp = be.pi_mcts_response
         assert pi_mcts_opp is not None, "pi_mcts_response must be provided for augmentation."
@@ -480,7 +485,9 @@ class AlphaZeroAgent:
                 final_history_list[i], device=self.device
             )
 
-        self.train_buffer.push(pi_mcts, pi_mcts_opp, outcome, was_white, grouped_tensor, score, full_search)
+        self.train_buffer.push(
+            pi_mcts, pi_mcts_opp, perspective_adj_outcome, is_white, grouped_tensor, score, full_search, white_started
+        )
 
         # rotate state
         for rot in range(1, 4):
@@ -493,7 +500,14 @@ class AlphaZeroAgent:
             rotated_opp = torch.cat([rotated_opp_board.flatten(), pi_res_pass.unsqueeze(0)])
 
             self.train_buffer.push(
-                rotated_pi, rotated_opp, outcome, was_white, rotated_grouped_tensor, score, full_search
+                rotated_pi,
+                rotated_opp,
+                perspective_adj_outcome,
+                is_white,
+                rotated_grouped_tensor,
+                score,
+                full_search,
+                white_started,
             )
 
         # mirror state
@@ -506,7 +520,14 @@ class AlphaZeroAgent:
         mirrored_pi_response = torch.cat([mirrored_pi_response_board.flatten(), pi_res_pass.unsqueeze(0)])
 
         self.train_buffer.push(
-            mirrored_pi, mirrored_pi_response, outcome, was_white, mirrored_grouped_tensor, score, full_search
+            mirrored_pi,
+            mirrored_pi_response,
+            perspective_adj_outcome,
+            is_white,
+            mirrored_grouped_tensor,
+            score,
+            full_search,
+            white_started,
         )
 
         for rot in range(1, 4):
@@ -521,11 +542,12 @@ class AlphaZeroAgent:
             self.train_buffer.push(
                 mirrored_rotated_pi,
                 mirrored_rotated_response,
-                outcome,
-                was_white,
+                perspective_adj_outcome,
+                is_white,
                 mirrored_rotated_group,
                 score,
                 full_search,
+                white_started,
             )
 
     def preprocess_state(
@@ -534,6 +556,7 @@ class AlphaZeroAgent:
         history: list[State],
         valid_moves: np.ndarray[Any, np.dtype[np.bool_]],
         is_white: bool,
+        white_started: bool,
         device: str,
     ):
         """
@@ -623,9 +646,17 @@ class AlphaZeroAgent:
 
         num_empty_locations = (board_tensor == 0).count_nonzero().float()
 
+        you_started = torch.tensor(white_started == is_white, device=device).float()
+
         # game_data_vector = torch.as_tensor(passes, device=self.device).unsqueeze(0).float()  # shape [1, num_pass]
         game_data_vector = torch.cat(
-            [passes.float(), num_own_stones.unsqueeze(0), num_opp_stones.unsqueeze(0), num_empty_locations.unsqueeze(0)]
+            [
+                passes.float(),
+                num_own_stones.unsqueeze(0),
+                num_opp_stones.unsqueeze(0),
+                num_empty_locations.unsqueeze(0),
+                you_started.unsqueeze(0),
+            ]
         )
 
         return spacial_data_tensor.to(self.device), game_data_vector.to(self.device)
@@ -645,29 +676,13 @@ class AlphaZeroAgent:
         return new_state
 
     @torch.no_grad()  # pyright: ignore
-    def get_actions_eval(
-        self,
-        uf: UnionFind,
-        game_history: list[State],
-        valid_moves: np.ndarray[Any, np.dtype[np.bool_]],
-        color_is_white: bool,
-    ) -> tuple[torch.Tensor, float]:
-        valid_moves_reshaped = valid_moves[:-1].reshape((self.board_width, self.board_height))
-        state_tensor, game_data_vector = self.preprocess_state(
-            uf, game_history, valid_moves_reshaped, color_is_white, "cpu"
-        )
-
-        # Get logits
-        policy, outcome, _, _ = self.policy_net.forward_mcts_eval(state_tensor, game_data_vector)
-        return policy.squeeze(0), outcome.item()
-
-    @torch.no_grad()  # pyright: ignore
     def predict_eval(
         self,
         uf: UnionFind,
         game_history: list[State],
         valid_moves: np.ndarray[Any, np.dtype[np.bool_]],
         color_is_white: bool,
+        white_started: bool,
     ) -> tuple[torch.Tensor, float, float, float]:
         """Given a nodes data, predict the policy and value.
 
@@ -682,7 +697,7 @@ class AlphaZeroAgent:
         """
         valid_moves_reshaped = valid_moves[:-1].reshape((self.board_width, self.board_height))
         state_tensor, game_data_vector = self.preprocess_state(
-            uf, game_history, valid_moves_reshaped, color_is_white, "cpu"
+            uf, game_history, valid_moves_reshaped, color_is_white, white_started, "cpu"
         )
 
         # Get logits
@@ -693,7 +708,7 @@ class AlphaZeroAgent:
         policy_logits_squeezed[~valid_mask] = -1e9
         final_probs = torch.softmax(policy_logits_squeezed, dim=0)
 
-        return final_probs, outcome.squeeze()[0].item(), mu.item(), sigma.item()
+        return final_probs, outcome.squeeze().item(), mu.item(), sigma.item()
 
     def decode_action(self, action_idx: int) -> tuple[int, int]:
         """
@@ -717,7 +732,9 @@ class AlphaZeroAgent:
         batch = self.train_buffer.sample(self.batch_size)
 
         # tuple[torch.Tensor, torch.Tensor, int, bool, torch.Tensor]
-        (pi_list, pi_opp_list, z_list, is_white_list, group_list, score_list, full_search_list) = zip(*batch)
+        (pi_list, pi_opp_list, z_list, is_white_list, group_list, score_list, full_search_list, white_started_list) = (
+            zip(*batch)
+        )
 
         # 2. Convert data into tensors
         state_tensor_list: list[torch.Tensor] = []
@@ -731,18 +748,20 @@ class AlphaZeroAgent:
             history_list = [history[:, :, j].cpu().numpy() for j in range(self.history_length)]
 
             valid_moves = np.array(valid_moves, dtype=np.bool_)
-            t, v = self.preprocess_state(uf, history_list, valid_moves, is_white_list[i], device="cuda")
+            t, v = self.preprocess_state(
+                uf, history_list, valid_moves, is_white_list[i], white_started_list[i], device="cuda"
+            )
             state_tensor_list.append(t)
             game_info_vec_list.append(v)
             ownership_list.append(current_group[:, :, 1])
 
         state_batch = torch.cat(state_tensor_list)  # shape [B, channels, W, H]
-        game_info_vec_batch = torch.stack(game_info_vec_list, dim=0)  # shape [B, 5]
+        game_info_vec_batch = torch.stack(game_info_vec_list, dim=0)  # shape [B, num past steps + 4]
         pi_batch = torch.stack(pi_list, dim=0).to(device=self.device)  # shape [B, 26]
         pi_opp_batch = torch.stack(pi_opp_list, dim=0).to(device=self.device)  # shape [B, 26]
         z_batch = torch.tensor(z_list, dtype=torch.float, device=self.device)  # [B]
         # z_batch_transformed = torch.stack([(z_batch + 1) / 2, (1 - z_batch) / 2], dim=1)  # [B, 2]
-        z_class_indices = ((1 - z_batch) / 2).long()
+        # z_class_indices = ((1 - z_batch) / 2).long()
 
         ownership_batch = torch.stack(ownership_list, dim=0).to(device=self.device)  # shape [B, 1, W, H]
         o_target_player = (ownership_batch == 1).float()
@@ -773,8 +792,9 @@ class AlphaZeroAgent:
         # z_hat = F.log_softmax(outcome_logits[:, :2], dim=1)  # shape [B, 2]
         score_log_probs = F.log_softmax(score_logits, dim=1)  # shape [B, num_possible_scores]
         score_probs = F.softmax(score_logits, dim=1)  # shape [B, num_possible_scores]
-        mu_hat = outcome_logits[:, 2]
-        sigma_hat = outcome_logits[:, 3]
+        z_hat = outcome_logits[:, 0]
+        mu_hat = outcome_logits[:, 1]
+        sigma_hat = outcome_logits[:, 2]
 
         ## ownership loss preparation
         ownership_logits_player = (ownership_logits + 1) / 2  # type: ignore
@@ -806,7 +826,8 @@ class AlphaZeroAgent:
         policy_loss_opp = ((raw_policy_loss_opp * full_search_mask).sum() / num_full_search_samples) * 0.15
 
         # game_outcome_value_loss = -(z_batch_transformed * z_hat).sum(dim=1).mean() * 1.5
-        game_outcome_value_loss = F.cross_entropy(outcome_logits[:, :2], z_class_indices) * 1.5
+        # game_outcome_value_loss = F.cross_entropy(outcome_logits[:, :2], z_class_indices) * 1.5
+        game_outcome_value_loss = F.mse_loss(z_hat, z_batch) * 1.5
 
         ownership_loss = -(o_target_flat * torch.log(ownership_hat_flat)).sum(dim=1).mean() * 0.06
 
@@ -826,6 +847,17 @@ class AlphaZeroAgent:
         gamma_intermediate = F.relu(self.policy_net.score_head.scale_fc1(v_pooled))
         gamma = self.policy_net.score_head.scale_fc2(gamma_intermediate)
         score_scaling_penalty = 0.0005 * (gamma**2).mean()
+        # Assert all loss components are numerical (not NaN)
+
+        assert not torch.isnan(policy_loss_own), "policy_loss_own is NaN"
+        assert not torch.isnan(policy_loss_opp), "policy_loss_opp is NaN"
+        assert not torch.isnan(game_outcome_value_loss), "game_outcome_value_loss is NaN"
+        assert not torch.isnan(ownership_loss), "ownership_loss is NaN"
+        assert not torch.isnan(score_pdf_loss), "score_pdf_loss is NaN"
+        assert not torch.isnan(score_cdf_loss), "score_cdf_loss is NaN"
+        assert not torch.isnan(score_mean_loss), "score_mean_loss is NaN"
+        assert not torch.isnan(score_std_loss), "score_std_loss is NaN"
+        assert not torch.isnan(score_scaling_penalty), "score_scaling_penalty is NaN"
 
         loss = (
             policy_loss_own

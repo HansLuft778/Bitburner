@@ -8,7 +8,8 @@ import websockets
 # from Go.Go import Go
 from Go.Go_uf import Go_uf, UnionFind
 
-State = np.ndarray[Any, np.dtype[np.int8]]
+from plotter import GameStatePlotter
+from go_types import State
 
 
 class GameServerGo:
@@ -18,7 +19,7 @@ class GameServerGo:
         self.message_queue: asyncio.Queue[str] = asyncio.Queue()
         self.server = None  # Reference to the server task
 
-        self.go = Go_uf(board_size, np.zeros((board_size, board_size), dtype=np.int8), 0)
+        self.go = Go_uf(board_size, np.zeros((board_size, board_size), dtype=np.int8), 0, False)
 
     async def handle_client(self, websocket: Any):
         self.websocket = websocket
@@ -56,6 +57,16 @@ class GameServerGo:
         return np.append(v, True)
 
     async def make_move(self, action: tuple[int, int], action_idx: int, is_white: bool) -> tuple[UnionFind, int, bool]:
+        """Called when performing selfplay inside of bitburner
+
+        Args:
+            action (tuple[int, int]): coordinate of the board, 0,0 is lower left
+            action_idx (int): the above coord converted to index
+            is_white (bool): indicator wether this move is performed for white or black
+
+        Returns:
+            tuple[UnionFind, int, bool]: The resutlign Unionfind, outcome (-1, 0 ,1), if game is done or not
+        """
         # make move in bitburner
         if action == (-1, -1):  # pass
             res = await self.send_request({"command": "pass_turn", "playAsWhite": is_white})
@@ -80,6 +91,16 @@ class GameServerGo:
         assert d == done, f"Done flag mismatch: left: {d}, right: {done}"
 
         return uf, r, d
+
+    def make_move_local(
+        self, action_idx: int, is_white: bool, plotter: "GameStatePlotter"
+    ) -> tuple[UnionFind, int, bool]:
+        uf, o, d = self.go.make_move(action_idx, is_white)
+
+        scores = self.go.get_score_details(uf)
+        plotter.plot(uf.state, is_white, scores)
+
+        return uf, o, d
 
     async def make_move_eval(
         self, action: tuple[int, int], action_idx: int, is_white: bool
@@ -122,7 +143,7 @@ class GameServerGo:
         return hash_history
 
     def get_score(self, uf: UnionFind) -> dict[str, dict[str, float]]:
-        scores = self.go.get_score(uf, self.go.komi)
+        scores = self.go.get_score(uf)
         return scores
 
     async def get_state(self) -> list[str]:

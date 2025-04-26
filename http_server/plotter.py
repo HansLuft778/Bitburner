@@ -7,9 +7,13 @@ import torch.nn.functional as F
 import math
 import os
 from zipfile import ZipFile
+from typing import TYPE_CHECKING
 
 from Go.Go_uf import UnionFind
-from gameserver_local_uf import GameServerGo
+from go_types import State
+
+if TYPE_CHECKING:
+    from gameserver_local_uf import GameServerGo
 
 NUM_POSSIBLE_SCORES = int(30.5 * 2 + 1)
 
@@ -69,11 +73,12 @@ class Plot:
 
 
 class Plotter:
-    def __init__(self, rows=2, cols=2):
+    def __init__(self, rows=2, cols=2, window_title:str = "Go Bot Losses"):
         plt.ion()  # Enable interactive mode
 
         # Create a configurable subplot layout
         self.fig, self.axes = plt.subplots(rows, cols, figsize=(12, 8))
+        self.fig.canvas.manager.set_window_title(window_title)
         # Convert to 2D array for consistent indexing
         if rows == 1 and cols == 1:
             self.axes = np.array([[self.axes]])
@@ -145,7 +150,7 @@ class ModelOverlay:
         uf_after_after: UnionFind | None,
         model_output: tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
         is_white: bool,
-        server: GameServerGo,
+        server: "GameServerGo",
         final_score: float,
         save_image: bool = False,
         save_path: str = "model_overlay.png",
@@ -158,9 +163,9 @@ class ModelOverlay:
         pi, pi_opp, game_outcome_tensor, ownership, score_logits, v_pooled = model_output
 
         win_prob_pred = game_outcome_tensor[0][0].item()
-        mu_score = game_outcome_tensor[0][2].item()
-        sigma_score = game_outcome_tensor[0][3].item()
-        score = server.go.get_score(uf, server.go.komi)
+        mu_score = game_outcome_tensor[0][1].item()
+        sigma_score = game_outcome_tensor[0][2].item()
+        score = server.go.get_score(uf)
 
         score_diff = score["black"]["sum"] - score["white"]["sum"]
         score_normalized = -score_diff if is_white else score_diff
@@ -247,3 +252,102 @@ class ModelOverlay:
             plt.savefig(f"out/{save_path}")
             plt.close(fig)  # Close the figure to prevent display
             plt.switch_backend(current_backend)  # Restore original backend
+
+
+class GameStatePlotter:
+    def __init__(self, board_size: int):
+        self.board_size = board_size
+        self.board_color = "#DEB887"
+        self.line_color = "#5C4033"
+
+        self.stone_size = 1000
+        self.disabled_size = 350
+        self.territory_size = 200
+
+        plt.ion()
+
+        self.fig, self.axes = plt.subplots(figsize=(5, 5))
+
+        self._setup_board()
+
+    def _setup_board(self):
+        """Sets up the static appearance of the board (background, grid, limits)."""
+        self.axes.set_facecolor(self.board_color)
+
+        # Set plot limits slightly outside the grid
+        margin = 0.5
+        self.axes.set_xlim(-margin, self.board_size - 1 + margin)
+        self.axes.set_ylim(-margin, self.board_size - 1 + margin)
+
+        # Draw grid lines
+        for i in range(self.board_size):
+            self.axes.axhline(i, color=self.line_color, lw=1, zorder=0)
+            self.axes.axvline(i, color=self.line_color, lw=1, zorder=0)
+
+        # Show axes with zero-based ticks
+        self.axes.set_xticks(range(self.board_size))
+        self.axes.set_yticks(range(self.board_size))
+        # Hide the top and right spines for a cleaner look
+        self.axes.spines["top"].set_visible(False)
+        self.axes.spines["right"].set_visible(False)
+
+        # Ensure aspect ratio is equal
+        self.axes.set_aspect("equal", adjustable="box")
+
+    def plot(self, state: State, is_white: bool, scores: dict[str, dict[str, float | State]]):
+        """Plots the current game state."""
+        self.axes.cla()
+        self._setup_board()
+
+        black_y, black_x = np.where(state == 1)
+        white_y, white_x = np.where(state == 2)
+        disabled_y, disabled_x = np.where(state == 3)
+
+        score_black: float = scores["black"]["sum"]
+        score_white: float = scores["white"]["sum"]
+
+        black_terr_y, black_terr_x = np.where(scores["black"]["territory"] == 1)
+        white_terr_y, white_terr_x = np.where(scores["white"]["territory"] == 1)
+
+        self.axes.set_title(
+            f"{"White" if is_white else "Black"}\nScore Black: {score_black} Score White: {score_white}"
+        )
+        self.axes.scatter(black_x, black_y, c="black", s=self.stone_size, alpha=1, zorder=1, edgecolors="dimgray")
+        self.axes.scatter(white_x, white_y, c="white", s=self.stone_size, alpha=1, zorder=1, edgecolors="darkgray")
+
+        # territory
+        self.axes.scatter(
+            black_terr_x,
+            black_terr_y,
+            c="dimgray",  # Dark gray for black territory
+            s=self.territory_size,
+            marker="s",  # Square marker
+            alpha=0.6,  # Slightly transparent
+            zorder=0.5,  # Between grid (0) and stones (1)
+        )
+        self.axes.scatter(
+            white_terr_x,
+            white_terr_y,
+            c="lightgray",  # Light gray for white territory
+            s=self.territory_size,
+            marker="s",  # Square marker
+            alpha=0.6,  # Slightly transparent
+            zorder=0.5,  # Between grid (0) and stones (1)
+        )
+
+        # disabled
+        self.axes.scatter(
+            disabled_x,
+            disabled_y,
+            c="#606060",
+            s=self.disabled_size,
+            alpha=1,
+            marker="x",
+            zorder=1,
+            lw=2,
+        )
+
+        self.fig.tight_layout(pad=0.5)
+
+        self.fig.canvas.draw()
+        self.fig.canvas.flush_events()
