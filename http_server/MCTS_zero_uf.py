@@ -120,7 +120,7 @@ class Node:
             )
 
             self.policy = policy
-            self.win_utility = value * 2.0 - 1.0
+            self.win_utility = value #* 2.0 - 1.0
             self.mu_s = mu
             self.sigma_s = sigma
 

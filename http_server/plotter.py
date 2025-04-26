@@ -163,8 +163,8 @@ class ModelOverlay:
         pi, pi_opp, game_outcome_tensor, ownership, score_logits, v_pooled = model_output
 
         win_prob_pred = game_outcome_tensor[0][0].item()
-        mu_score = game_outcome_tensor[0][2].item()
-        sigma_score = game_outcome_tensor[0][3].item()
+        mu_score = game_outcome_tensor[0][1].item()
+        sigma_score = game_outcome_tensor[0][2].item()
         score = server.go.get_score(uf)
 
         score_diff = score["black"]["sum"] - score["white"]["sum"]

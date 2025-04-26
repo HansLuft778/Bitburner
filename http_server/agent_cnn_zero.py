@@ -194,7 +194,9 @@ class ResNet(nn.Module):
         self.game_outcome_head = nn.Sequential(
             nn.Linear(pooled_features_dim, value_head_intermediate_channels),
             nn.ReLU(),
-            nn.Linear(value_head_intermediate_channels, 4),  # win / lose / score mean / score std dev
+            nn.Linear(
+                value_head_intermediate_channels, 3
+            ),  # who wins, score mean, score std # win / lose / score mean / score std dev
         )
 
         # output shape [B, 1, board_width, board_height]
@@ -236,11 +238,12 @@ class ResNet(nn.Module):
 
         # --- game outcome head ---
         game_outcome_logits = self.game_outcome_head(v_pooled)  # shape [B, 4]
-        outcome_distribution = torch.softmax(game_outcome_logits[:, 0:2], dim=1)  # shape [B, 2]
-        score_mean = game_outcome_logits[:, 2:3] * 20  # shape [B, 1]
-        score_std = F.softplus(game_outcome_logits[:, 3:4]) * 20  # shape [B, 1]
+        # outcome_distribution = torch.softmax(game_outcome_logits[:, 0:2], dim=1)  # shape [B, 2]
+        value_output = torch.tanh(game_outcome_logits[:, 0:1])  # NEW, shape [B, 1]
+        score_mean = game_outcome_logits[:, 1:2] * 20  # shape [B, 1]
+        score_std = F.softplus(game_outcome_logits[:, 2:3]) * 20  # shape [B, 1]
 
-        game_outcome = torch.cat([outcome_distribution, score_mean, score_std], dim=1)  # shape [B, 4]
+        game_outcome = torch.cat([value_output, score_mean, score_std], dim=1)  # shape [B, 3]
 
         # --- ownership head ---
         ownership_logits = self.ownership_head(x)  # shape [B, 1, board_width, board_height]
@@ -272,11 +275,12 @@ class ResNet(nn.Module):
         v_pooled = torch.cat([v_mean, v_max, v_std], dim=1)  # shape [B, c_val]
         game_outcome_head_output = self.game_outcome_head(v_pooled)
 
-        outcome_distribution = torch.softmax(game_outcome_head_output[:, 0:2], dim=1)  # shape [B, 2]
-        mu = game_outcome_head_output[:, 2:3] * 20  # shape [B, 1]
-        sigma = F.softplus(game_outcome_head_output[:, 3:4]) * 20
+        # outcome_distribution = torch.softmax(game_outcome_head_output[:, 0:2], dim=1)  # shape [B, 2]
+        value_output = torch.tanh(game_outcome_head_output[:, 0:1])  # NEW, shape [B, 1]
+        mu = game_outcome_head_output[:, 1:2] * 20  # shape [B, 1]
+        sigma = F.softplus(game_outcome_head_output[:, 2:3]) * 20
 
-        return own_policy_logits, outcome_distribution, mu, sigma
+        return own_policy_logits, value_output, mu, sigma
 
 
 class ResBlock(nn.Module):
@@ -704,7 +708,7 @@ class AlphaZeroAgent:
         policy_logits_squeezed[~valid_mask] = -1e9
         final_probs = torch.softmax(policy_logits_squeezed, dim=0)
 
-        return final_probs, outcome.squeeze()[0].item(), mu.item(), sigma.item()
+        return final_probs, outcome.squeeze().item(), mu.item(), sigma.item()
 
     def decode_action(self, action_idx: int) -> tuple[int, int]:
         """
@@ -757,7 +761,7 @@ class AlphaZeroAgent:
         pi_opp_batch = torch.stack(pi_opp_list, dim=0).to(device=self.device)  # shape [B, 26]
         z_batch = torch.tensor(z_list, dtype=torch.float, device=self.device)  # [B]
         # z_batch_transformed = torch.stack([(z_batch + 1) / 2, (1 - z_batch) / 2], dim=1)  # [B, 2]
-        z_class_indices = ((1 - z_batch) / 2).long()
+        # z_class_indices = ((1 - z_batch) / 2).long()
 
         ownership_batch = torch.stack(ownership_list, dim=0).to(device=self.device)  # shape [B, 1, W, H]
         o_target_player = (ownership_batch == 1).float()
@@ -788,8 +792,9 @@ class AlphaZeroAgent:
         # z_hat = F.log_softmax(outcome_logits[:, :2], dim=1)  # shape [B, 2]
         score_log_probs = F.log_softmax(score_logits, dim=1)  # shape [B, num_possible_scores]
         score_probs = F.softmax(score_logits, dim=1)  # shape [B, num_possible_scores]
-        mu_hat = outcome_logits[:, 2]
-        sigma_hat = outcome_logits[:, 3]
+        z_hat = outcome_logits[:, 0]
+        mu_hat = outcome_logits[:, 1]
+        sigma_hat = outcome_logits[:, 2]
 
         ## ownership loss preparation
         ownership_logits_player = (ownership_logits + 1) / 2  # type: ignore
@@ -821,7 +826,8 @@ class AlphaZeroAgent:
         policy_loss_opp = ((raw_policy_loss_opp * full_search_mask).sum() / num_full_search_samples) * 0.15
 
         # game_outcome_value_loss = -(z_batch_transformed * z_hat).sum(dim=1).mean() * 1.5
-        game_outcome_value_loss = F.cross_entropy(outcome_logits[:, :2], z_class_indices) * 1.5
+        # game_outcome_value_loss = F.cross_entropy(outcome_logits[:, :2], z_class_indices) * 1.5
+        game_outcome_value_loss = F.mse_loss(z_hat, z_batch) * 1.5
 
         ownership_loss = -(o_target_flat * torch.log(ownership_hat_flat)).sum(dim=1).mean() * 0.06
 
@@ -841,6 +847,17 @@ class AlphaZeroAgent:
         gamma_intermediate = F.relu(self.policy_net.score_head.scale_fc1(v_pooled))
         gamma = self.policy_net.score_head.scale_fc2(gamma_intermediate)
         score_scaling_penalty = 0.0005 * (gamma**2).mean()
+        # Assert all loss components are numerical (not NaN)
+
+        assert not torch.isnan(policy_loss_own), "policy_loss_own is NaN"
+        assert not torch.isnan(policy_loss_opp), "policy_loss_opp is NaN"
+        assert not torch.isnan(game_outcome_value_loss), "game_outcome_value_loss is NaN"
+        assert not torch.isnan(ownership_loss), "ownership_loss is NaN"
+        assert not torch.isnan(score_pdf_loss), "score_pdf_loss is NaN"
+        assert not torch.isnan(score_cdf_loss), "score_cdf_loss is NaN"
+        assert not torch.isnan(score_mean_loss), "score_mean_loss is NaN"
+        assert not torch.isnan(score_std_loss), "score_std_loss is NaN"
+        assert not torch.isnan(score_scaling_penalty), "score_scaling_penalty is NaN"
 
         loss = (
             policy_loss_own
