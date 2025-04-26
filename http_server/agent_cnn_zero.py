@@ -434,7 +434,7 @@ class AlphaZeroAgent:
     def augment_state(
         self,
         be: BufferElement,
-        outcome: int,
+        perspective_adj_outcome: int,
         ownership: np.ndarray[Any, np.dtype[np.int8]],
         score: float,
         white_started: bool,
@@ -482,7 +482,7 @@ class AlphaZeroAgent:
             )
 
         self.train_buffer.push(
-            pi_mcts, pi_mcts_opp, outcome, is_white, grouped_tensor, score, full_search, white_started
+            pi_mcts, pi_mcts_opp, perspective_adj_outcome, is_white, grouped_tensor, score, full_search, white_started
         )
 
         # rotate state
@@ -496,7 +496,14 @@ class AlphaZeroAgent:
             rotated_opp = torch.cat([rotated_opp_board.flatten(), pi_res_pass.unsqueeze(0)])
 
             self.train_buffer.push(
-                rotated_pi, rotated_opp, outcome, is_white, rotated_grouped_tensor, score, full_search, white_started
+                rotated_pi,
+                rotated_opp,
+                perspective_adj_outcome,
+                is_white,
+                rotated_grouped_tensor,
+                score,
+                full_search,
+                white_started,
             )
 
         # mirror state
@@ -511,7 +518,7 @@ class AlphaZeroAgent:
         self.train_buffer.push(
             mirrored_pi,
             mirrored_pi_response,
-            outcome,
+            perspective_adj_outcome,
             is_white,
             mirrored_grouped_tensor,
             score,
@@ -531,7 +538,7 @@ class AlphaZeroAgent:
             self.train_buffer.push(
                 mirrored_rotated_pi,
                 mirrored_rotated_response,
-                outcome,
+                perspective_adj_outcome,
                 is_white,
                 mirrored_rotated_group,
                 score,

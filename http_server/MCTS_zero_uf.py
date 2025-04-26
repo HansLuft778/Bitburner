@@ -115,7 +115,9 @@ class Node:
             history_states = self.get_history_ref()
             history_states.extend(self.server.get_game_history())
             valid_moves = self.get_valid_moves()
-            policy, value, mu, sigma = self.agent.predict_eval(self.uf, history_states, valid_moves, self.is_white, self.server.go.white_starts)
+            policy, value, mu, sigma = self.agent.predict_eval(
+                self.uf, history_states, valid_moves, self.is_white, self.server.go.white_starts
+            )
 
             self.policy = policy
             self.win_utility = value * 2.0 - 1.0
@@ -582,7 +584,7 @@ def main() -> None:
     plotter.add_plot("score_mean_loss", plotter.axes[3, 1], "Score Mean Loss Over Time", "Updates", "Score Mean Loss")  # type: ignore
     plotter.add_plot("score_std_loss", plotter.axes[3, 2], "Score Std Dev Loss Over Time", "Updates", "Score Std Dev Loss")  # type: ignore
 
-    agent = AlphaZeroAgent(board_size, plotter)
+    agent = AlphaZeroAgent(board_size, plotter, batch_size=128)
     # agent.load_checkpoint("checkpoint_37.pth")
     mcts = MCTS(
         server, agent, full_search_iterations=1000, fast_search_iterations=200, full_seach_prop=0.25, table=table

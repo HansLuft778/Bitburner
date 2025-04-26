@@ -48,6 +48,9 @@ class GoStateGenerator:
 
         return np.rot90(state, np.random.randint(0, 4))
 
+    def convert_state_to_MCTS(self, state: State) -> State:
+        return (1 - state) * 3
+
     def ensure_offline_nodes(self, state: State) -> State:
         """Ensures at least one node is 0 (removed)."""
         if np.all(state):  # If no zeros exist
@@ -144,11 +147,12 @@ class GoStateGenerator:
 
 if __name__ == "__main__":
     # Test with different sizes
-    for size in [5, 9, 13]:
+    for size in [5]:
         print(f"\n--- Generating Board Size: {size}x{size} ---")
         generator = GoStateGenerator(size)
         try:
             board_state = generator.generate_board_state()
+            print(board_state)
             generator.print_board(board_state)
             # Verify ensure_offline_nodes worked if needed
             if np.all(board_state):
