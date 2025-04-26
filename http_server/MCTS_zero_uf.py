@@ -120,7 +120,7 @@ class Node:
             )
 
             self.policy = policy
-            self.win_utility = value #* 2.0 - 1.0
+            self.win_utility = value  # * 2.0 - 1.0
             self.mu_s = mu
             self.sigma_s = sigma
 
@@ -542,7 +542,9 @@ def temperature_decay(episode_length: int) -> float:
 def main() -> None:
     # torch.manual_seed(0)  # pyright: ignore
     # np.random.seed(0)
-    board_size = 5
+    board_size = 7
+    komi = 5.5
+
     table = LookupTable(board_size, C_SCORE)
 
     server = GameServerGo(board_size)
@@ -584,7 +586,7 @@ def main() -> None:
     plotter.add_plot("score_mean_loss", plotter.axes[3, 1], "Score Mean Loss Over Time", "Updates", "Score Mean Loss")  # type: ignore
     plotter.add_plot("score_std_loss", plotter.axes[3, 2], "Score Std Dev Loss Over Time", "Updates", "Score Std Dev Loss")  # type: ignore
 
-    agent = AlphaZeroAgent(board_size, plotter, batch_size=128)
+    agent = AlphaZeroAgent(board_size, komi, plotter, batch_size=128)
     # agent.load_checkpoint("checkpoint_37.pth")
     mcts = MCTS(
         server, agent, full_search_iterations=1000, fast_search_iterations=200, full_seach_prop=0.25, table=table
@@ -596,7 +598,6 @@ def main() -> None:
     print("Done! Starting MCTS...")
 
     temperature = 0.8
-    komi = 5.5
 
     outcome = 0
     for iter in range(NUM_EPISODES):
@@ -700,7 +701,7 @@ def main() -> None:
         score = black_score - white_score  # black leads with
 
         print("saving model overlay...")
-        mo = ModelOverlay()
+        mo = ModelOverlay(board_size, komi)
         len_buffer = len(buffer)
         buffer_indices = [0, 1, len_buffer // 2, len_buffer // 2 + 1, len_buffer - 2, len_buffer - 1]
         # buffer_indices = range(len_buffer)  # for testing
@@ -754,7 +755,7 @@ async def main_eval():
     print("GameServer ready and client connected")
 
     plotter = Plotter()
-    agent = AlphaZeroAgent(board_size, plotter, checkpoint_dir="models")
+    agent = AlphaZeroAgent(board_size, 5.5, plotter, checkpoint_dir="models")
     agent.load_checkpoint("checkpoint_129_katago_v1.pth")
     mcts = MCTS(server, agent, 1000, 100, 0.25, table=table, eval_mode=True)
 

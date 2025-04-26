@@ -14,8 +14,6 @@ from plotter import Plotter  # type: ignore
 from Buffer import BufferElement, TrainingBuffer
 from go_types import State
 
-NUM_POSSIBLE_SCORES = int(30.5 * 2 + 1)
-
 
 class GlobalPoolingBias(nn.Module):
     def __init__(self, channels_g: int, channels_x: int):
@@ -97,12 +95,12 @@ class PolicyHead(nn.Module):
 
 
 class FinalScoreDistHead(nn.Module):
-    def __init__(self, pooled_features_dim: int, value_head_intermediate_channels: int):
+    def __init__(self, pooled_features_dim: int, value_head_intermediate_channels: int, max_score: float):
         super().__init__()  # pyright: ignore
 
-        self.min_score = -30.5
-        self.max_score = 30.5
-        self.num_possible_scores = NUM_POSSIBLE_SCORES
+        self.min_score = -max_score
+        self.max_score = max_score
+        self.num_possible_scores = int(max_score * 2 + 1)
 
         # Layers processing pooled features + score info (shared weights across scores)
         # Input: pooled_features_dim + 2 (scaled score s, parity(s))
@@ -145,6 +143,7 @@ class ResNet(nn.Module):
         num_res_blocks: int,
         num_pooling_blocks: int,
         num_hidden: int,
+        max_score: float,
     ) -> None:
         super().__init__()  # pyright: ignore
 
@@ -206,7 +205,7 @@ class ResNet(nn.Module):
             nn.Tanh(),
         )
 
-        self.score_head = FinalScoreDistHead(pooled_features_dim, value_head_intermediate_channels)
+        self.score_head = FinalScoreDistHead(pooled_features_dim, value_head_intermediate_channels, max_score)
 
     def forward(
         self, x: torch.Tensor, x_vector: torch.Tensor
@@ -348,6 +347,7 @@ class AlphaZeroAgent:
     def __init__(
         self,
         board_width: int,
+        komi: float,
         plotter: Plotter | None,
         lr: float = 3e-4,
         batch_size: int = 128,
@@ -362,6 +362,9 @@ class AlphaZeroAgent:
         self.checkpoint_dir = checkpoint_dir
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+        self.max_score = board_width * board_width + komi
+        self.num_possible_scores = int(self.max_score * 2 + 1)
+
         self.num_past_steps = num_past_steps
         # plus one for pass move evaluation, the difference between the past steps is checked. For n past steps, need to check n+1 boards
         self.history_length = num_past_steps + 1
@@ -371,6 +374,7 @@ class AlphaZeroAgent:
             num_res_blocks=6,
             num_hidden=96,
             num_pooling_blocks=2,
+            max_score=self.max_score,
         ).to(self.device)
         self.policy_net.eval()
 
@@ -380,10 +384,7 @@ class AlphaZeroAgent:
         self.train_buffer = TrainingBuffer()
 
         self.possible_scores = torch.linspace(  # shape [1, num_possible_scores]
-            self.policy_net.score_head.min_score,
-            self.policy_net.score_head.max_score,
-            self.policy_net.score_head.num_possible_scores,
-            device=self.device,
+            -self.max_score, self.max_score, self.num_possible_scores, device=self.device
         ).unsqueeze(0)
 
         self.liberty_kernel_cpu = (
@@ -665,7 +666,7 @@ class AlphaZeroAgent:
         """
         Deprocess the state tensor into a numpy array.
         """
-        new_state = torch.zeros((5, 5), dtype=torch.int8, device=state.device)
+        new_state = torch.zeros((self.board_height, self.board_height), dtype=torch.int8, device=state.device)
         new_state[state[0] == 1] = 3  # disabled stones
         if is_white:
             new_state[state[1] == 1] = 2  # own stones
@@ -810,9 +811,9 @@ class AlphaZeroAgent:
         ownership_hat_flat = ownership_hat_prob.view(B, C, -1)  # shape [B, 2, W*H]
 
         ## score loss preparation
-        score_onehot = torch.zeros((self.batch_size, NUM_POSSIBLE_SCORES), device=self.device)
+        score_onehot = torch.zeros((self.batch_size, self.num_possible_scores), device=self.device)
         for i in range(self.batch_size):
-            score_idx = NUM_POSSIBLE_SCORES // 2 + torch.floor(score_batch[i])
+            score_idx = self.num_possible_scores // 2 + torch.floor(score_batch[i])
             score_onehot[i, int(score_idx)] = 1.0
 
         # calculate losses
