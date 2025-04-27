@@ -23,6 +23,8 @@ INITIAL_TEMPERATURE = 1.0
 FINAL_TEMPERATURE = 0.1
 TEMPERATURE_DECAY_MOVES = 6
 
+FORCED_PLAYOUTS_K = 2
+
 
 def get_puct_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) -> float:
     """
@@ -36,11 +38,6 @@ def get_puct_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) 
         q_value = -(child.utility_sum / child.visit_cnt)
     u_value = c_puct * child.prior * parent_visit_count**0.5 / (1 + child.visit_cnt)
     return q_value + u_value
-
-
-def get_num_forced_playouts(child: "Node", k: int = 2) -> int:
-    assert child.parent is not None, "Child must have a parent to calculate number of forced playouts"
-    return int((k * child.prior * child.parent.visit_cnt) ** 0.5)
 
 
 def get_explore_selection_value_inverse(
@@ -126,7 +123,7 @@ class Node:
                 self.uf, history_states, valid_moves, self.is_white, self.server.go.white_starts
             )
 
-            self.policy = policy
+            self.policy = policy.cpu()
             self.win_utility = value  # * 2.0 - 1.0
             self.mu_s = mu
             self.sigma_s = sigma
@@ -292,11 +289,11 @@ class MCTS:
         if self.eval_mode:
             is_full_search = True
             playout_cap = self.full_search_iterations
-            disable_exploration_features = True
+            exploration_features_disabled = True
         else:
             is_full_search = np.random.rand() < self.full_seach_prop
             playout_cap = self.full_search_iterations if is_full_search else self.fast_search_iterations
-            disable_exploration_features = False
+            exploration_features_disabled = False
         print(f"starting {"full" if is_full_search else "fast"} search...")
 
         # reset stats
@@ -313,6 +310,9 @@ class MCTS:
         self.root.score_utility = self.table.get_expected_uscore(self.root.mu_s, self.root.sigma_s, x_0).item()
 
         # Apply dirichlet noise
+        print(
+            f"Value estimate: {self.root.win_utility:.3f} (from {'white' if self.root.is_white else 'black'}'s perspective)"
+        )
         if not self.eval_mode and self.root.visit_cnt == 0:
             alpha = 0.2
             dir_noise = np.random.dirichlet([alpha] * len(self.root.policy))
@@ -330,7 +330,7 @@ class MCTS:
             # selection with forced playouts and lazy expand
             select_start = time.time()
 
-            while node.is_fully_expanded() and not node.done:
+            while not node.is_fully_expanded() and not node.done:
                 current_node = node
                 valid = current_node.get_valid_moves()
                 only_valid = np.where(valid == True)[0]
@@ -340,30 +340,55 @@ class MCTS:
 
                 best_action = -1
                 best_value = -float("inf")
-                for action in only_valid:
-                    child = current_node.get_child_if_exists(action)
 
-                    if child is not None:
-                        q_value = 0.0 if child.visit_cnt == 0 else -(child.utility_sum / child.visit_cnt)
-                        u_value = C_PUCT * policy[action] * current_node.visit_cnt**0.5 / (1 + child.visit_cnt)
-                    else:
-                        q_value = 0.0
-                        u_value = C_PUCT * policy[action] * current_node.visit_cnt**0.5  # / (1 + 0)
-                    puct_value = q_value + u_value
-                    if puct_value > best_value:
-                        best_value = puct_value
-                        best_action = action
+                # calculate forced playout count vectorized
+                next_action: int | None = None
+                # if node.parent is None and not exploration_features_disabled:
+                #     child_forced_playouts = np.floor((FORCED_PLAYOUTS_K * policy * current_node.visit_cnt) ** 0.5)
+                #     next_node_prior: torch.Tensor | None = None
+                #     for action in only_valid:
+                #         child = current_node.get_child_if_exists(action)
+                #         child_prior = policy[action]
+
+                #         child_visit_cnt = 0 if child is None else child.visit_cnt
+                #         # find node to force by choosing the one with the largest prior
+                #         if child_visit_cnt < child_forced_playouts[action] and (
+                #             next_node_prior is None or child_prior > next_node_prior
+                #         ):
+                #             next_node_prior = child_prior
+                #             next_action = action  # child with larger prior found, override it
+
+                if next_action is None:  # no node to force, descent normally
+                    for action in only_valid:
+                        child = current_node.get_child_if_exists(action)
+                        child_prior = policy[action]
+
+                        if child is not None:
+                            q_value = 0.0 if child.visit_cnt == 0 else -(child.utility_sum / child.visit_cnt)
+                            u_value = C_PUCT * child_prior * current_node.visit_cnt**0.5 / (1 + child.visit_cnt)
+                        else:
+                            q_value = 0.0
+                            u_value = C_PUCT * child_prior * current_node.visit_cnt**0.5  # / (1 + 0)
+                        puct_value = q_value + u_value
+                        if puct_value > best_value:
+                            best_value = puct_value
+                            best_action = action
+                else:
+                    best_action = next_action
 
                 assert best_action != -1
+
                 self.timing_stats["selection"] += time.time() - select_start
                 self.iterations_stats["selection"] += 1
 
                 chosen_child = current_node.get_child_if_exists(best_action)
                 if chosen_child is not None:
                     node = chosen_child
+                    self.max_depth = max(self.max_depth, node.depth)
                 else:  # expand lazily
                     expand_start = time.time()
                     new_child = current_node.create_child(best_action)
+                    self.max_depth = max(self.max_depth, new_child.depth)
                     node = new_child
                     self.timing_stats["expansion"] += time.time() - expand_start
                     break
@@ -380,27 +405,16 @@ class MCTS:
                 self.timing_stats["end_check"] += time.time() - end_check_start
             else:
                 self.timing_stats["end_check"] += time.time() - end_check_start
-                inference_start = time.time()
 
                 if node.policy is None:
+                    inference_start = time.time()
                     # This sets leaf_node.win_utility and leaf_node.score_utility
                     final_probs, _, _, _ = node.get_predictions(self.table, x_0)
                     node.policy = final_probs
+                    self.timing_stats["nn_inference"] += time.time() - inference_start
+                    self.iterations_stats["nn_inference"] += 1
 
-                policy = node.policy
                 assert node.win_utility is not None and node.score_utility is not None, "Values should not be None"
-
-                self.timing_stats["nn_inference"] += time.time() - inference_start
-                self.iterations_stats["nn_inference"] += 1
-
-                if iter == 0:
-                    print(
-                        f"Value estimate: {node.win_utility:.3f} (from {'white' if node.is_white else 'black'}'s perspective)"
-                    )
-
-                # expand_start = time.time()
-                # node.expand(policy)
-                # self.timing_stats["expansion"] += time.time() - expand_start
 
             # backpropagation
             backprop_start = time.time()
@@ -409,13 +423,13 @@ class MCTS:
             self.timing_stats["backprop"] += time.time() - backprop_start
 
             # plot tree from root node for debugging
-            # if iter == 999:
+            # if iter == playout_cap:
             #     TreePlot(self.root).create_tree()
 
         # calculate final policy distribution
         final_policy_start = time.time()
 
-        if disable_exploration_features:
+        if exploration_features_disabled:
             props = torch.zeros(
                 self.agent.board_height * self.agent.board_height + 1,
                 device=self.agent.device,
@@ -445,36 +459,36 @@ class MCTS:
         explore_scaling = C_PUCT * self.root.visit_cnt**0.5
         pruned_visit_counts = {c.action: float(c.visit_cnt) for c in self.root.children.values()}
 
-        for c in self.root.children.values():
-            action = c.action
-            # use action to differentiate between c and c_star, since action is unique for every child
-            if action is None or action == c_star.action:
-                continue
+        # for c in self.root.children.values():
+        #     action = c.action
+        #     # use action to differentiate between c and c_star, since action is unique for every child
+        #     if action is None or action == c_star.action:
+        #         continue
 
-            n_orig = float(c.visit_cnt)
-            wins = c.utility_sum
-            prior = c.prior
+        #     n_orig = float(c.visit_cnt)
+        #     wins = c.utility_sum
+        #     child_prior = c.prior
 
-            # set visit count to 0 if c has no visits
-            if n_orig <= 0:
-                pruned_visit_counts[action] = 0.0
-                continue
+        #     # set visit count to 0 if c has no visits
+        #     if n_orig <= 0:
+        #         pruned_visit_counts[action] = 0.0
+        #         continue
 
-            child_q_value = wins / n_orig
-            child_utility_from_parent = -child_q_value
+        #     child_q_value = wins / n_orig
+        #     child_utility_from_parent = -child_q_value
 
-            wanted_weight = get_explore_selection_value_inverse(
-                c_star_puct, explore_scaling, prior, child_utility_from_parent
-            )
+        #     wanted_weight = get_explore_selection_value_inverse(
+        #         c_star_puct, explore_scaling, child_prior, child_utility_from_parent
+        #     )
 
-            actual_weight = n_orig
-            pruned_weight = min(wanted_weight, actual_weight)
+        #     actual_weight = n_orig
+        #     pruned_weight = min(wanted_weight, actual_weight)
 
-            if pruned_weight < 1.0:
-                print(f"Pruning child {action} from {actual_weight:.3f} to {pruned_weight:.3f}")
-                pruned_weight = 0.0
+        #     if pruned_weight < 1.0:
+        #         print(f"Pruning child {action} from {actual_weight:.3f} to {pruned_weight:.3f}")
+        #         pruned_weight = 0.0
 
-            pruned_visit_counts[action] = pruned_weight
+        #     pruned_visit_counts[action] = pruned_weight
 
         props = torch.zeros(
             self.agent.board_height * self.agent.board_height + 1,
@@ -546,15 +560,16 @@ def temperature_decay(episode_length: int) -> float:
         return FINAL_TEMPERATURE
 
 
-def main() -> None:
+async def main() -> None:
     # torch.manual_seed(0)  # pyright: ignore
     # np.random.seed(0)
-    board_size = 7
+    board_size = 5
     komi = 5.5
 
     table = LookupTable(board_size, C_SCORE)
 
     server = GameServerGo(board_size)
+    await server.wait()
     print("GameServer ready and client connected")
     print("initializing MCTS...")
 
@@ -607,13 +622,15 @@ def main() -> None:
     temperature = 0.8
 
     outcome = 0
+    is_white = False
     for iter in range(NUM_EPISODES):
-        white_starts = iter % 2 == 0  # white even, black odd
+        # white_starts = iter % 2 == 0  # white even, black odd
+        white_starts = False
         white_komi = 0 if white_starts else komi
         black_komi = komi if white_starts else 0
 
-        # state, komi = await server.reset_game("No AI", is_white)
-        state = generator.convert_state_to_MCTS(generator.generate_board_state())
+        state, komi = await server.reset_game("No AI", is_white)
+        # state = generator.convert_state_to_MCTS(generator.generate_board_state())
         uf = UnionFind.get_uf_from_state(state, server.go.zobrist)
         server.go = Go_uf(board_size, state, komi, white_starts)
 
@@ -652,7 +669,8 @@ def main() -> None:
             )
 
             # outcome is: 1 if black won, -1 is white won
-            next_uf, outcome, done = server.make_move_local(best_move, is_white, game_state_plotter)
+            # next_uf, outcome, done = server.make_move_local(best_move, is_white, game_state_plotter)
+            next_uf, outcome, done = await server.make_move(action, best_move, is_white)
             game_history.insert(0, next_uf.state)
 
             is_white = not is_white
@@ -813,7 +831,7 @@ async def main_eval():
 
 # Run the main coroutine
 if __name__ == "__main__":
-    # import asyncio
+    import asyncio
 
-    # asyncio.run(main())
-    main()
+    asyncio.run(main())
+    # main()
