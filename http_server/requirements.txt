@@ -1,10 +1,10 @@
-igraph==0.11.8
-matplotlib==3.10.0
-plotly==6.0.0
+igraph
+matplotlib
+plotly
 torch==2.6.0+cu126
 torchaudio==2.6.0+cu126
 torchvision==0.21.0+cu126
-websockets==14.2
+websockets
 scipy
 numpy
 plotly-stubs

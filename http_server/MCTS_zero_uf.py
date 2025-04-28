@@ -25,6 +25,8 @@ TEMPERATURE_DECAY_MOVES = 6
 
 FORCED_PLAYOUTS_K = 2
 
+USER_BITBURNER = False
+
 
 def get_puct_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) -> float:
     """
@@ -606,7 +608,8 @@ async def main() -> None:
     table = LookupTable(board_size, C_SCORE)
 
     server = GameServerGo(board_size)
-    await server.wait()
+    if USER_BITBURNER:
+        await server.wait()
     print("GameServer ready and client connected")
     print("initializing MCTS...")
 
@@ -660,13 +663,18 @@ async def main() -> None:
 
     outcome = 0
     for iter in range(NUM_EPISODES):
-        # white_starts = iter % 2 == 0  # white even, black odd
-        white_starts = False
+        if USER_BITBURNER:
+            white_starts = False
+        else:
+            white_starts = iter % 2 == 0  # white even, black odd
         white_komi = 0 if white_starts else komi
         black_komi = komi if white_starts else 0
 
-        state, komi = await server.reset_game("No AI", white_starts)
-        # state = generator.convert_state_to_MCTS(generator.generate_board_state())
+        if USER_BITBURNER:
+            state, _ = await server.reset_game("No AI", white_starts)
+        else:
+            state = generator.convert_state_to_MCTS(generator.generate_board_state())
+
         uf = UnionFind.get_uf_from_state(state, server.go.zobrist)
         server.go = Go_uf(board_size, state, komi, white_starts)
 
@@ -705,8 +713,10 @@ async def main() -> None:
             )
 
             # outcome is: 1 if black won, -1 is white won
-            # next_uf, outcome, done = server.make_move_local(best_move, is_white, game_state_plotter)
-            next_uf, outcome, done = await server.make_move(action, best_move, is_white)
+            if USER_BITBURNER:
+                next_uf, outcome, done = await server.make_move(action, best_move, is_white)
+            else:
+                next_uf, outcome, done = server.make_move_local(best_move, is_white, game_state_plotter)
             game_history.insert(0, next_uf.state)
 
             is_white = not is_white
