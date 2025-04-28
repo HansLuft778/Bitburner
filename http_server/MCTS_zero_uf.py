@@ -157,6 +157,26 @@ class Node:
         if self.action == board_size and self.parent is not None and self.parent.action == board_size:
             return True
 
+        # technically, passing is always legal, so these two are not needed?
+        # when the board is full, you can still pass
+
+        # # board full (technically not needed?)
+        # space_available = np.any(self.uf.state == 0)
+        # if not space_available:
+        #     self.done = True
+        #     return True
+
+        # one pass, next player has no valid moves
+        # if self.parent is not None and self.parent.action == board_size:
+        #     if self._valid_moves is not None:
+        #         has_valid = True#np.any(self._valid_moves)
+        #     else:
+        #         # history_hashes = self.get_hash_history()
+        #         has_valid = True #self.server.go.has_any_valid_moves(self.uf, self.is_white, history_hashes)
+        #     if not has_valid:
+        #         self.done = True
+        #         return True
+
         return False
 
     def get_history_ref(self) -> list[State]:
@@ -187,14 +207,29 @@ class Node:
                 break
         return history
 
-    def next(self) -> "Node":
-        best: tuple[Node | None, float] = (None, -99999)
-        for c in self.children.values():
-            score = get_puct_value(c, self.visit_cnt, c_puct=C_PUCT)
-            if score > best[1]:
-                best = (c, score)
+    def next(self) -> int:
+        assert self.policy is not None
+        valid_moves = self.get_valid_moves()
+        only_valid = np.where(valid_moves == True)[0]
 
-        assert best[0] is not None
+        parent_visit_cnt_sqrt = self.visit_cnt**0.5  # faster than sqrt
+
+        best: tuple[int, float] = (-1, -99999)
+        for action in only_valid:
+            c = self.get_child_if_exists(action)
+            child_prior = self.policy[action].item()
+            if c is not None:
+                q_value = 0.0 if c.visit_cnt == 0 else -(c.utility_sum / c.visit_cnt)
+                u_value = C_PUCT * child_prior * parent_visit_cnt_sqrt / (1 + c.visit_cnt)
+                score = q_value + u_value
+            else:
+                q_value = 0.0
+                u_value = C_PUCT * child_prior * parent_visit_cnt_sqrt  # / (1 + 0)
+                score = q_value + u_value
+            if score > best[1]:
+                best = (action, score)
+
+        assert best[0] != -1
         return best[0]
 
     def get_child_if_exists(self, action: int) -> "Node | None":
@@ -204,7 +239,7 @@ class Node:
         assert self.policy is not None, "Policy must be predicted before expansion"
 
         board_size = self.server.go.board_size
-        policy_cpu = self.policy.cpu().numpy()  # type: ignore
+        policy_cpu = self.policy.numpy()  # type: ignore # TODO: maybe dont need .numpy()
 
         if action == board_size:
             next_uf = self.uf.copy()
@@ -330,68 +365,73 @@ class MCTS:
             # selection with forced playouts and lazy expand
             select_start = time.time()
 
-            while not node.is_fully_expanded() and not node.done:
-                current_node = node
-                valid = current_node.get_valid_moves()
-                only_valid = np.where(valid == True)[0]
+            # # calculate forced playout count vectorized
 
-                assert current_node.policy is not None
-                policy = current_node.policy
+            # descent tree until next child is not yet expanded to
+            expand_to = -1
+            force_action_taken = False
+            while True:
+                # --- FORCED PLAYOUT LOGIC ---
+                if node.parent is None and not exploration_features_disabled:
+                    assert node.policy is not None
+                    policy = node.policy
 
-                best_action = -1
-                best_value = -float("inf")
+                    forced_playouts_base = FORCED_PLAYOUTS_K * policy * node.visit_cnt
+                    child_forced_playouts = torch.floor(forced_playouts_base * forced_playouts_base)
+                    valid = node.get_valid_moves()
+                    only_valid = np.where(valid == True)[0]
 
-                # calculate forced playout count vectorized
-                next_action: int | None = None
-                # if node.parent is None and not exploration_features_disabled:
-                #     child_forced_playouts = np.floor((FORCED_PLAYOUTS_K * policy * current_node.visit_cnt) ** 0.5)
-                #     next_node_prior: torch.Tensor | None = None
-                #     for action in only_valid:
-                #         child = current_node.get_child_if_exists(action)
-                #         child_prior = policy[action]
-
-                #         child_visit_cnt = 0 if child is None else child.visit_cnt
-                #         # find node to force by choosing the one with the largest prior
-                #         if child_visit_cnt < child_forced_playouts[action] and (
-                #             next_node_prior is None or child_prior > next_node_prior
-                #         ):
-                #             next_node_prior = child_prior
-                #             next_action = action  # child with larger prior found, override it
-
-                if next_action is None:  # no node to force, descent normally
+                    action_to_force = -1
+                    next_node_prior: torch.Tensor | None = None
                     for action in only_valid:
-                        child = current_node.get_child_if_exists(action)
+                        child = node.get_child_if_exists(action)
                         child_prior = policy[action]
+                        child_visit_cnt = 0 if child is None else child.visit_cnt
 
-                        if child is not None:
-                            q_value = 0.0 if child.visit_cnt == 0 else -(child.utility_sum / child.visit_cnt)
-                            u_value = C_PUCT * child_prior * current_node.visit_cnt**0.5 / (1 + child.visit_cnt)
+                        # find node to force by choosing the one with the largest prior
+                        if child_visit_cnt < child_forced_playouts[action] and (
+                            next_node_prior is None or child_prior > next_node_prior
+                        ):
+                            next_node_prior = child_prior
+                            action_to_force = action  # child with larger prior found, override it
+
+                    if action_to_force != -1:
+                        force_action_taken = True
+                        forced_child = node.get_child_if_exists(action_to_force)
+                        if forced_child is None:
+                            # Need to expand this forced action, it does not yet exist
+                            expand_to = action_to_force
+                            break
                         else:
-                            q_value = 0.0
-                            u_value = C_PUCT * child_prior * current_node.visit_cnt**0.5  # / (1 + 0)
-                        puct_value = q_value + u_value
-                        if puct_value > best_value:
-                            best_value = puct_value
-                            best_action = action
-                else:
-                    best_action = next_action
+                            node = forced_child
 
-                assert best_action != -1
+                if force_action_taken and expand_to == -1:  # Check expand_to in case force decided to expand
+                    force_action_taken = False
+                    continue
 
-                self.timing_stats["selection"] += time.time() - select_start
-                self.iterations_stats["selection"] += 1
-
-                chosen_child = current_node.get_child_if_exists(best_action)
-                if chosen_child is not None:
-                    node = chosen_child
-                    self.max_depth = max(self.max_depth, node.depth)
-                else:  # expand lazily
-                    expand_start = time.time()
-                    new_child = current_node.create_child(best_action)
-                    self.max_depth = max(self.max_depth, new_child.depth)
-                    node = new_child
-                    self.timing_stats["expansion"] += time.time() - expand_start
+                is_node_done = node.has_game_ended()
+                if is_node_done:
                     break
+
+                # node is fully expanded and not node
+                child_idx = node.next()
+                child = node.get_child_if_exists(child_idx)
+                if child is None:
+                    # found a node to expand
+                    expand_to = child_idx
+                    break
+                else:
+                    node = child
+
+            self.timing_stats["selection"] += time.time() - select_start
+            self.iterations_stats["selection"] += 1
+
+            if expand_to != -1:
+                expand_start = time.time()
+                new_child = node.create_child(expand_to)
+                self.max_depth = max(self.max_depth, new_child.depth)
+                node = new_child
+                self.timing_stats["expansion"] += time.time() - expand_start
 
             # fill child with data
             end_check_start = time.time()
@@ -423,7 +463,7 @@ class MCTS:
             self.timing_stats["backprop"] += time.time() - backprop_start
 
             # plot tree from root node for debugging
-            # if iter == playout_cap:
+            # if iter == playout_cap - 1:
             #     TreePlot(self.root).create_tree()
 
         # calculate final policy distribution
@@ -436,6 +476,7 @@ class MCTS:
                 dtype=torch.float32,
             )
             for c in self.root.children.values():
+                # i use c.action so it **should** be the same as the action index on the board
                 props[c.action] = c.visit_cnt
 
             self.timing_stats["final_policy"] += time.time() - final_policy_start
@@ -459,36 +500,36 @@ class MCTS:
         explore_scaling = C_PUCT * self.root.visit_cnt**0.5
         pruned_visit_counts = {c.action: float(c.visit_cnt) for c in self.root.children.values()}
 
-        # for c in self.root.children.values():
-        #     action = c.action
-        #     # use action to differentiate between c and c_star, since action is unique for every child
-        #     if action is None or action == c_star.action:
-        #         continue
+        for c in self.root.children.values():
+            action = c.action
+            # use action to differentiate between c and c_star, since action is unique for every child
+            if action is None or action == c_star.action:
+                continue
 
-        #     n_orig = float(c.visit_cnt)
-        #     wins = c.utility_sum
-        #     child_prior = c.prior
+            n_orig = float(c.visit_cnt)
+            wins = c.utility_sum
+            child_prior = c.prior
 
-        #     # set visit count to 0 if c has no visits
-        #     if n_orig <= 0:
-        #         pruned_visit_counts[action] = 0.0
-        #         continue
+            # set visit count to 0 if c has no visits
+            if n_orig <= 0:
+                pruned_visit_counts[action] = 0.0
+                continue
 
-        #     child_q_value = wins / n_orig
-        #     child_utility_from_parent = -child_q_value
+            child_q_value = wins / n_orig
+            child_utility_from_parent = -child_q_value
 
-        #     wanted_weight = get_explore_selection_value_inverse(
-        #         c_star_puct, explore_scaling, child_prior, child_utility_from_parent
-        #     )
+            wanted_weight = get_explore_selection_value_inverse(
+                c_star_puct, explore_scaling, child_prior, child_utility_from_parent
+            )
 
-        #     actual_weight = n_orig
-        #     pruned_weight = min(wanted_weight, actual_weight)
+            actual_weight = n_orig
+            pruned_weight = min(wanted_weight, actual_weight)
 
-        #     if pruned_weight < 1.0:
-        #         print(f"Pruning child {action} from {actual_weight:.3f} to {pruned_weight:.3f}")
-        #         pruned_weight = 0.0
+            if pruned_weight < 1.0:
+                print(f"Pruning child {action} from {actual_weight:.3f} to {pruned_weight:.3f}")
+                pruned_weight = 0.0
 
-        #     pruned_visit_counts[action] = pruned_weight
+            pruned_visit_counts[action] = pruned_weight
 
         props = torch.zeros(
             self.agent.board_height * self.agent.board_height + 1,
@@ -622,14 +663,13 @@ async def main() -> None:
     temperature = 0.8
 
     outcome = 0
-    is_white = False
     for iter in range(NUM_EPISODES):
         # white_starts = iter % 2 == 0  # white even, black odd
         white_starts = False
         white_komi = 0 if white_starts else komi
         black_komi = komi if white_starts else 0
 
-        state, komi = await server.reset_game("No AI", is_white)
+        state, komi = await server.reset_game("No AI", white_starts)
         # state = generator.convert_state_to_MCTS(generator.generate_board_state())
         uf = UnionFind.get_uf_from_state(state, server.go.zobrist)
         server.go = Go_uf(board_size, state, komi, white_starts)
