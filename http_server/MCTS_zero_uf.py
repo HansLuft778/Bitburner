@@ -365,9 +365,6 @@ class MCTS:
             # selection with forced playouts and lazy expand
             select_start = time.time()
 
-            # # calculate forced playout count vectorized
-
-            # descent tree until next child is not yet expanded to
             expand_to = -1
             force_action_taken = False
             while True:
@@ -376,8 +373,7 @@ class MCTS:
                     assert node.policy is not None
                     policy = node.policy
 
-                    forced_playouts_base = FORCED_PLAYOUTS_K * policy * node.visit_cnt
-                    child_forced_playouts = torch.floor(forced_playouts_base * forced_playouts_base)
+                    child_forced_playouts = torch.floor((FORCED_PLAYOUTS_K * policy * node.visit_cnt) ** 0.5)
                     valid = node.get_valid_moves()
                     only_valid = np.where(valid == True)[0]
 
