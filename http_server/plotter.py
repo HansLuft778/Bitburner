@@ -15,8 +15,6 @@ from go_types import State
 if TYPE_CHECKING:
     from gameserver_local_uf import GameServerGo
 
-NUM_POSSIBLE_SCORES = int(30.5 * 2 + 1)
-
 
 def cleanup_out_folder(out_folder: str):
     """Zips every png file from the out folder into a zip and removes them from the folder.
@@ -73,7 +71,7 @@ class Plot:
 
 
 class Plotter:
-    def __init__(self, rows=2, cols=2, window_title:str = "Go Bot Losses"):
+    def __init__(self, rows=2, cols=2, window_title: str = "Go Bot Losses"):
         plt.ion()  # Enable interactive mode
 
         # Create a configurable subplot layout
@@ -139,9 +137,10 @@ class Plotter:
 
 
 class ModelOverlay:
-    def __init__(self) -> None:
-        self.possible_scores = np.linspace(-30.5, 30.5, NUM_POSSIBLE_SCORES)
-        pass
+    def __init__(self, board_size: int, komi: float) -> None:
+        max_score = board_size * board_size + komi
+        self.num_scores = int(max_score * 2 + 1)
+        self.possible_scores = np.linspace(-max_score, max_score, self.num_scores)
 
     def heatmap(
         self,
@@ -192,8 +191,8 @@ class ModelOverlay:
         fig.colorbar(im, ax=ax[0][0])
 
         # score cdf plot
-        score_onehot = torch.zeros(NUM_POSSIBLE_SCORES)
-        score_idx = int(NUM_POSSIBLE_SCORES / 2) + math.floor(final_score_normalized)
+        score_onehot = torch.zeros(self.num_scores)
+        score_idx = int(self.num_scores / 2) + math.floor(final_score_normalized)
         score_onehot[score_idx] = 1.0
 
         target_cdf = torch.cumsum(score_onehot, dim=0)
