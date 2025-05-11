@@ -831,7 +831,8 @@ class AlphaZeroAgent:
         # game_outcome_value_loss = F.cross_entropy(outcome_logits[:, :2], z_class_indices) * 1.5
         game_outcome_value_loss = F.mse_loss(z_hat, z_batch) * 1.5
 
-        ownership_loss = -(o_target_flat * torch.log(ownership_hat_flat)).sum(dim=1).mean() * 0.06
+        ownership_loss_weight = 1.5 / (self.board_width * self.board_width)
+        ownership_loss = -(o_target_flat * torch.log(ownership_hat_flat)).sum(dim=1).mean() * ownership_loss_weight
 
         score_pdf_loss = -(score_onehot * score_log_probs).sum(dim=1).mean() * 0.02
 
