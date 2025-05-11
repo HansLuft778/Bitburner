@@ -7,14 +7,17 @@ class LookupTable:
     def __init__(
         self,
         board_width: int,
-        c_score: float
+        c_score: float,
+        komi: float
     ):
         self.board_width = board_width
         self.c_score = c_score
+        
+        max_score = board_width*board_width+komi
 
-        max_sigma = 30
-        min_mu = -30.5
-        max_mu = 30.5
+        max_sigma = 60
+        min_mu = -max_score
+        max_mu = max_score
         max_p1 = (min_mu - max_mu) / board_width
 
         print("creating p2 range...")

@@ -138,6 +138,7 @@ class Plotter:
 
 class ModelOverlay:
     def __init__(self, board_size: int, komi: float) -> None:
+        self.board_size = board_size
         max_score = board_size * board_size + komi
         self.num_scores = int(max_score * 2 + 1)
         self.possible_scores = np.linspace(-max_score, max_score, self.num_scores)
@@ -217,9 +218,9 @@ class ModelOverlay:
         pi_props = torch.softmax(pi.squeeze(), dim=0).detach().cpu().squeeze().numpy()
         pi_opp_props = torch.softmax(pi_opp.squeeze(), dim=0).detach().cpu().squeeze().numpy()
 
-        pi_board = pi_props[:-1].reshape((5, 5))
+        pi_board = pi_props[:-1].reshape((self.board_size, self.board_size))
         pi_pass = pi_props[-1].item()
-        pi_opp_board = pi_opp_props[:-1].reshape((5, 5))
+        pi_opp_board = pi_opp_props[:-1].reshape((self.board_size, self.board_size))
         pi_opp_pass = pi_opp_props[-1]
 
         # own move policy plot
@@ -265,7 +266,7 @@ class GameStatePlotter:
 
         plt.ion()
 
-        self.fig, self.axes = plt.subplots(figsize=(5, 5))
+        self.fig, self.axes = plt.subplots(figsize=(self.board_size, self.board_size))
 
         self._setup_board()
 

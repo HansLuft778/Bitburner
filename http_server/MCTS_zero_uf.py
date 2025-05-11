@@ -605,7 +605,7 @@ async def main() -> None:
     board_size = 5
     komi = 5.5
 
-    table = LookupTable(board_size, C_SCORE)
+    table = LookupTable(board_size, C_SCORE, komi)
 
     server = GameServerGo(board_size)
     if USER_BITBURNER:
