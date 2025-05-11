@@ -650,12 +650,13 @@ class AlphaZeroAgent:
         you_started = torch.tensor(white_started == is_white, device=device).float()
 
         # game_data_vector = torch.as_tensor(passes, device=self.device).unsqueeze(0).float()  # shape [1, num_pass]
+        board_size = float(self.board_width * self.board_width)
         game_data_vector = torch.cat(
             [
                 passes.float(),
-                num_own_stones.unsqueeze(0),
-                num_opp_stones.unsqueeze(0),
-                num_empty_locations.unsqueeze(0),
+                num_own_stones.unsqueeze(0) / board_size,
+                num_opp_stones.unsqueeze(0) / board_size,
+                num_empty_locations.unsqueeze(0) / board_size,
                 you_started.unsqueeze(0),
             ]
         )
