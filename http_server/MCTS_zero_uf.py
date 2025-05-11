@@ -351,7 +351,9 @@ class MCTS:
             f"Value estimate: {self.root.win_utility:.3f} (from {'white' if self.root.is_white else 'black'}'s perspective)"
         )
         if not self.eval_mode and self.root.visit_cnt == 0:
-            alpha = 0.2
+            alpha = (
+                0.03 * self.agent.board_width * self.agent.board_width / np.count_nonzero(self.root.get_valid_moves())
+            )
             dir_noise = np.random.dirichlet([alpha] * len(self.root.policy))
             dir_noise_tensor = torch.tensor(dir_noise, device=self.root.policy.device, dtype=self.root.policy.dtype)
             epsilon = 0.25
