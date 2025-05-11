@@ -865,9 +865,9 @@ class Go_uf:
         # when the board is full, you can still pass
 
         # previous pass, current has no valid moves
-        # valid = self.get_valid_moves(uf, is_white, additional_history)
-        # if self.previous_action == self.board_width * self.board_height and np.count_nonzero(valid) == 0:
-        #     return True
+        valid = self.get_valid_moves(uf, is_white, additional_history)
+        if self.previous_action == self.board_width * self.board_height and np.count_nonzero(valid) == 0:
+            return True
 
         # # board is full
         # has_empty_node = np.any(uf.state == 0)
