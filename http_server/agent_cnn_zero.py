@@ -352,7 +352,7 @@ class AlphaZeroAgent:
         lr: float = 3e-4,
         batch_size: int = 128,
         num_past_steps: int = 5,
-        wheight_decay: float = 2e-4,
+        wheight_decay: float = 3e-5,
         checkpoint_dir: str = "models/checkpoints",
     ):
         self.board_width = board_width
