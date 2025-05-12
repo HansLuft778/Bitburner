@@ -349,7 +349,7 @@ class AlphaZeroAgent:
         board_width: int,
         komi: float,
         plotter: Plotter | None,
-        lr: float = 3e-4,
+        lr: float = 1e-4,
         batch_size: int = 128,
         num_past_steps: int = 5,
         wheight_decay: float = 3e-5,
