@@ -349,10 +349,10 @@ class AlphaZeroAgent:
         board_width: int,
         komi: float,
         plotter: Plotter | None,
-        lr: float = 3e-4,
+        lr: float = 1e-4,
         batch_size: int = 128,
         num_past_steps: int = 5,
-        wheight_decay: float = 2e-4,
+        wheight_decay: float = 3e-5,
         checkpoint_dir: str = "models/checkpoints",
     ):
         self.board_width = board_width
@@ -650,12 +650,13 @@ class AlphaZeroAgent:
         you_started = torch.tensor(white_started == is_white, device=device).float()
 
         # game_data_vector = torch.as_tensor(passes, device=self.device).unsqueeze(0).float()  # shape [1, num_pass]
+        board_size = float(self.board_width * self.board_width)
         game_data_vector = torch.cat(
             [
                 passes.float(),
-                num_own_stones.unsqueeze(0),
-                num_opp_stones.unsqueeze(0),
-                num_empty_locations.unsqueeze(0),
+                num_own_stones.unsqueeze(0) / board_size,
+                num_opp_stones.unsqueeze(0) / board_size,
+                num_empty_locations.unsqueeze(0) / board_size,
                 you_started.unsqueeze(0),
             ]
         )
@@ -830,7 +831,8 @@ class AlphaZeroAgent:
         # game_outcome_value_loss = F.cross_entropy(outcome_logits[:, :2], z_class_indices) * 1.5
         game_outcome_value_loss = F.mse_loss(z_hat, z_batch) * 1.5
 
-        ownership_loss = -(o_target_flat * torch.log(ownership_hat_flat)).sum(dim=1).mean() * 0.06
+        ownership_loss_weight = 1.5 / (self.board_width * self.board_width)
+        ownership_loss = -(o_target_flat * torch.log(ownership_hat_flat)).sum(dim=1).mean() * ownership_loss_weight
 
         score_pdf_loss = -(score_onehot * score_log_probs).sum(dim=1).mean() * 0.02
 

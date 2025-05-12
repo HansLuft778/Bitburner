@@ -21,11 +21,11 @@ C_SCORE = 0.5
 
 INITIAL_TEMPERATURE = 1.0
 FINAL_TEMPERATURE = 0.1
-TEMPERATURE_DECAY_MOVES = 6
+TEMPERATURE_DECAY_MOVES = 14
 
 FORCED_PLAYOUTS_K = 2
 
-USER_BITBURNER = False
+USE_BITBURNER = False
 
 
 def get_puct_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) -> float:
@@ -351,7 +351,9 @@ class MCTS:
             f"Value estimate: {self.root.win_utility:.3f} (from {'white' if self.root.is_white else 'black'}'s perspective)"
         )
         if not self.eval_mode and self.root.visit_cnt == 0:
-            alpha = 0.2
+            alpha = (
+                0.03 * self.agent.board_width * self.agent.board_width / np.count_nonzero(self.root.get_valid_moves())
+            )
             dir_noise = np.random.dirichlet([alpha] * len(self.root.policy))
             dir_noise_tensor = torch.tensor(dir_noise, device=self.root.policy.device, dtype=self.root.policy.dtype)
             epsilon = 0.25
@@ -361,7 +363,7 @@ class MCTS:
         # ------------------------------------------------ start search ------------------------------------------------
         self.timing_stats["search_init"] += time.time() - search_init_start
         search_start = time.time()
-        for iter in range(playout_cap):
+        for iter in range(playout_cap):  # type: ignore
             node = self.root
 
             # selection with forced playouts and lazy expand
@@ -476,6 +478,8 @@ class MCTS:
             for c in self.root.children.values():
                 # i use c.action so it **should** be the same as the action index on the board
                 props[c.action] = c.visit_cnt
+
+            props /= props.sum()
 
             self.timing_stats["final_policy"] += time.time() - final_policy_start
             total_time = time.time() - search_start
@@ -602,13 +606,13 @@ def temperature_decay(episode_length: int) -> float:
 async def main() -> None:
     # torch.manual_seed(0)  # pyright: ignore
     # np.random.seed(0)
-    board_size = 5
+    board_size = 7
     komi = 5.5
 
-    table = LookupTable(board_size, C_SCORE)
+    table = LookupTable(board_size, C_SCORE, komi)
 
     server = GameServerGo(board_size)
-    if USER_BITBURNER:
+    if USE_BITBURNER:
         await server.wait()
     print("GameServer ready and client connected")
     print("initializing MCTS...")
@@ -648,7 +652,7 @@ async def main() -> None:
     plotter.add_plot("score_mean_loss", plotter.axes[3, 1], "Score Mean Loss Over Time", "Updates", "Score Mean Loss")  # type: ignore
     plotter.add_plot("score_std_loss", plotter.axes[3, 2], "Score Std Dev Loss Over Time", "Updates", "Score Std Dev Loss")  # type: ignore
 
-    agent = AlphaZeroAgent(board_size, komi, plotter, batch_size=128)
+    agent = AlphaZeroAgent(board_size, komi, plotter, batch_size=256)
     # agent.load_checkpoint("checkpoint_37.pth")
     mcts = MCTS(
         server, agent, full_search_iterations=1000, fast_search_iterations=200, full_seach_prop=0.25, table=table
@@ -663,14 +667,14 @@ async def main() -> None:
 
     outcome = 0
     for iter in range(NUM_EPISODES):
-        if USER_BITBURNER:
+        if USE_BITBURNER:
             white_starts = False
         else:
             white_starts = iter % 2 == 0  # white even, black odd
         white_komi = 0 if white_starts else komi
         black_komi = komi if white_starts else 0
 
-        if USER_BITBURNER:
+        if USE_BITBURNER:
             state, _ = await server.reset_game("No AI", white_starts)
         else:
             state = generator.convert_state_to_MCTS(generator.generate_board_state())
@@ -713,7 +717,7 @@ async def main() -> None:
             )
 
             # outcome is: 1 if black won, -1 is white won
-            if USER_BITBURNER:
+            if USE_BITBURNER:
                 next_uf, outcome, done = await server.make_move(action, best_move, is_white)
             else:
                 next_uf, outcome, done = server.make_move_local(best_move, is_white, game_state_plotter)
@@ -819,15 +823,17 @@ async def main() -> None:
 
 
 async def main_eval():
-    board_size = 5
-    table = LookupTable(board_size, C_SCORE)
+    board_size = 7
+    komi = 5.5
+
+    table = LookupTable(board_size, C_SCORE, komi)
     server = GameServerGo(board_size)
     await server.wait()
     print("GameServer ready and client connected")
 
     plotter = Plotter()
-    agent = AlphaZeroAgent(board_size, 5.5, plotter, checkpoint_dir="models")
-    agent.load_checkpoint("checkpoint_129_katago_v1.pth")
+    agent = AlphaZeroAgent(board_size, komi, plotter, checkpoint_dir="models")
+    agent.load_checkpoint("checkpoint_233_first_7x7.pth")
     mcts = MCTS(server, agent, 1000, 100, 0.25, table=table, eval_mode=True)
 
     plotter.add_plot(  # type: ignore
@@ -850,7 +856,7 @@ async def main_eval():
     NUM_EPISODES = 100
     outcome = 0
     for _ in range(NUM_EPISODES):
-        state, komi = await server.reset_game("Slum Snakes")
+        state, _ = await server.reset_game("Slum Snakes")
         server.go = Go_uf(board_size, state, komi, False)
 
         is_white = False
@@ -880,4 +886,3 @@ if __name__ == "__main__":
     import asyncio
 
     asyncio.run(main())
-    # main()
