@@ -10,7 +10,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from Go.Go_uf import UnionFind
 
-from plotter import Plotter  # type: ignore
+from plotter import TensorBoardPlotter  # type: ignore
 from Buffer import BufferElement, TrainingBuffer
 from go_types import State
 
@@ -348,7 +348,7 @@ class AlphaZeroAgent:
         self,
         board_width: int,
         komi: float,
-        plotter: Plotter | None,
+        plotter: TensorBoardPlotter | None,
         lr: float = 1e-4,
         batch_size: int = 128,
         num_past_steps: int = 5,
@@ -404,10 +404,11 @@ class AlphaZeroAgent:
                 "model_state_dict": self.policy_net.state_dict(),
                 "optimizer_state_dict": self.optimizer.state_dict(),
                 "scheduler_state_dict": self.scheduler.state_dict(),
-                # "train_buffer": pickle.dumps(self.train_buffer),
             },
             checkpoint_path,
         )
+        buffer_path = os.path.join(self.checkpoint_dir, "buffer.pkl")
+        torch.save({"buffer": self.train_buffer}, buffer_path)  # pyright: ignore
         print(f"Checkpoint saved to {checkpoint_path}")
         self._manage_checkpoints()
 
@@ -418,7 +419,9 @@ class AlphaZeroAgent:
         self.policy_net.load_state_dict(checkpoint["model_state_dict"])
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
-        # self.train_buffer = pickle.loads(checkpoint["train_buffer"])
+
+        buffer_path = os.path.join(self.checkpoint_dir, "buffer.pkl")
+        self.train_buffer = torch.load(buffer_path, weights_only=False)["buffer"]  # pyright: ignore
         self.policy_net.eval()  # Set to eval mode after loading
         print(f"Checkpoint loaded from {checkpoint_path}")
 
@@ -884,16 +887,15 @@ class AlphaZeroAgent:
 
         if self.plotter is not None:
             if policy_loss_opp != 0:
-                self.plotter.update_loss(loss.item(), draw=False)
-                self.plotter.update_policy_loss(policy_loss_own.item(), draw=False)
-                self.plotter.update_value_loss(game_outcome_value_loss.item(), draw=False)
-            self.plotter.update_stat("policy_loss_opp", policy_loss_opp.item(), draw=False)  # type: ignore
-            self.plotter.update_stat("ownership_loss", ownership_loss.item(), draw=False)  # type: ignore
-            self.plotter.update_stat("score_pdf_loss", score_pdf_loss.item(), draw=False)  # type: ignore
-            self.plotter.update_stat("score_cdf_loss", score_cdf_loss.item(), draw=False)  # type: ignore
-            self.plotter.update_stat("score_mean_loss", score_mean_loss.item(), draw=False)  # type: ignore
-            self.plotter.update_stat("score_std_loss", score_std_loss.item(), draw=False)  # type: ignore
-            self.plotter.draw_and_flush()
+                self.plotter.update_stat("losses/loss", loss.item())
+                self.plotter.update_stat("losses/policy_loss", policy_loss_own.item())
+                self.plotter.update_stat("losses/value_loss", game_outcome_value_loss.item())
+            self.plotter.update_stat("losses/policy_loss_opp", policy_loss_opp.item())
+            self.plotter.update_stat("losses/ownership_loss", ownership_loss.item())
+            self.plotter.update_stat("losses/score_pdf_loss", score_pdf_loss.item())
+            self.plotter.update_stat("losses/score_cdf_loss", score_cdf_loss.item())
+            self.plotter.update_stat("losses/score_mean_loss", score_mean_loss.item())
+            self.plotter.update_stat("losses/score_std_loss", score_std_loss.item())
         print(
             f"Training step: loss={loss}, policy_loss={policy_loss_own}, value_loss={game_outcome_value_loss}, lr={current_lr}"
         )

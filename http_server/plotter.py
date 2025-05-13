@@ -1,9 +1,13 @@
 # type: ignore
 import matplotlib.pyplot as plt
-from collections import deque
+from matplotlib.figure import Figure
 import numpy as np
 import torch
 import torch.nn.functional as F
+from torch.utils.tensorboard.writer import SummaryWriter
+
+from collections import deque, defaultdict
+from datetime import datetime
 import math
 import os
 from zipfile import ZipFile
@@ -148,15 +152,15 @@ class ModelOverlay:
         uf: UnionFind,
         uf_after: UnionFind | None,
         uf_after_after: UnionFind | None,
-        model_output: tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
+        model_output: tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor],
         is_white: bool,
         server: "GameServerGo",
         final_score: float,
-        save_image: bool = False,
+        save_image_to_disk: bool = False,
         save_path: str = "model_overlay.png",
-    ):
+    ) -> Figure:
         # If we're saving, switch to a non-interactive backend temporarily
-        if save_image:
+        if save_image_to_disk:
             current_backend = plt.get_backend()
             plt.switch_backend("Agg")
 
@@ -173,6 +177,7 @@ class ModelOverlay:
 
         fig, ax = plt.subplots(3, 2, figsize=(8, 8))
         fig.suptitle(
+            f"{save_path}\n"
             f"Move Prediction for {'White' if is_white else 'Black'} with current score: {score_normalized} | "
             f"final score: {final_score_normalized}\n"
             f"Outcome Prediction: value: {win_prob_pred:.2f}, {r'$\mu$'}: {mu_score:.2f}, {r'$\sigma$'}: {sigma_score:.2f}"
@@ -248,10 +253,12 @@ class ModelOverlay:
 
         fig.tight_layout()
 
-        if save_image:
+        if save_image_to_disk:
             plt.savefig(f"out/{save_path}")
-            plt.close(fig)  # Close the figure to prevent display
+            # plt.close(fig)  # Close the figure to prevent display
             plt.switch_backend(current_backend)  # Restore original backend
+
+        return fig
 
 
 class GameStatePlotter:
@@ -351,3 +358,41 @@ class GameStatePlotter:
 
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
+
+
+class TensorBoardPlotter:
+    def __init__(self, comment: str = ""):
+        current_date = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        self.writer = SummaryWriter(log_dir=f"runs/Go_bot_{current_date}", comment=comment)
+
+        self.global_step: dict[str, int] = defaultdict(int)
+        self.cumulative_values: dict[str, defaultdict[str, int]] = defaultdict(lambda: defaultdict(int))
+
+    def update_stat(self, plot_id: str, value: float | int):
+        gloabal_step = self.global_step.get(plot_id, 0)
+        self.writer.add_scalar(plot_id, value, gloabal_step)
+        self.global_step[plot_id] += 1
+
+    def update_stat_dict(self, plot_id: str, value: dict[str, int], cumulative: bool = False):
+        value_to_log: dict[str, int] | defaultdict[str, int]
+        if cumulative:
+            # self.cumulative_values[plot_id] is a defaultdict(int)
+            # value is a dict[str, int]
+            cumulative_dict_for_plot = self.cumulative_values[plot_id]
+            for key, val_item in value.items():
+                cumulative_dict_for_plot[key] += val_item
+            value_to_log = cumulative_dict_for_plot
+        else:
+            value_to_log = value
+
+        gloabal_step = self.global_step.get(plot_id, 0)
+        self.writer.add_scalars(plot_id, value_to_log, gloabal_step)
+        self.global_step[plot_id] += 1
+
+    def update_figure(self, plot_id: str, figure: Figure):
+        gloabal_step = self.global_step.get(plot_id, 0)
+        self.writer.add_figure(plot_id, figure, gloabal_step, close=True)
+        self.global_step[plot_id] += 1
+
+    def close(self):
+        self.writer.close()

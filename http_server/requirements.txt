@@ -9,4 +9,5 @@ scipy
 numpy
 plotly-stubs
 scipy-stubs
-scikit-learn  
+scikit-learn
+tensorboard
