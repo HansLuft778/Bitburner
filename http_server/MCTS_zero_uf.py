@@ -9,11 +9,12 @@ from agent_cnn_zero import AlphaZeroAgent
 from gameserver_local_uf import GameServerGo
 from Go.Go_uf import Go_uf, UnionFind
 from Go.Go_state_generator import GoStateGenerator
-from plotter import Plotter, ModelOverlay, GameStatePlotter, cleanup_out_folder  # type: ignore
+from plotter import Plotter, ModelOverlay, GameStatePlotter, cleanup_out_folder, TensorBoardPlotter  # type: ignore
 from TreePlotter import TreePlot  # pyright: ignore
 from Buffer import BufferElement
 from LookupTable import LookupTable
 from go_types import State
+import matplotlib.pyplot as plt
 
 C_PUCT = 1.1
 NUM_EPISODES = 1000
@@ -528,7 +529,7 @@ class MCTS:
             pruned_weight = min(wanted_weight, actual_weight)
 
             if pruned_weight < 1.0:
-                print(f"Pruning child {action} from {actual_weight:.3f} to {pruned_weight:.3f}")
+                # print(f"Pruning child {action} from {actual_weight:.3f} to {pruned_weight:.3f}")
                 pruned_weight = 0.0
 
             pruned_visit_counts[action] = pruned_weight
@@ -617,40 +618,9 @@ async def main() -> None:
     print("GameServer ready and client connected")
     print("initializing MCTS...")
 
-    plotter = Plotter(4, 3)
     cleanup_out_folder("D:/AProgramming/Bitburner/bb-external-editor/http_server/out")
-    plotter.add_plot(  # type: ignore
-        "cumulative_reward_black",
-        plotter.axes[0, 0],  # type: ignore
-        "Cumulative Wins Over Time",
-        "Updates",
-        "Cumulative Wins",
-        label="Black",
-    )
-    plotter.add_plot(  # type: ignore
-        "cumulative_reward_white",
-        plotter.axes[0, 0],  # type: ignore
-        "Cumulative Wins Over Time",
-        "Updates",
-        "Cumulative Wins",
-        label="White",
-    )
-    plotter.update_wins_black(0, draw=False)
-    plotter.update_wins_white(0, draw=False)
-    plotter.add_plot("loss", plotter.axes[0, 1], "Training Loss Over Time", "Updates", "Loss")  # type: ignore
-    plotter.add_plot("depth", plotter.axes[0, 2], "MCTS Depth", "Iteration", "Depth", label="tree depth")  # type: ignore
-    plotter.add_plot("episode_length", plotter.axes[0, 2], "Episode Length", "Iteration", "Length", label="episode length")  # type: ignore
-
-    plotter.add_plot("policy_loss_own", plotter.axes[1, 0], "Own Policy Loss Over Time", "Updates", "Policy Loss")  # type: ignore
-    plotter.add_plot("policy_loss_opp", plotter.axes[1, 1], "Opponent Policy Loss Over Time", "Updates", "Policy Loss")  # type: ignore
-    plotter.add_plot("value_loss", plotter.axes[1, 2], "Value Loss Over Time", "Updates", "Value Loss")  # type: ignore
-
-    plotter.add_plot("ownership_loss", plotter.axes[2, 1], "Ownership Loss Over Time", "Updates", "Ownership Loss")  # type: ignore
-    plotter.add_plot("score_pdf_loss", plotter.axes[2, 2], "Score PDF Loss Over Time", "Updates", "Score PDF Loss")  # type: ignore
-
-    plotter.add_plot("score_cdf_loss", plotter.axes[3, 0], "Score CDF Loss Over Time", "Updates", "Score CDF Loss")  # type: ignore
-    plotter.add_plot("score_mean_loss", plotter.axes[3, 1], "Score Mean Loss Over Time", "Updates", "Score Mean Loss")  # type: ignore
-    plotter.add_plot("score_std_loss", plotter.axes[3, 2], "Score Std Dev Loss Over Time", "Updates", "Score Std Dev Loss")  # type: ignore
+    plotter = TensorBoardPlotter()
+    mo = ModelOverlay(board_size, komi)
 
     agent = AlphaZeroAgent(board_size, komi, plotter, batch_size=256)
     # agent.load_checkpoint("checkpoint_37.pth")
@@ -728,21 +698,26 @@ async def main() -> None:
             previous_move = best_move
             episode_length += 1
 
-        # last move has no response, so set it to zero
-        buffer[-1].pi_mcts_response = torch.zeros(mcts.agent.board_height * mcts.agent.board_height + 1, device=mcts.agent.device)  # type: ignore
-
-        plotter.update_stat("depth", mcts.max_depth)  # type: ignore
-        plotter.update_stat("episode_length", episode_length)  # type: ignore
-        mcts.max_depth = 0
-        print(f"Episode length: {episode_length}, took {time.time()-start_time:.3f}s")
-        print("================================================================================")
-
         assert outcome != 0, "outcome should not be 0 after a game ended"
 
         if mcts.agent.plotter is not None:
-            mcts.agent.plotter.update_wins_white(1 if outcome == -1 else -1, draw=False)
-            mcts.agent.plotter.update_wins_black(1 if outcome == 1 else -1, draw=False)
-            mcts.agent.plotter.draw_and_flush()
+            mcts.agent.plotter.update_stat_dict(
+                "misc/cumulative_wins_over_time",
+                {"white": 1 if outcome == -1 else -1, "black": 1 if outcome == 1 else -1},
+                cumulative=True,
+            )
+            # plotter.update_stat("depth", mcts.max_depth)  # type: ignore
+            # plotter.update_stat("episode_length", episode_length)  # type: ignore:
+            mcts.agent.plotter.update_stat_dict(
+                "misc/depth and episode length", {"tree depth": mcts.max_depth, "episode length": episode_length}
+            )
+
+        # last move has no response, so set it to zero
+        buffer[-1].pi_mcts_response = torch.zeros(mcts.agent.board_height * mcts.agent.board_height + 1, device=mcts.agent.device)  # type: ignore
+
+        mcts.max_depth = 0
+        print(f"Episode length: {episode_length}, took {time.time()-start_time:.3f}s")
+        print("================================================================================")
 
         ownership_mask = np.zeros((board_size, board_size), dtype=np.int8)
         black_territory = np.zeros((board_size, board_size), dtype=np.int8)
@@ -776,7 +751,6 @@ async def main() -> None:
         score = black_score - white_score  # black leads with
 
         print("saving model overlay...")
-        mo = ModelOverlay(board_size, komi)
         len_buffer = len(buffer)
         buffer_indices = [0, 1, len_buffer // 2, len_buffer // 2 + 1, len_buffer - 2, len_buffer - 1]
         # buffer_indices = range(len_buffer)  # for testing
@@ -790,7 +764,7 @@ async def main() -> None:
             logits = agent.policy_net(state_tensor, state_vector)
             next_uf = buffer[i + 1].uf if i + 1 < len_buffer else None
             next_next_uf = buffer[i + 2].uf if i + 2 < len_buffer else None
-            mo.heatmap(
+            fig = mo.heatmap(
                 be.uf,
                 next_uf,
                 next_next_uf,
@@ -801,6 +775,8 @@ async def main() -> None:
                 True,
                 f"model_overlay_ep_{iter}_{i}.png",
             )
+            # plotter.update_figure("model_overlay", fig)
+            plt.close(fig)
         print("done!")
 
         for be in buffer:
@@ -831,27 +807,10 @@ async def main_eval():
     await server.wait()
     print("GameServer ready and client connected")
 
-    plotter = Plotter()
+    plotter = TensorBoardPlotter("eval_run")
     agent = AlphaZeroAgent(board_size, komi, plotter, checkpoint_dir="models")
     agent.load_checkpoint("checkpoint_233_first_7x7.pth")
     mcts = MCTS(server, agent, 1000, 100, 0.25, table=table, eval_mode=True)
-
-    plotter.add_plot(  # type: ignore
-        "cumulative_reward_black",
-        plotter.axes[0, 0],  # type: ignore
-        "Cumulative Wins Over Time",
-        "Updates",
-        "Cumulative Wins",
-        label="Black",
-    )
-    plotter.add_plot(  # type: ignore
-        "cumulative_reward_white",
-        plotter.axes[0, 0],  # type: ignore
-        "Cumulative Wins Over Time",
-        "Updates",
-        "Cumulative Wins",
-        label="White",
-    )
 
     NUM_EPISODES = 100
     outcome = 0
@@ -877,8 +836,11 @@ async def main_eval():
         assert outcome != 0, "outcome should not be 0 after a game ended"
 
         if mcts.agent.plotter is not None:
-            mcts.agent.plotter.update_wins_white(1 if outcome == -1 else -1)
-            mcts.agent.plotter.update_wins_black(1 if outcome == 1 else -1)
+            mcts.agent.plotter.update_stat_dict(
+                "cumulative_wins_over_time",
+                {"white": 1 if outcome == -1 else -1, "black": 1 if outcome == 1 else -1},
+                cumulative=True,
+            )
 
 
 # Run the main coroutine
@@ -886,3 +848,4 @@ if __name__ == "__main__":
     import asyncio
 
     asyncio.run(main())
+
