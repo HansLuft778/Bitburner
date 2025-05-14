@@ -412,7 +412,7 @@ class AlphaZeroAgent:
         print(f"Checkpoint saved to {checkpoint_path}")
         self._manage_checkpoints()
 
-    def load_checkpoint(self, filename: str):
+    def load_checkpoint(self, filename: str, load_buffer: bool):
         """Loads the model and optimizer state from a file."""
         checkpoint_path = os.path.join(self.checkpoint_dir, filename)
         checkpoint = torch.load(checkpoint_path)  # pyright: ignore
@@ -420,8 +420,9 @@ class AlphaZeroAgent:
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
 
-        buffer_path = os.path.join(self.checkpoint_dir, "buffer.pkl")
-        self.train_buffer = torch.load(buffer_path, weights_only=False)["buffer"]  # pyright: ignore
+        if load_buffer:
+            buffer_path = os.path.join(self.checkpoint_dir, "buffer.pkl")
+            self.train_buffer = torch.load(buffer_path, weights_only=False)["buffer"]  # pyright: ignore
         self.policy_net.eval()  # Set to eval mode after loading
         print(f"Checkpoint loaded from {checkpoint_path}")
 
@@ -882,6 +883,10 @@ class AlphaZeroAgent:
         loss.backward()  # type: ignore
         self.optimizer.step()  # type: ignore
         self.scheduler.step()
+        
+        total_grad_norm = torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), max_norm=1.0)
+        if total_grad_norm > 1.0:
+            print(f"Gradient was clipped! Norm before clipping: {total_grad_norm:.4f}")
 
         current_lr = self.scheduler.get_last_lr()[0]
 

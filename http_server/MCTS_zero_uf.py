@@ -809,13 +809,13 @@ async def main_eval():
 
     plotter = TensorBoardPlotter("eval_run")
     agent = AlphaZeroAgent(board_size, komi, plotter, checkpoint_dir="models")
-    agent.load_checkpoint("checkpoint_233_first_7x7.pth")
+    agent.load_checkpoint("checkpoint_21_7x7_but_broken.pth", False)
     mcts = MCTS(server, agent, 1000, 100, 0.25, table=table, eval_mode=True)
 
     NUM_EPISODES = 100
     outcome = 0
     for _ in range(NUM_EPISODES):
-        state, _ = await server.reset_game("Slum Snakes")
+        state, _ = await server.reset_game("Daedalus")
         server.go = Go_uf(board_size, state, komi, False)
 
         is_white = False
