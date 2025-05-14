@@ -7,7 +7,7 @@ import torch
 
 from agent_cnn_zero import AlphaZeroAgent
 from gameserver_local_uf import GameServerGo
-from Go.Go_uf import Go_uf, UnionFind
+from Go.Go_uf import Go_uf, UnionFind, MoveResult
 from Go.Go_state_generator import GoStateGenerator
 from plotter import Plotter, ModelOverlay, GameStatePlotter, cleanup_out_folder, TensorBoardPlotter  # type: ignore
 from TreePlotter import TreePlot  # pyright: ignore
@@ -249,8 +249,8 @@ class Node:
         else:
             # simulate the move to retrieve the resulting board state
             color = 2 if self.is_white else 1
-            is_legal, undo = self.server.go.simulate_move(self.uf, action, color, self.get_hash_history())
-            assert is_legal, "Illegal move cannot be lazily expanded"
+            result, undo = self.server.go.simulate_move(self.uf, action, color, self.get_hash_history())
+            assert result == MoveResult.SUCCESS, "Illegal move cannot be lazily expanded"
 
             next_uf = self.uf.copy()
             self.uf.undo_move_changes(undo, self.server.go.zobrist)

@@ -1,7 +1,7 @@
 import time  # pyright: ignore
 from collections import deque
 from dataclasses import dataclass
-from enum import Enum
+from enum import Enum, IntEnum
 from typing import Any
 import numba  # type: ignore
 
@@ -18,6 +18,13 @@ class UndoActionType(Enum):
     SET_STONES = 4
     SET_LIBERTIES = 5
     SET_COLOR = 6
+    
+class MoveResult(IntEnum):
+    SUCCESS = 1
+    SUICIDE = 2
+    REPEAT = 3
+    NOT_EMPTY = 4
+    PASS = 5
 
 
 @dataclass
@@ -78,8 +85,8 @@ class UnionFind:
         parent: np.ndarray[Any, np.dtype[np.int8]],
         colors: np.ndarray[Any, np.dtype[np.int8]],
         rank: np.ndarray[Any, np.dtype[np.int8]],
-        stones: np.ndarray[Any, np.dtype[np.int64]],  # list[set[int]],
-        liberties: np.ndarray[Any, np.dtype[np.int64]],  # list[set[int]],
+        stones: np.ndarray[Any, np.dtype[np.int64]],
+        liberties: np.ndarray[Any, np.dtype[np.int64]],
         board_size: int,
     ):
         self.state = state
@@ -407,14 +414,14 @@ class Go_uf:
         color = 2 if is_white else 1
         new_uf = uf.copy()
 
-        is_legal, _ = self.simulate_move(
+        result, _ = self.simulate_move(
             new_uf,
             action,
             color,
             additional_history,
         )
 
-        if is_legal:
+        if result == MoveResult.SUCCESS:
             return new_uf
         else:
             return None
@@ -600,13 +607,13 @@ class Go_uf:
         action: int,
         color: int,
         additional_history: list[np.uint64] = [],
-    ) -> tuple[bool, list[UndoAction]]:
+    ) -> tuple[MoveResult, list[UndoAction]]:
         if action == self.board_height * self.board_height:
-            return True, []
+            return MoveResult.PASS, []
 
         x, y = self.decode_action(action)
         if uf.state[x, y] != 0:
-            return False, []
+            return MoveResult.NOT_EMPTY, []
 
         undo_stack: list[UndoAction] = []
 
@@ -724,16 +731,16 @@ class Go_uf:
         if uf.liberties[action_root] == 0:
             # move was actually a suicide
             uf.undo_move_changes(undo_stack, self.zobrist)
-            return False, undo_stack
+            return MoveResult.SUICIDE, undo_stack
 
         # check for repeat
         is_repeat = self.check_state_is_repeat(uf.hash, additional_history)
         if is_repeat:
             # move was actually a repeat
             uf.undo_move_changes(undo_stack, self.zobrist)
-            return False, undo_stack
+            return MoveResult.REPEAT, undo_stack
 
-        return True, undo_stack
+        return MoveResult.SUCCESS, undo_stack
 
     def verify_uf_consistency(self, state: State, uf: UnionFind) -> bool:
         """Verify that the UnionFind structure is consistent with the board state"""
@@ -814,13 +821,13 @@ class Go_uf:
         empty_positions = np.where(empty_mask)
         for x, y in zip(empty_positions[0], empty_positions[1]):
             action = self.encode_action(int(x), int(y))
-            is_legal, undo = self.simulate_move(
+            result, undo = self.simulate_move(
                 uf,
                 action,
                 player,
                 history,
             )
-            if is_legal:  # only needs to undo if legal, since illegal moves are not persisted
+            if result == MoveResult.SUCCESS:  # only needs to undo if legal, since illegal moves are not persisted
                 uf.undo_move_changes(undo, self.zobrist)
                 legal_moves[x, y] = True
 
@@ -838,13 +845,13 @@ class Go_uf:
         empty_positions = np.where(empty_mask)
         for x, y in zip(empty_positions[0], empty_positions[1]):
             action = self.encode_action(int(x), int(y))
-            is_legal, undo = self.simulate_move(
+            result, undo = self.simulate_move(
                 uf,
                 action,
                 player,
                 history,
             )
-            if is_legal:  # only needs to undo if legal, since illegal moves are not persisted
+            if result == MoveResult.SUCCESS:  # only needs to undo if legal, since illegal moves are not persisted
                 uf.undo_move_changes(undo, self.zobrist)
                 return True
 
