@@ -64,11 +64,11 @@ def calculate_group_liberties(stones_mask: np.int64, state: State, board_size: i
 
 
 def add_stone_to_group(array: np.ndarray[Any, np.dtype[np.int64]], group_idx: int, pos: int):
-    array[group_idx] |= 1 << pos
+    array[group_idx] |= 1 << int(pos)
 
 
 def remove_stone_from_group(array: np.ndarray[Any, np.dtype[np.int64]], group_idx: int, pos: int):
-    array[group_idx] &= ~(1 << pos)
+    array[group_idx] &= ~(1 << int(pos))
 
 
 class UnionFind:
