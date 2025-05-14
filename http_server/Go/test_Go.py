@@ -1,7 +1,11 @@
 import unittest
-from Go_uf import Go_uf
+from Go_uf import Go_uf, UnionFind
 import numpy as np
-from go_types import State
+
+# from go_types import State
+from typing import Any
+
+State = np.ndarray[Any, np.dtype[np.int8]]
 
 
 def encode_state(state: list[str]) -> State:
@@ -73,6 +77,36 @@ class TestGo(unittest.TestCase):
             # Test komi values
             self.assertEqual(score["black"]["komi"], 0)
             self.assertEqual(score["white"]["komi"], 5.5)
+
+    def place_stone_edge_case_7x7(self):
+        # fmt: off
+        parent= np.array([-1, -1, 8, 22, -1, 5, -1, 22, 8, 8, 22, 22, -1, -1, 22, 22, 22, 24, 19, 22, -1, -1, 22, 22, 22, 33, 33, -1, 29, 29, 29, 33, 33, 29, 33, -1, 36, 29, -1, 33, 33, 29, -1, -1, 44, -1, -1, -1, -1])
+        colors= np.array([-1, -1, 2, 1, -1, 1, -1, 1, 2, 2, 1, 1, -1, -1, 1, 1, 1, 1, 1, 1, -1, -1, 1, 1, 1, 2, 2, -1, 2, 2, 2, 2, 2, 2, 2, -1, 1, 2, -1, 2, 2, 2, -1, -1, 1, -1, -1, -1, -1])
+        rank= np.array([-1, -1, -1, -1, -1, 0, -1, -1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 2, -1, -1, -1, -1, -1, -1, 2, -1, -1, -1, -1, -1, -1, 0, -1, -1, -1, -1, -1, -1, -1, 0, -1, -1, -1, -1])
+        stones= np.array([0, 0, 0, 0, 0, 32, 0, 0, 772, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 30395528, 0, 0, 0, 0, 0, 0, 4019921616896, 0, 0, 0, 0, 0, 0, 68719476736, 0, 0, 0, 0, 0, 0, 0, 17592186044416, 0, 0, 0, 0])
+        liberties= np.array([0, 0, 0, 0, 0, 4176, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2101264, 0, 0, 0, 0, 0, 0, 351878216941568, 0, 0, 0, 0, 0, 0, 8830452760576, 0, 0, 0, 0, 0, 0, 0, 8796093022208, 0, 0, 0, 0])
+        # fmt: on
+
+        decoded_board = np.array(
+            [
+                [3, 0, 2, 1, 0, 1, 0],
+                [1, 2, 2, 1, 1, 0, 3],
+                [1, 1, 1, 1, 1, 1, 3],
+                [0, 1, 1, 1, 2, 2, 0],
+                [2, 2, 2, 2, 2, 2, 2],
+                [0, 1, 2, 3, 2, 2, 2],
+                [3, 0, 1, 3, 0, 3, 0],
+            ],
+            dtype=np.int8,
+        )
+
+        uf = UnionFind(decoded_board, parent, colors, rank, stones, liberties, 7)
+        go = Go_uf(7, decoded_board, 5.5, False)
+        go.uf = uf
+        out_uf, outcome, has_ended = go.make_move(43, True)
+        self.assertIsNotNone(out_uf)
+        self.assertEqual(outcome, 0)
+        self.assertEqual(has_ended, False)
 
 
 if __name__ == "__main__":
