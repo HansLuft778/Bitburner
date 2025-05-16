@@ -412,13 +412,14 @@ class AlphaZeroAgent:
         print(f"Checkpoint saved to {checkpoint_path}")
         self._manage_checkpoints()
 
-    def load_checkpoint(self, filename: str, load_buffer: bool):
+    def load_checkpoint(self, filename: str, load_buffer: bool, load_optimizer_scheduler: bool = True):
         """Loads the model and optimizer state from a file."""
         checkpoint_path = os.path.join(self.checkpoint_dir, filename)
         checkpoint = torch.load(checkpoint_path)  # pyright: ignore
         self.policy_net.load_state_dict(checkpoint["model_state_dict"])
-        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+        if load_optimizer_scheduler:
+            self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+            self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
 
         if load_buffer:
             buffer_path = os.path.join(self.checkpoint_dir, "buffer.pkl")
