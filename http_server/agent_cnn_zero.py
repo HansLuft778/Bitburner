@@ -1054,6 +1054,11 @@ class AlphaZeroAgent:
 
         current_lr = self.scheduler.get_last_lr()[0]
 
+        policy_props = torch.softmax(logits_own, dim=1)
+        pi_batch_safe = torch.clamp(pi_batch, min=epsilon)
+        policy_props_safe = torch.clamp(policy_props, min=epsilon)
+        kl_divergence = (pi_batch_safe * (torch.log(pi_batch_safe) - torch.log(policy_props_safe))).sum(dim=1).mean()
+
         if self.plotter is not None:
             if policy_loss_opp != 0:
                 self.plotter.update_stat("losses/loss", loss.item())
@@ -1065,7 +1070,10 @@ class AlphaZeroAgent:
             self.plotter.update_stat("losses/score_cdf_loss", score_cdf_loss.item())
             self.plotter.update_stat("losses/score_mean_loss", score_mean_loss.item())
             self.plotter.update_stat("losses/score_std_loss", score_std_loss.item())
+            self.plotter.update_stat("losses/score_scaling_penalty", score_scaling_penalty.item())
             self.plotter.update_stat("misc/grad_norm", total_grad_norm.item())
+            self.plotter.update_stat("misc/current_learning_rate", current_lr)
+            self.plotter.update_stat("misc/kl_divergence_net_to_mcts", kl_divergence.item())
 
         print(
             f"Training step: loss={loss}, policy_loss={policy_loss_own}, value_loss={game_outcome_value_loss}, lr={current_lr}"

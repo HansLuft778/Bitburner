@@ -227,9 +227,7 @@ class Node:
         go_history_length = len(go_history)
 
         history_length = limit if limit != -1 else self.depth + go_history_length
-        history = np.zeros(
-            (history_length, self.agent.board_width, self.agent.board_width), dtype=np.int8
-        )
+        history = np.zeros((history_length, self.agent.board_width, self.agent.board_width), dtype=np.int8)
         if self.parent is None:
             return history
 
@@ -239,21 +237,21 @@ class Node:
         while current:
             if depth >= history_length:
                 return history
-            
+
             history[depth] = current.uf.state
             if current.parent is not None:
                 current = current.parent
             else:
                 break
             depth += 1
-        
+
         # collect go history
         for h in go_history:
             if depth >= history_length:
                 return history
             history[depth] = h
-            depth += 1    
-        
+            depth += 1
+
         return history
 
     def next(self) -> int:
@@ -532,10 +530,8 @@ class MCTS:
                 else:
                     print("here")
 
-            # print(f"len(leaf_node_batch): {len(leaf_node_batch)}")
             if len(leaf_node_batch) == 0:
-                print(f"len(leaf_node_batch): {len(leaf_node_batch)}")
-                continue
+                continue  # TODO: break cause when a batch could not be filled the game is most likely over?
 
             inference_start = time.time()
             props_batch, value_batch, mu_batch, sigma_batch = self.agent.predict_eval_batch(leaf_node_batch)
@@ -784,7 +780,12 @@ async def main() -> None:
             after = time.time()
             print(f"TOOK: {after-before}s")
             print(pi_mcts)
-            # best_move = int(torch.argmax(pi_mcts).item())
+            if plotter is not None: # type: ignore
+                entropy = -sum(pi_mcts * np.log2(pi_mcts))
+                kl_divergence = sum(pi_mcts * np.log(pi_mcts / mcts.root.policy)) # type: ignore
+                plotter.update_stat("mcts/pi_mcts_entropy", entropy)
+                plotter.update_stat("mcts/kl_divergence_root", kl_divergence)
+
             best_move = choose_action_temperature(pi_mcts, temperature)
             temperature = temperature_decay(episode_length)
 
