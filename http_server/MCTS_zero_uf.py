@@ -4,6 +4,7 @@ from typing import Any, Union
 import math
 
 import numpy as np
+from numpy.typing import NDArray
 import torch
 
 from agent_cnn_zero import AlphaZeroAgent
@@ -432,7 +433,6 @@ class MCTS:
         for batch_id in range(math.ceil(playout_cap / MCTS_BATCH_SIZE)):  # type: ignore
 
             # selection with forced playouts and lazy expand
-            select_start = time.time()
 
             leaf_node_batch: list[Node] = []
 
@@ -440,6 +440,7 @@ class MCTS:
                 node = self.root
                 expand_to = -1
                 # force_action_taken = False
+                select_start = time.time()
                 while True:
                     # --- FORCED PLAYOUT LOGIC ---
                     if node.parent is None and not exploration_features_disabled:
@@ -527,9 +528,13 @@ class MCTS:
                     new_child.queued_for_inference = True
                     new_child.apply_virtual_loss(MCTS_VIRTUAL_LOSS_VALUE)
                     self.timing_stats["expansion"] += time.time() - expand_start
+                    self.iterations_stats["expansion"] += 1
+                else:
+                    print("here")
 
-            print(f"len(leaf_node_batch): {len(leaf_node_batch)}")
+            # print(f"len(leaf_node_batch): {len(leaf_node_batch)}")
             if len(leaf_node_batch) == 0:
+                print(f"len(leaf_node_batch): {len(leaf_node_batch)}")
                 continue
 
             inference_start = time.time()
@@ -546,18 +551,18 @@ class MCTS:
                 if node.done is None:
                     node.done = node.has_game_ended()
                 assert node.done is not None
+                self.timing_stats["end_check"] += time.time() - end_check_start
+                self.iterations_stats["end_check"] += 1
 
+                evaluation_start_time = time.time()
                 if node.done:
                     node.win_utility, node.score_utility = node.get_utility(x_0)
                     assert node.win_utility is not None and node.score_utility is not None, "Values should not be None"
-                    self.timing_stats["end_check"] += time.time() - end_check_start
                 else:
-                    self.timing_stats["end_check"] += time.time() - end_check_start
-
                     if node.policy is None:
                         # This sets leaf_node.win_utility and leaf_node.score_utility
                         # final_probs, _, _, _ = node.get_predictions(self.table, x_0)
-                        node.policy = props_batch[i]
+                        node.policy = props_batch[i].cpu()
                         node.win_utility = value_batch[i].item()
                         node.mu_s = mu_batch[i].item()
                         node.sigma_s = sigma_batch[i].item()
@@ -566,12 +571,15 @@ class MCTS:
                         ).item()
 
                     assert node.win_utility is not None and node.score_utility is not None, "Values should not be None"
+                self.timing_stats["evaluation"] += time.time() - evaluation_start_time
+                self.iterations_stats["evaluation"] += 1
 
                 # backpropagation
                 backprop_start = time.time()
                 assert node.win_utility is not None and node.score_utility is not None
                 node.backprop(node.win_utility + node.score_utility)
                 self.timing_stats["backprop"] += time.time() - backprop_start
+                self.iterations_stats["backprop"] += 1
 
             # plot tree from root node for debugging
             # if iter == playout_cap - 1:
