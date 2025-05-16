@@ -180,10 +180,10 @@ class ResNet(nn.Module):
         self.final_bn = nn.BatchNorm2d(num_hidden)
 
         # --- Policy head ---
-        self.policy_head = PolicyHead(num_hidden, policy_head_channels=32)
+        self.policy_head = PolicyHead(num_hidden, policy_head_channels=48)
 
         # --- Value head base ---
-        value_base_channels = 48
+        value_base_channels = 64
         self.vh_init_conv = nn.Conv2d(num_hidden, value_base_channels, kernel_size=1)
 
         # --- Value sub heads ---
@@ -734,7 +734,6 @@ class AlphaZeroAgent:
         if len(self.train_buffer) < self.batch_size:
             return
 
-        print("=======================================================================")
         # 1. sample batch from train buffer
         batch = self.train_buffer.sample(self.batch_size)
 
