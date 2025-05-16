@@ -902,6 +902,8 @@ class AlphaZeroAgent:
             self.plotter.update_stat("losses/score_cdf_loss", score_cdf_loss.item())
             self.plotter.update_stat("losses/score_mean_loss", score_mean_loss.item())
             self.plotter.update_stat("losses/score_std_loss", score_std_loss.item())
+            self.plotter.update_stat("misc/grad_norm", total_grad_norm.item())
+            
         print(
             f"Training step: loss={loss}, policy_loss={policy_loss_own}, value_loss={game_outcome_value_loss}, lr={current_lr}"
         )
