@@ -1,8 +1,10 @@
 import time
 from collections import defaultdict
 from typing import Any, Union
+import math
 
 import numpy as np
+from numpy.typing import NDArray
 import torch
 
 from agent_cnn_zero import AlphaZeroAgent
@@ -27,6 +29,9 @@ TEMPERATURE_DECAY_MOVES = 14
 FORCED_PLAYOUTS_K = 2
 
 USE_BITBURNER = False
+
+MCTS_BATCH_SIZE = 8
+MCTS_VIRTUAL_LOSS_VALUE = 1
 
 
 def get_puct_value(child: "Node", parent_visit_count: int, c_puct: float = 2.0) -> float:
@@ -98,6 +103,13 @@ class Node:
 
         self.visit_cnt = visit_count
         self.utility_sum = 0.0
+
+        self.queued_for_inference = False
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Node):
+            return NotImplemented
+        return self.uf.hash == other.uf.hash
 
     def is_fully_expanded(self):
         # node is fully expanded, if every valid move has a child
@@ -210,6 +222,38 @@ class Node:
                 break
         return history
 
+    def get_complete_history_tensor(self, limit: int = -1) -> NDArray[np.int8]:
+        go_history = self.server.go.get_history()
+        go_history_length = len(go_history)
+
+        history_length = limit if limit != -1 else self.depth + go_history_length
+        history = np.zeros((history_length, self.agent.board_width, self.agent.board_width), dtype=np.int8)
+        if self.parent is None:
+            return history
+
+        # collect MCTS history
+        current = self.parent
+        depth = 0
+        while current:
+            if depth >= history_length:
+                return history
+
+            history[depth] = current.uf.state
+            if current.parent is not None:
+                current = current.parent
+            else:
+                break
+            depth += 1
+
+        # collect go history
+        for h in go_history:
+            if depth >= history_length:
+                return history
+            history[depth] = h
+            depth += 1
+
+        return history
+
     def next(self) -> int:
         assert self.policy is not None
         valid_moves = self.get_valid_moves()
@@ -269,11 +313,31 @@ class Node:
         return child
 
     def backprop(self, score: float):
-        self.visit_cnt += 1
-        self.utility_sum += score
+        node = self
+        sign = 1.0
+        while node is not None:
+            node.visit_cnt += 1
+            node.utility_sum += sign * score
+            node = node.parent
+            sign *= -1.0
 
-        if self.parent:
-            self.parent.backprop(-score)
+    def apply_virtual_loss(self, amount: float):
+        node = self
+        sign = 1.0
+        while node is not None:
+            node.visit_cnt += 1
+            node.utility_sum -= sign * amount
+            node = node.parent
+            sign *= -1.0
+
+    def revert_virtual_loss(self, amount: float):
+        node = self
+        sign = 1.0
+        while node is not None:
+            node.visit_cnt -= 1
+            node.utility_sum += sign * amount
+            node = node.parent
+            sign *= -1.0
 
 
 class MCTS:
@@ -364,104 +428,154 @@ class MCTS:
         # ------------------------------------------------ start search ------------------------------------------------
         self.timing_stats["search_init"] += time.time() - search_init_start
         search_start = time.time()
-        for iter in range(playout_cap):  # type: ignore
-            node = self.root
+        for batch_id in range(math.ceil(playout_cap / MCTS_BATCH_SIZE)):  # type: ignore
 
             # selection with forced playouts and lazy expand
-            select_start = time.time()
 
-            expand_to = -1
-            force_action_taken = False
-            while True:
-                # --- FORCED PLAYOUT LOGIC ---
-                if node.parent is None and not exploration_features_disabled:
-                    assert node.policy is not None
-                    policy = node.policy
+            leaf_node_batch: list[Node] = []
 
-                    child_forced_playouts = torch.floor((FORCED_PLAYOUTS_K * policy * node.visit_cnt) ** 0.5)
-                    valid = node.get_valid_moves()
-                    only_valid = np.where(valid == True)[0]
+            for i in range(MCTS_BATCH_SIZE):
+                node = self.root
+                expand_to = -1
+                # force_action_taken = False
+                select_start = time.time()
+                while True:
+                    # --- FORCED PLAYOUT LOGIC ---
+                    if node.parent is None and not exploration_features_disabled:
+                        assert node.policy is not None
+                        policy = node.policy
 
-                    action_to_force = -1
-                    next_node_prior: torch.Tensor | None = None
-                    for action in only_valid:
-                        child = node.get_child_if_exists(action)
-                        child_prior = policy[action]
-                        child_visit_cnt = 0 if child is None else child.visit_cnt
+                        child_forced_playouts = torch.floor((FORCED_PLAYOUTS_K * policy * node.visit_cnt) ** 0.5)
+                        valid = node.get_valid_moves()
+                        only_valid = np.where(valid == True)[0]
 
-                        # find node to force by choosing the one with the largest prior
-                        if child_visit_cnt < child_forced_playouts[action] and (
-                            next_node_prior is None or child_prior > next_node_prior
-                        ):
-                            next_node_prior = child_prior
-                            action_to_force = action  # child with larger prior found, override it
+                        action_to_force = -1
+                        next_node_prior: torch.Tensor | None = None
+                        for action in only_valid:
+                            child = node.get_child_if_exists(action)
+                            child_prior = policy[action]
+                            child_visit_cnt = 0 if child is None else child.visit_cnt
 
-                    if action_to_force != -1:
-                        force_action_taken = True
-                        forced_child = node.get_child_if_exists(action_to_force)
-                        if forced_child is None:
-                            # Need to expand this forced action, it does not yet exist
-                            expand_to = action_to_force
-                            break
-                        else:
-                            node = forced_child
+                            # find node to force by choosing the one with the largest prior
+                            if child_visit_cnt < child_forced_playouts[action] and (
+                                next_node_prior is None or child_prior > next_node_prior
+                            ):
+                                next_node_prior = child_prior
+                                action_to_force = action  # child with larger prior found, override it
 
-                if force_action_taken and expand_to == -1:  # Check expand_to in case force decided to expand
-                    force_action_taken = False
+                        # if a child to force is found set it to the next child, otherwise continue without any forcing
+                        if action_to_force != -1:
+                            # force_action_taken = True
+                            forced_child = node.get_child_if_exists(action_to_force)
+                            if forced_child is None:
+                                # Need to expand this forced action, it does not yet exist
+                                expand_to = action_to_force
+                                break
+                            else:
+                                node = forced_child
+                                # force_action_taken = False
+                                continue
+
+                    # if force_action_taken and expand_to == -1:  # Check expand_to in case force decided to expand
+                    #     force_action_taken = False
+                    #     continue
+
+                    if node.queued_for_inference:
+                        node = None
+                        break
+
+                    is_node_done = node.has_game_ended()
+                    if is_node_done:
+                        win_util, score_util = node.get_utility(x_0)
+                        combined_util = win_util + score_util
+                        node.backprop(combined_util)
+                        node = None
+                        break
+
+                    if node.policy is None:
+                        leaf_node_batch.append(node)
+                        node.queued_for_inference = True
+                        node.apply_virtual_loss(MCTS_VIRTUAL_LOSS_VALUE)
+                        node = None
+                        break
+
+                    # node is fully expanded and not none
+                    child_idx = node.next()
+                    child = node.get_child_if_exists(child_idx)
+                    if child is None:
+                        # found a node to expand
+                        expand_to = child_idx
+                        break
+                    else:
+                        node = child
+                        continue
+
+                if node is None:
+                    # hit a terminal node, no reason to process it further
                     continue
 
-                is_node_done = node.has_game_ended()
-                if is_node_done:
-                    break
+                self.timing_stats["selection"] += time.time() - select_start
+                self.iterations_stats["selection"] += 1
 
-                # node is fully expanded and not node
-                child_idx = node.next()
-                child = node.get_child_if_exists(child_idx)
-                if child is None:
-                    # found a node to expand
-                    expand_to = child_idx
-                    break
+                if expand_to != -1:
+                    expand_start = time.time()
+                    new_child = node.create_child(expand_to)
+                    self.max_depth = max(self.max_depth, new_child.depth)
+
+                    leaf_node_batch.append(new_child)
+                    new_child.queued_for_inference = True
+                    new_child.apply_virtual_loss(MCTS_VIRTUAL_LOSS_VALUE)
+                    self.timing_stats["expansion"] += time.time() - expand_start
+                    self.iterations_stats["expansion"] += 1
                 else:
-                    node = child
+                    print("here")
 
-            self.timing_stats["selection"] += time.time() - select_start
-            self.iterations_stats["selection"] += 1
+            if len(leaf_node_batch) == 0:
+                continue  # TODO: break cause when a batch could not be filled the game is most likely over?
 
-            if expand_to != -1:
-                expand_start = time.time()
-                new_child = node.create_child(expand_to)
-                self.max_depth = max(self.max_depth, new_child.depth)
-                node = new_child
-                self.timing_stats["expansion"] += time.time() - expand_start
+            inference_start = time.time()
+            props_batch, value_batch, mu_batch, sigma_batch = self.agent.predict_eval_batch(leaf_node_batch)
+            self.timing_stats["nn_inference"] += time.time() - inference_start
+            self.iterations_stats["nn_inference"] += 1
 
-            # fill child with data
-            end_check_start = time.time()
-            if node.done is None:
-                node.done = node.has_game_ended()
-            assert node.done is not None
+            for i, node in enumerate(leaf_node_batch):
+                node.revert_virtual_loss(MCTS_VIRTUAL_LOSS_VALUE)
+                node.queued_for_inference = False
 
-            if node.done:
-                node.win_utility, node.score_utility = node.get_utility(x_0)
-                assert node.win_utility is not None and node.score_utility is not None, "Values should not be None"
+                # fill child with data
+                end_check_start = time.time()
+                if node.done is None:
+                    node.done = node.has_game_ended()
+                assert node.done is not None
                 self.timing_stats["end_check"] += time.time() - end_check_start
-            else:
-                self.timing_stats["end_check"] += time.time() - end_check_start
+                self.iterations_stats["end_check"] += 1
 
-                if node.policy is None:
-                    inference_start = time.time()
-                    # This sets leaf_node.win_utility and leaf_node.score_utility
-                    final_probs, _, _, _ = node.get_predictions(self.table, x_0)
-                    node.policy = final_probs
-                    self.timing_stats["nn_inference"] += time.time() - inference_start
-                    self.iterations_stats["nn_inference"] += 1
+                evaluation_start_time = time.time()
+                if node.done:
+                    node.win_utility, node.score_utility = node.get_utility(x_0)
+                    assert node.win_utility is not None and node.score_utility is not None, "Values should not be None"
+                else:
+                    if node.policy is None:
+                        # This sets leaf_node.win_utility and leaf_node.score_utility
+                        # final_probs, _, _, _ = node.get_predictions(self.table, x_0)
+                        node.policy = props_batch[i].cpu()
+                        node.win_utility = value_batch[i].item()
+                        node.mu_s = mu_batch[i].item()
+                        node.sigma_s = sigma_batch[i].item()
+                        node.score_utility = self.table.get_expected_uscore(
+                            mu=node.mu_s, sigma=node.sigma_s, x_0=x_0
+                        ).item()
 
-                assert node.win_utility is not None and node.score_utility is not None, "Values should not be None"
+                    assert node.win_utility is not None and node.score_utility is not None, "Values should not be None"
+                self.timing_stats["evaluation"] += time.time() - evaluation_start_time
+                self.iterations_stats["evaluation"] += 1
 
-            # backpropagation
-            backprop_start = time.time()
-            assert node.win_utility is not None and node.score_utility is not None
-            node.backprop(node.win_utility + node.score_utility)
-            self.timing_stats["backprop"] += time.time() - backprop_start
+                # backpropagation
+                backprop_start = time.time()
+                assert node.win_utility is not None and node.score_utility is not None
+                node.backprop(node.win_utility + node.score_utility)
+                self.timing_stats["backprop"] += time.time() - backprop_start
+                self.iterations_stats["backprop"] += 1
 
             # plot tree from root node for debugging
             # if iter == playout_cap - 1:
@@ -666,7 +780,12 @@ async def main() -> None:
             after = time.time()
             print(f"TOOK: {after-before}s")
             print(pi_mcts)
-            # best_move = int(torch.argmax(pi_mcts).item())
+            if plotter is not None: # type: ignore
+                entropy = -sum(pi_mcts * np.log2(pi_mcts))
+                kl_divergence = sum(pi_mcts * np.log(pi_mcts / mcts.root.policy)) # type: ignore
+                plotter.update_stat("mcts/pi_mcts_entropy", entropy)
+                plotter.update_stat("mcts/kl_divergence_root", kl_divergence)
+
             best_move = choose_action_temperature(pi_mcts, temperature)
             temperature = temperature_decay(episode_length)
 
@@ -758,7 +877,7 @@ async def main() -> None:
                 continue
             be = buffer[i]
             state_tensor, state_vector = agent.preprocess_state(
-                be.uf, be.history, be.valid_moves, be.is_white, white_starts, "cpu"
+                be.uf.state, be.history, be.valid_moves, be.is_white, white_starts, "cpu"
             )
             logits = agent.policy_net(state_tensor, state_vector)
             next_uf = buffer[i + 1].uf if i + 1 < len_buffer else None

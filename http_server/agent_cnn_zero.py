@@ -12,7 +12,12 @@ from Go.Go_uf import UnionFind
 
 from plotter import TensorBoardPlotter  # type: ignore
 from Buffer import BufferElement, TrainingBuffer
-from go_types import State
+from go_types import State, StateBatch
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from MCTS_zero_uf import Node
 
 
 class GlobalPoolingBias(nn.Module):
@@ -180,10 +185,10 @@ class ResNet(nn.Module):
         self.final_bn = nn.BatchNorm2d(num_hidden)
 
         # --- Policy head ---
-        self.policy_head = PolicyHead(num_hidden, policy_head_channels=48)
+        self.policy_head = PolicyHead(num_hidden, policy_head_channels=32)
 
         # --- Value head base ---
-        value_base_channels = 64
+        value_base_channels = 48
         self.vh_init_conv = nn.Conv2d(num_hidden, value_base_channels, kernel_size=1)
 
         # --- Value sub heads ---
@@ -349,7 +354,7 @@ class AlphaZeroAgent:
         board_width: int,
         komi: float,
         plotter: TensorBoardPlotter | None,
-        lr: float = 1e-4,
+        lr: float = 5e-5,
         batch_size: int = 128,
         num_past_steps: int = 5,
         wheight_decay: float = 3e-5,
@@ -395,6 +400,7 @@ class AlphaZeroAgent:
             .unsqueeze(0)
             .unsqueeze(0)
         )
+        self.num_non_history_channels = self.policy_net.num_input_channels - self.num_past_steps
 
     def save_checkpoint(self, filename: str):
         """Saves the model and optimizer state to a file."""
@@ -558,7 +564,7 @@ class AlphaZeroAgent:
 
     def preprocess_state(
         self,
-        uf: UnionFind,
+        state: State,
         history: list[State],
         valid_moves: np.ndarray[Any, np.dtype[np.bool_]],
         is_white: bool,
@@ -586,7 +592,7 @@ class AlphaZeroAgent:
 
         num_channels = 7 + self.num_past_steps
         spacial_data_tensor = torch.zeros((1, num_channels, self.board_width, self.board_width), device=device)
-        board_tensor = torch.as_tensor(uf.state, device=device)
+        board_tensor = torch.as_tensor(state, device=device)
 
         # liberty count tensor
         empty_mask = (board_tensor == 0).float().unsqueeze(0).unsqueeze(0)  # Shape [1, 1, H, W]
@@ -623,10 +629,10 @@ class AlphaZeroAgent:
 
         # process t and t-1
         if len(history) > 0:
-            if np.array_equal(uf.state, history[0]):
+            if np.array_equal(state, history[0]):
                 passes[0] = 1
             else:
-                diff = history[0] - uf.state
+                diff = history[0] - state
                 placed_mask = diff < 0
                 spacial_data_tensor[0, num_non_history_channels][placed_mask] = 1
 
@@ -668,6 +674,123 @@ class AlphaZeroAgent:
 
         return spacial_data_tensor.to(self.device), game_data_vector.to(self.device)
 
+    def preprocess_state_batch(
+        self,
+        state_batch: StateBatch,
+        history_batch: np.ndarray[Any, np.dtype[np.int8]],
+        valid_moves: np.ndarray[Any, np.dtype[np.bool_]],
+        is_white_batch_mask: np.ndarray[Any, np.dtype[np.bool_]],  # list[bool]
+        white_started: bool,
+        device: str,
+    ):
+        batch_size = state_batch.shape[0]
+        num_channels = 7 + self.num_past_steps
+        spacial_data_tensor = torch.zeros((batch_size, num_channels, self.board_width, self.board_width), device=device)
+        board_tensor_batch = torch.as_tensor(state_batch, device=device, dtype=torch.float32)
+        history_tensor = torch.tensor(history_batch, device=device, dtype=torch.float32)
+        is_white_batch_tensor = torch.tensor(is_white_batch_mask, device=device, dtype=torch.bool)
+
+        targets = torch.tensor([0, 1, 2, 3], device=device)  # [3]
+        masks = board_tensor_batch.unsqueeze(0) == targets.view(-1, 1, 1, 1)  # [4, B, W, H]
+        board_tensor_empty_locations = masks[0]
+        board_tensor_black_locations = masks[1]
+        board_tensor_white_locations = masks[2]
+        board_tensor_disabled_locations = masks[3]
+
+        # liberty count tensor
+        empty_mask = board_tensor_empty_locations.float().unsqueeze(1)  # Shape [B, 1, H, W]
+        stone_mask = board_tensor_black_locations | board_tensor_white_locations
+
+        kernel = self.liberty_kernel_cpu if device == "cpu" else self.liberty_kernel_gpu
+        neighbor_liberties = F.conv2d(empty_mask, kernel, padding=1)
+        liberty_counts_batch = neighbor_liberties.squeeze(1) * stone_mask  # Shape [B, H, W]
+
+        # ko move tensor
+        illegal_moves_tensor_batch = torch.as_tensor(np.invert(valid_moves), device=device)
+        # mask black, white and disabled locations so only KO locations are included
+        illegal_moves_tensor_batch[
+            board_tensor_black_locations | board_tensor_white_locations | board_tensor_disabled_locations
+        ] = 0.0
+
+        spacial_data_tensor[:, 0] = board_tensor_disabled_locations.float()  # disabled
+
+        is_white_mask_expanded = is_white_batch_tensor.view(batch_size, 1, 1)  # [B, H, W]
+        spacial_data_tensor[:, 1] = torch.where(  # own stones
+            is_white_mask_expanded,
+            (board_tensor_batch == 2).float(),  # White stones if white's turn
+            (board_tensor_batch == 1).float(),  # Black stones if black's turn
+        )
+        spacial_data_tensor[:, 2] = torch.where(  # opp stones
+            is_white_mask_expanded,
+            (board_tensor_batch == 1).float(),  # Black stones if white's turn
+            (board_tensor_batch == 2).float(),  # White stones if black's turn
+        )
+
+        liberty_count_masks = liberty_counts_batch.unsqueeze(0) == targets[1:].view(-1, 1, 1, 1)  # [3, B, W, H]
+        spacial_data_tensor[:, 3] = liberty_count_masks[0].float()  # has one liberty
+        spacial_data_tensor[:, 4] = liberty_count_masks[1].float()  # has two liberties
+        spacial_data_tensor[:, 5] = liberty_count_masks[2].float()  # has three liberties
+
+        spacial_data_tensor[:, 6] = illegal_moves_tensor_batch  # has three liberties
+
+        # process history from most recent to oldest
+        passes_batch = torch.zeros((batch_size, self.num_past_steps), dtype=torch.float32, device=device)
+
+        if self.num_past_steps > 0:
+            history_t0 = history_tensor[:, 0]
+            is_pass_curr_vs_t0 = torch.all(
+                board_tensor_batch == history_t0, dim=(1, 2)
+            )  # first history step == current state => pass
+            passes_batch[:, 0] = is_pass_curr_vs_t0.float()
+
+            diff_curr_vs_t0 = history_t0 - board_tensor_batch
+            placed_mask_curr_vs_t0 = (diff_curr_vs_t0 < 0) & ~is_pass_curr_vs_t0.view(-1, 1, 1)  # Only if not a pass
+            spacial_data_tensor[:, self.num_non_history_channels + 0] = placed_mask_curr_vs_t0.float()
+
+            if self.num_past_steps > 1:
+                history_t_values = history_tensor[:, 1:]  # [B, T-1, H, W]
+                history_t_minus_1_values = history_tensor[:, 0:-1]  # [B, T-1, H, W]
+                is_pass_t_vs_t_minus_1 = torch.all(history_t_values == history_t_minus_1_values, dim=(2, 3))  # [B, T-1]
+                passes_batch[:, 1:] = is_pass_t_vs_t_minus_1.float()
+
+                diff_t_vs_t_minus_1 = history_t_values - history_t_minus_1_values  # (older_state - newer_state_in_pair)
+
+                pass_mask_expanded = ~is_pass_t_vs_t_minus_1.view(batch_size, self.num_past_steps - 1, 1, 1)
+                placed_mask_s_vs_s_minus_1 = (diff_t_vs_t_minus_1 < 0) & pass_mask_expanded  # [B, T-1, H, W]
+
+                if placed_mask_s_vs_s_minus_1.shape[1] > 0:  # Check if there are any T-1 steps
+                    start_idx_hist_channels = self.num_non_history_channels + 1
+                    end_idx_hist_channels = self.num_non_history_channels + self.num_past_steps
+                    spacial_data_tensor[:, start_idx_hist_channels:end_idx_hist_channels] = (
+                        placed_mask_s_vs_s_minus_1.float()
+                    )
+
+        # build game data vector
+        white_counts = board_tensor_white_locations.count_nonzero(dim=(1, 2)).float()
+        black_counts = board_tensor_black_locations.count_nonzero(dim=(1, 2)).float()
+
+        num_own_stones_batch = torch.where(is_white_batch_tensor, white_counts, black_counts)
+        num_opp_stones_batch = torch.where(is_white_batch_tensor, black_counts, white_counts)
+
+        num_empty_locations = board_tensor_empty_locations.count_nonzero(dim=(1, 2)).float()
+
+        you_started = (torch.tensor(white_started, device=device, dtype=torch.bool) == is_white_batch_tensor).float()
+
+        # game_data_vector = torch.as_tensor(passes, device=self.device).unsqueeze(0).float()  # shape [1, num_pass]
+        board_size = float(self.board_width * self.board_width)
+        game_data_vector = torch.cat(
+            [
+                passes_batch,
+                (num_own_stones_batch / board_size).unsqueeze(1),
+                (num_opp_stones_batch / board_size).unsqueeze(1),
+                (num_empty_locations / board_size).unsqueeze(1),
+                you_started.unsqueeze(1),
+            ],
+            dim=1,
+        )
+
+        return spacial_data_tensor.to(self.device), game_data_vector.to(self.device)
+
     def deprocess_state(self, state: torch.Tensor, is_white: bool) -> torch.Tensor:
         """
         Deprocess the state tensor into a numpy array.
@@ -704,7 +827,7 @@ class AlphaZeroAgent:
         """
         valid_moves_reshaped = valid_moves[:-1].reshape((self.board_width, self.board_height))
         state_tensor, game_data_vector = self.preprocess_state(
-            uf, game_history, valid_moves_reshaped, color_is_white, white_started, "cpu"
+            uf.state, game_history, valid_moves_reshaped, color_is_white, white_started, "cpu"
         )
 
         # Get logits
@@ -716,6 +839,47 @@ class AlphaZeroAgent:
         final_probs = torch.softmax(policy_logits_squeezed, dim=0)
 
         return final_probs, outcome.squeeze().item(), mu.item(), sigma.item()
+
+    @torch.no_grad()  # pyright: ignore
+    def predict_eval_batch(
+        self, node_batch: list["Node"]
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        batch_size = len(node_batch)
+        valid_moves_batch = np.zeros((batch_size, self.board_width, self.board_width), dtype=np.bool_)
+        state_batch = np.zeros((batch_size, self.board_width, self.board_width), dtype=np.int8)
+        history_batch = np.zeros((batch_size, self.num_past_steps, self.board_width, self.board_width), dtype=np.int8)
+        is_white_batch = np.empty(batch_size, dtype=np.bool_)
+
+        valid_moves_vec_batch = np.empty((batch_size, self.board_width * self.board_width + 1), dtype=np.bool_)
+
+        white_started = node_batch[0].server.go.white_starts
+
+        self.num_past_steps
+
+        # build node batch from nodes
+        for i, node in enumerate(node_batch):
+            valid_moves = node.get_valid_moves()
+            valid_moves_vec_batch[i] = valid_moves
+            valid_moves_batch[i] = valid_moves[:-1].reshape((self.board_width, self.board_width))
+            state_batch[i] = node.uf.state
+            hist = node.get_complete_history_tensor(limit=self.num_past_steps)
+            history_batch[i] = hist
+            is_white_batch[i] = node.is_white
+
+        # valid_moves_reshaped = valid_moves[:-1].reshape((self.board_width, self.board_height))
+        state_tensor, game_data_vector = self.preprocess_state_batch(
+            state_batch, history_batch, valid_moves_batch, is_white_batch, white_started, "cuda"
+        )
+
+        # Get logits
+        policy_logits, outcome, mu, sigma = self.policy_net.forward_mcts_eval(state_tensor, game_data_vector)
+        # policy_logits_squeezed = policy_logits.squeeze()
+        # mask invalid moves and convert to probabilities
+        valid_mask = torch.tensor(valid_moves_vec_batch, device=self.device, dtype=torch.bool)
+        policy_logits[~valid_mask] = -1e9
+        final_probs = torch.softmax(policy_logits, dim=1)
+
+        return final_probs, outcome, mu, sigma
 
     def decode_action(self, action_idx: int) -> tuple[int, int]:
         """
@@ -755,7 +919,7 @@ class AlphaZeroAgent:
 
             valid_moves = np.array(valid_moves, dtype=np.bool_)
             t, v = self.preprocess_state(
-                uf, history_list, valid_moves, is_white_list[i], white_started_list[i], device="cuda"
+                uf.state, history_list, valid_moves, is_white_list[i], white_started_list[i], device="cuda"
             )
             state_tensor_list.append(t)
             game_info_vec_list.append(v)
@@ -883,12 +1047,17 @@ class AlphaZeroAgent:
         loss.backward()  # type: ignore
         self.optimizer.step()  # type: ignore
         self.scheduler.step()
-        
+
         total_grad_norm = torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), max_norm=1.0)
         if total_grad_norm > 1.0:
             print(f"Gradient was clipped! Norm before clipping: {total_grad_norm:.4f}")
 
         current_lr = self.scheduler.get_last_lr()[0]
+
+        policy_props = torch.softmax(logits_own, dim=1)
+        pi_batch_safe = torch.clamp(pi_batch, min=epsilon)
+        policy_props_safe = torch.clamp(policy_props, min=epsilon)
+        kl_divergence = (pi_batch_safe * (torch.log(pi_batch_safe) - torch.log(policy_props_safe))).sum(dim=1).mean()
 
         if self.plotter is not None:
             if policy_loss_opp != 0:
@@ -901,8 +1070,11 @@ class AlphaZeroAgent:
             self.plotter.update_stat("losses/score_cdf_loss", score_cdf_loss.item())
             self.plotter.update_stat("losses/score_mean_loss", score_mean_loss.item())
             self.plotter.update_stat("losses/score_std_loss", score_std_loss.item())
+            self.plotter.update_stat("losses/score_scaling_penalty", score_scaling_penalty.item())
             self.plotter.update_stat("misc/grad_norm", total_grad_norm.item())
-            
+            self.plotter.update_stat("misc/current_learning_rate", current_lr)
+            self.plotter.update_stat("misc/kl_divergence_net_to_mcts", kl_divergence.item())
+
         print(
             f"Training step: loss={loss}, policy_loss={policy_loss_own}, value_loss={game_outcome_value_loss}, lr={current_lr}"
         )
