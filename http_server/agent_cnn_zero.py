@@ -185,10 +185,10 @@ class ResNet(nn.Module):
         self.final_bn = nn.BatchNorm2d(num_hidden)
 
         # --- Policy head ---
-        self.policy_head = PolicyHead(num_hidden, policy_head_channels=48)
+        self.policy_head = PolicyHead(num_hidden, policy_head_channels=32)
 
         # --- Value head base ---
-        value_base_channels = 64
+        value_base_channels = 48
         self.vh_init_conv = nn.Conv2d(num_hidden, value_base_channels, kernel_size=1)
 
         # --- Value sub heads ---
@@ -354,7 +354,7 @@ class AlphaZeroAgent:
         board_width: int,
         komi: float,
         plotter: TensorBoardPlotter | None,
-        lr: float = 1e-4,
+        lr: float = 5e-5,
         batch_size: int = 128,
         num_past_steps: int = 5,
         wheight_decay: float = 3e-5,
