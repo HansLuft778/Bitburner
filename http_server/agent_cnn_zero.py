@@ -12,7 +12,12 @@ from Go.Go_uf import UnionFind
 
 from plotter import TensorBoardPlotter  # type: ignore
 from Buffer import BufferElement, TrainingBuffer
-from go_types import State
+from go_types import State, StateBatch
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from MCTS_zero_uf import Node
 
 
 class GlobalPoolingBias(nn.Module):
@@ -558,7 +563,7 @@ class AlphaZeroAgent:
 
     def preprocess_state(
         self,
-        uf: UnionFind,
+        state: State,
         history: list[State],
         valid_moves: np.ndarray[Any, np.dtype[np.bool_]],
         is_white: bool,
@@ -586,7 +591,7 @@ class AlphaZeroAgent:
 
         num_channels = 7 + self.num_past_steps
         spacial_data_tensor = torch.zeros((1, num_channels, self.board_width, self.board_width), device=device)
-        board_tensor = torch.as_tensor(uf.state, device=device)
+        board_tensor = torch.as_tensor(state, device=device)
 
         # liberty count tensor
         empty_mask = (board_tensor == 0).float().unsqueeze(0).unsqueeze(0)  # Shape [1, 1, H, W]
@@ -623,10 +628,10 @@ class AlphaZeroAgent:
 
         # process t and t-1
         if len(history) > 0:
-            if np.array_equal(uf.state, history[0]):
+            if np.array_equal(state, history[0]):
                 passes[0] = 1
             else:
-                diff = history[0] - uf.state
+                diff = history[0] - state
                 placed_mask = diff < 0
                 spacial_data_tensor[0, num_non_history_channels][placed_mask] = 1
 
@@ -668,6 +673,108 @@ class AlphaZeroAgent:
 
         return spacial_data_tensor.to(self.device), game_data_vector.to(self.device)
 
+    def preprocess_state_batch(
+        self,
+        state_batch: StateBatch,
+        history_batch: list[list[State]],
+        valid_moves: np.ndarray[Any, np.dtype[np.bool_]],
+        is_white_batch_mask: np.ndarray[Any, np.dtype[np.bool_]],  # list[bool]
+        white_started: bool,
+        device: str,
+    ):
+        batch_size = state_batch.shape[0]
+        num_channels = 7 + self.num_past_steps
+        spacial_data_tensor = torch.zeros((batch_size, num_channels, self.board_width, self.board_width), device=device)
+        board_tensor_batch = torch.as_tensor(state_batch, device=device)
+
+        # liberty count tensor
+        empty_mask = (board_tensor_batch == 0).float().unsqueeze(1)  # Shape [B, 1, H, W]
+        stone_mask = (board_tensor_batch == 1) | (board_tensor_batch == 2)
+
+        kernel = self.liberty_kernel_cpu if device == "cpu" else self.liberty_kernel_gpu
+        neighbor_liberties = F.conv2d(empty_mask, kernel, padding=1)
+        liberty_counts_batch = neighbor_liberties.squeeze(1) * stone_mask  # Shape [B, H, W]
+
+        # ko move tensor
+        illegal_moves_tensor_batch = torch.as_tensor(np.invert(valid_moves), device=device)
+        # mask black, white and disabled locations so only KO locations are included
+        illegal_moves_tensor_batch[
+            (board_tensor_batch == 1) | (board_tensor_batch == 2) | (board_tensor_batch == 3)
+        ] = 0.0
+
+        spacial_data_tensor[:, 0] = (board_tensor_batch == 3).float()  # disabled
+        # if is_white:
+        spacial_data_tensor[is_white_batch_mask, 1] = (board_tensor_batch[is_white_batch_mask] == 2).float()  # white
+        spacial_data_tensor[is_white_batch_mask, 2] = (board_tensor_batch[is_white_batch_mask] == 1).float()  # black
+        # else:
+        is_black_batch_mask = ~is_white_batch_mask
+        spacial_data_tensor[is_black_batch_mask, 1] = (board_tensor_batch[is_black_batch_mask] == 1).float()  # black
+        spacial_data_tensor[is_black_batch_mask, 2] = (board_tensor_batch[is_black_batch_mask] == 2).float()  # white
+
+        spacial_data_tensor[:, 3] = (liberty_counts_batch == 1).float()  # has one liberty
+        spacial_data_tensor[:, 4] = (liberty_counts_batch == 2).float()  # has two liberties
+        spacial_data_tensor[:, 5] = (liberty_counts_batch == 3).float()  # has three liberties
+
+        spacial_data_tensor[:, 6] = illegal_moves_tensor_batch  # has three liberties
+
+        # process history from most recent to oldest
+        passes_batch = torch.zeros((batch_size, self.num_past_steps), dtype=torch.int8, device=device)
+        num_non_history_channels = self.policy_net.num_input_channels - self.num_past_steps
+
+        for batch_idx, history in enumerate(history_batch):
+            # process t and t-1
+            if len(history) > 0:
+                if np.array_equal(state_batch[batch_idx], history[0]):
+                    passes_batch[batch_idx, 0] = 1
+                else:
+                    diff = history[0] - state_batch[batch_idx]
+                    placed_mask = diff < 0
+                    spacial_data_tensor[batch_idx, num_non_history_channels, placed_mask] = 1
+
+                # process history from t-1 to t-k
+                for history_idx in range(1, min(self.num_past_steps, len(history))):
+                    if np.array_equal(history[history_idx - 1], history[history_idx]):
+                        passes_batch[batch_idx, history_idx] = 1
+                        # pass at this location cannot have move, skip histroy check
+                        continue
+
+                    # values < 1 are placed stones, values > 1 are captured stones, equal to 0 are no change
+                    diff = history[history_idx] - history[history_idx - 1]
+                    placed_mask = diff < 0
+                    spacial_data_tensor[batch_idx, num_non_history_channels + history_idx, placed_mask] = 1
+
+        num_own_stones_batch = torch.zeros(batch_size, device=device)
+        num_opp_stones_batch = torch.zeros(batch_size, device=device)
+
+        # build game data vector
+        white_counts = (board_tensor_batch == 2).count_nonzero(dim=(1, 2)).float()
+        black_counts = (board_tensor_batch == 1).count_nonzero(dim=(1, 2)).float()
+
+        num_own_stones_batch[is_white_batch_mask] = white_counts
+        num_opp_stones_batch[is_white_batch_mask] = black_counts
+        
+        num_own_stones_batch[is_black_batch_mask] = black_counts
+        num_opp_stones_batch[is_black_batch_mask] = white_counts
+
+        num_empty_locations = (board_tensor_batch == 0).count_nonzero(dim=(1,2)).float()
+
+        you_started = torch.tensor(white_started == is_white_batch_mask, device=device).float()
+
+        # game_data_vector = torch.as_tensor(passes, device=self.device).unsqueeze(0).float()  # shape [1, num_pass]
+        board_size = float(self.board_width * self.board_width)
+        game_data_vector = torch.cat(
+            [
+                passes_batch,
+                (num_own_stones_batch / board_size).unsqueeze(1),
+                (num_opp_stones_batch / board_size).unsqueeze(1),
+                (num_empty_locations / board_size).unsqueeze(1),
+                you_started.unsqueeze(1),
+            ],
+            dim=1,
+        )
+
+        return spacial_data_tensor.to(self.device), game_data_vector.to(self.device)
+
     def deprocess_state(self, state: torch.Tensor, is_white: bool) -> torch.Tensor:
         """
         Deprocess the state tensor into a numpy array.
@@ -704,7 +811,7 @@ class AlphaZeroAgent:
         """
         valid_moves_reshaped = valid_moves[:-1].reshape((self.board_width, self.board_height))
         state_tensor, game_data_vector = self.preprocess_state(
-            uf, game_history, valid_moves_reshaped, color_is_white, white_started, "cpu"
+            uf.state, game_history, valid_moves_reshaped, color_is_white, white_started, "cpu"
         )
 
         # Get logits
@@ -716,6 +823,42 @@ class AlphaZeroAgent:
         final_probs = torch.softmax(policy_logits_squeezed, dim=0)
 
         return final_probs, outcome.squeeze().item(), mu.item(), sigma.item()
+
+    @torch.no_grad()  # pyright: ignore
+    def predict_eval_batch(self, node_batch: list[Node]) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        batch_size = len(node_batch)
+        valid_moves_batch = np.zeros((batch_size, self.board_width, self.board_width), dtype=np.bool_)
+        state_batch = np.zeros((batch_size, self.board_width, self.board_width), dtype=np.int8)
+        game_history_batch:list[list[State]] = []
+        is_white_batch = np.empty(batch_size, dtype=np.bool_)
+        
+        server_history = node_batch[0].server.go.get_history()
+        white_started = node_batch[0].server.go.white_starts
+
+        # build node batch from nodes
+        for i, node in enumerate(node_batch):
+            valid_moves = node.get_valid_moves()
+            valid_moves_batch[i] = valid_moves[:-1].reshape((self.board_width, self.board_width))
+            state_batch[i] = node.uf.state
+            node_history = node.get_history_ref()
+            node_history.extend(server_history)
+            game_history_batch.append(node_history)
+            is_white_batch[i] = node.is_white
+
+        # valid_moves_reshaped = valid_moves[:-1].reshape((self.board_width, self.board_height))
+        state_tensor, game_data_vector = self.preprocess_state_batch(
+            state_batch, game_history_batch, valid_moves_batch, is_white_batch, white_started, "cpu"
+        )
+
+        # Get logits
+        policy_logits, outcome, mu, sigma = self.policy_net.forward_mcts_eval(state_tensor, game_data_vector)
+        policy_logits_squeezed = policy_logits.squeeze()
+        # mask invalid moves and convert to probabilities
+        valid_mask = torch.tensor(valid_moves_batch, device=self.device, dtype=torch.bool)
+        policy_logits_squeezed[~valid_mask] = -1e9
+        final_probs = torch.softmax(policy_logits_squeezed, dim=1)
+
+        return final_probs, outcome.squeeze(), mu, sigma
 
     def decode_action(self, action_idx: int) -> tuple[int, int]:
         """
@@ -755,7 +898,7 @@ class AlphaZeroAgent:
 
             valid_moves = np.array(valid_moves, dtype=np.bool_)
             t, v = self.preprocess_state(
-                uf, history_list, valid_moves, is_white_list[i], white_started_list[i], device="cuda"
+                uf.state, history_list, valid_moves, is_white_list[i], white_started_list[i], device="cuda"
             )
             state_tensor_list.append(t)
             game_info_vec_list.append(v)
@@ -883,7 +1026,7 @@ class AlphaZeroAgent:
         loss.backward()  # type: ignore
         self.optimizer.step()  # type: ignore
         self.scheduler.step()
-        
+
         total_grad_norm = torch.nn.utils.clip_grad_norm_(self.policy_net.parameters(), max_norm=1.0)
         if total_grad_norm > 1.0:
             print(f"Gradient was clipped! Norm before clipping: {total_grad_norm:.4f}")
@@ -902,7 +1045,7 @@ class AlphaZeroAgent:
             self.plotter.update_stat("losses/score_mean_loss", score_mean_loss.item())
             self.plotter.update_stat("losses/score_std_loss", score_std_loss.item())
             self.plotter.update_stat("misc/grad_norm", total_grad_norm.item())
-            
+
         print(
             f"Training step: loss={loss}, policy_loss={policy_loss_own}, value_loss={game_outcome_value_loss}, lr={current_lr}"
         )
