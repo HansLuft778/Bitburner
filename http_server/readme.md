@@ -1,0 +1,3 @@
+## tensorboard
+
+`tensorboard --logdir=runs`
