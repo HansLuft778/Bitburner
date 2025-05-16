@@ -314,25 +314,31 @@ class Node:
         return child
 
     def backprop(self, score: float):
-        self.visit_cnt += 1
-        self.utility_sum += score
-
-        if self.parent:
-            self.parent.backprop(-score)
+        node = self
+        sign = 1.0
+        while node is not None:
+            node.visit_cnt += 1
+            node.utility_sum += sign * score
+            node = node.parent
+            sign *= -1.0
 
     def apply_virtual_loss(self, amount: float):
-        self.visit_cnt += 1
-        self.utility_sum -= amount
-
-        if self.parent:
-            self.parent.apply_virtual_loss(-amount)
+        node = self
+        sign = 1.0
+        while node is not None:
+            node.visit_cnt += 1
+            node.utility_sum -= sign * amount
+            node = node.parent
+            sign *= -1.0
 
     def revert_virtual_loss(self, amount: float):
-        self.visit_cnt -= 1
-        self.utility_sum += amount
-
-        if self.parent:
-            self.parent.revert_virtual_loss(-amount)
+        node = self
+        sign = 1.0
+        while node is not None:
+            node.visit_cnt -= 1
+            node.utility_sum += sign * amount
+            node = node.parent
+            sign *= -1.0
 
 
 class MCTS:
