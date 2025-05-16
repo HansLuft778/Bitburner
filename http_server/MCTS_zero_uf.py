@@ -221,6 +221,40 @@ class Node:
                 break
         return history
 
+    def get_complete_history_tensor(self, limit: int = -1) -> NDArray[np.int8]:
+        go_history = self.server.go.get_history()
+        go_history_length = len(go_history)
+
+        history_length = limit if limit != -1 else self.depth + go_history_length
+        history = np.zeros(
+            (history_length, self.agent.board_width, self.agent.board_width), dtype=np.int8
+        )
+        if self.parent is None:
+            return history
+
+        # collect MCTS history
+        current = self.parent
+        depth = 0
+        while current:
+            if depth >= history_length:
+                return history
+            
+            history[depth] = current.uf.state
+            if current.parent is not None:
+                current = current.parent
+            else:
+                break
+            depth += 1
+        
+        # collect go history
+        for h in go_history:
+            if depth >= history_length:
+                return history
+            history[depth] = h
+            depth += 1    
+        
+        return history
+
     def next(self) -> int:
         assert self.policy is not None
         valid_moves = self.get_valid_moves()
