@@ -610,8 +610,6 @@ async def main() -> None:
     board_size = 7
     komi = 5.5
 
-    table = LookupTable(board_size, C_SCORE, komi)
-
     server = GameServerGo(board_size)
     if USE_BITBURNER:
         await server.wait()
@@ -623,7 +621,9 @@ async def main() -> None:
     mo = ModelOverlay(board_size, komi)
 
     agent = AlphaZeroAgent(board_size, komi, plotter, batch_size=256)
-    # agent.load_checkpoint("checkpoint_37.pth")
+    # agent.load_checkpoint("checkpoint_51.pth", True)
+
+    table = LookupTable(board_size, C_SCORE, komi)
     mcts = MCTS(
         server, agent, full_search_iterations=1000, fast_search_iterations=200, full_seach_prop=0.25, table=table
     )
@@ -634,7 +634,6 @@ async def main() -> None:
     print("Done! Starting MCTS...")
 
     temperature = 0.8
-
     outcome = 0
     for iter in range(NUM_EPISODES):
         if USE_BITBURNER:
@@ -764,6 +763,7 @@ async def main() -> None:
             logits = agent.policy_net(state_tensor, state_vector)
             next_uf = buffer[i + 1].uf if i + 1 < len_buffer else None
             next_next_uf = buffer[i + 2].uf if i + 2 < len_buffer else None
+            # TODO: also log out: actual played move, pi_mcts, model out argmax
             fig = mo.heatmap(
                 be.uf,
                 next_uf,
@@ -848,4 +848,3 @@ if __name__ == "__main__":
     import asyncio
 
     asyncio.run(main())
-
