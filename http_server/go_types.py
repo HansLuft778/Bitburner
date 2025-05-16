@@ -1,5 +1,6 @@
 import numpy as np
-from typing import Any
+from numpy.typing import NDArray
+# from typing import Any
 
-State = np.ndarray[Any, np.dtype[np.int8]]
-StateBatch = np.ndarray[Any, np.dtype[np.int8]]
+State = NDArray[np.int8]
+StateBatch = NDArray[np.int8]
