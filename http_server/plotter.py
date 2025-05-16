@@ -190,9 +190,10 @@ class ModelOverlay:
         black_y, black_x = np.where(uf.state == 1)
         white_y, white_x = np.where(uf.state == 2)
         disabled_y, disabled_x = np.where(uf.state == 3)
-        ax[0][0].scatter(black_x, black_y, c="black", s=200, alpha=1)
-        ax[0][0].scatter(white_x, white_y, c="white", s=200, alpha=1)
-        ax[0][0].scatter(disabled_x, disabled_y, c="#808080", s=200, alpha=1, marker="x")
+        stone_size = 1000 / self.board_size  # Scale stone size based on board size
+        ax[0][0].scatter(black_x, black_y, c="black", s=stone_size, alpha=1)
+        ax[0][0].scatter(white_x, white_y, c="white", s=stone_size, alpha=1)
+        ax[0][0].scatter(disabled_x, disabled_y, c="#808080", s=stone_size, alpha=1, marker="x")
         ax[0][0].set_title("Ownership prediction")
         fig.colorbar(im, ax=ax[0][0])
 
