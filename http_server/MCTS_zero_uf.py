@@ -777,11 +777,17 @@ async def main() -> None:
             after = time.time()
             print(f"TOOK: {after-before}s")
             print(pi_mcts)
-            if plotter is not None: # type: ignore
-                entropy = -sum(pi_mcts * np.log2(pi_mcts))
-                kl_divergence = sum(pi_mcts * np.log(pi_mcts / mcts.root.policy)) # type: ignore
-                plotter.update_stat("mcts/pi_mcts_entropy", entropy)
-                plotter.update_stat("mcts/kl_divergence_root", kl_divergence)
+
+            pi_mcts_2 = pi_mcts.clone().to("cpu")
+            if plotter is not None:  # type: ignore
+                eps = 1e-9
+                pi_mcts_2_clipped = torch.clamp(pi_mcts_2, min=eps)
+                root_policy_clipped = torch.clamp(mcts.root.policy, min=eps)  # type: ignore
+
+                entropy = -torch.sum(pi_mcts_2_clipped * torch.log2(pi_mcts_2_clipped))
+                kl_divergence = torch.sum(pi_mcts_2_clipped * (torch.log(pi_mcts_2_clipped) - torch.log(root_policy_clipped)))  # type: ignore
+                plotter.update_stat("mcts/pi_mcts_entropy", entropy)  # type: ignore
+                plotter.update_stat("mcts/kl_divergence_root", kl_divergence)  # type: ignore
 
             best_move = choose_action_temperature(pi_mcts, temperature)
             temperature = temperature_decay(episode_length)
