@@ -131,15 +131,12 @@ class Node:
     def get_predictions(self, table: LookupTable, x_0: float) -> tuple[torch.Tensor, float, float, float]:
         if self.policy is None:
             assert self.mu_s is None and self.sigma_s is None
-            history_states = self.get_history_ref()
-            history_states.extend(self.server.get_game_history())
-            valid_moves = self.get_valid_moves()
-            policy, value, mu, sigma = self.agent.predict_eval(
-                self.uf, history_states, valid_moves, self.is_white, self.server.go.white_starts
-            )
+            policy, value, mu, sigma = self.agent.predict_eval([self])
+            mu = mu.item()
+            sigma = sigma.item()
 
             self.policy = policy.cpu()
-            self.win_utility = value  # * 2.0 - 1.0
+            self.win_utility = value.item()  # * 2.0 - 1.0
             self.mu_s = mu
             self.sigma_s = sigma
 
@@ -534,7 +531,7 @@ class MCTS:
                 continue  # TODO: break cause when a batch could not be filled the game is most likely over?
 
             inference_start = time.time()
-            props_batch, value_batch, mu_batch, sigma_batch = self.agent.predict_eval_batch(leaf_node_batch)
+            props_batch, value_batch, mu_batch, sigma_batch = self.agent.predict_eval(leaf_node_batch)
             self.timing_stats["nn_inference"] += time.time() - inference_start
             self.iterations_stats["nn_inference"] += 1
 

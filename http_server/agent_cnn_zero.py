@@ -572,22 +572,7 @@ class AlphaZeroAgent:
         device: str,
     ):
         """
-        Convert the board (numpy array) into a float tensor of shape [1,8,w,h].
-
-        Channels:
-        0: disabled
-        1: current players stones
-        2: opponent stones
-        3: has one liberty
-        4: has two liberties
-        5: has three liberties
-        6: KO illegal moves
-
-        History:
-        7: histroy action one-hot encoded at t-1
-        8: histroy action one-hot encoded at t-2
-        9: ...
-        ...
+        deprecated, do not use; leftover for legacy reasons
         """
 
         num_channels = 7 + self.num_past_steps
@@ -683,6 +668,24 @@ class AlphaZeroAgent:
         white_started: bool,
         device: str,
     ):
+        """
+        Convert a batch of boards (numpy array) into a float tensor of shape [B,S,W,H] and game data vector of shape [B, 12].
+        
+        Channels:
+        0: disabled
+        1: current players stones
+        2: opponent stones
+        3: has one liberty
+        4: has two liberties
+        5: has three liberties
+        6: KO illegal moves
+
+        History:
+        7: histroy action one-hot encoded at t-1
+        8: histroy action one-hot encoded at t-2
+        9: ...
+        ...
+        """
         batch_size = state_batch.shape[0]
         num_channels = 7 + self.num_past_steps
         spacial_data_tensor = torch.zeros((batch_size, num_channels, self.board_width, self.board_width), device=device)
@@ -805,45 +808,19 @@ class AlphaZeroAgent:
             new_state[state[2] == 1] = 2  # opponent stones
         return new_state
 
+
     @torch.no_grad()  # pyright: ignore
     def predict_eval(
-        self,
-        uf: UnionFind,
-        game_history: list[State],
-        valid_moves: np.ndarray[Any, np.dtype[np.bool_]],
-        color_is_white: bool,
-        white_started: bool,
-    ) -> tuple[torch.Tensor, float, float, float]:
-        """Given a nodes data, predict the policy and value.
-
-        Args:
-            uf (UnionFind)
-            game_history (list[State]): History of the entire game, most recent move at index 0.
-            valid_moves (np.ndarray[Any, np.dtype[np.bool_]]): Flat numpy array of valid moves, including pass move.
-            color_is_white (bool)
-
-        Returns:
-            tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
-        """
-        valid_moves_reshaped = valid_moves[:-1].reshape((self.board_width, self.board_height))
-        state_tensor, game_data_vector = self.preprocess_state(
-            uf.state, game_history, valid_moves_reshaped, color_is_white, white_started, "cpu"
-        )
-
-        # Get logits
-        policy_logits, outcome, mu, sigma = self.policy_net.forward_mcts_eval(state_tensor, game_data_vector)
-        policy_logits_squeezed = policy_logits.squeeze()
-        # mask invalid moves and convert to probabilities
-        valid_mask = torch.tensor(valid_moves.squeeze(), device=self.device, dtype=torch.bool)
-        policy_logits_squeezed[~valid_mask] = -1e9
-        final_probs = torch.softmax(policy_logits_squeezed, dim=0)
-
-        return final_probs, outcome.squeeze().item(), mu.item(), sigma.item()
-
-    @torch.no_grad()  # pyright: ignore
-    def predict_eval_batch(
         self, node_batch: list["Node"]
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Given a list of Nodes, predict the policy and value.
+
+        Args:
+            node_batch (list[Node]): the node batch to evaluate
+
+        Returns:
+            tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: With batch dimension [B, ..]
+        """
         batch_size = len(node_batch)
         valid_moves_batch = np.zeros((batch_size, self.board_width, self.board_width), dtype=np.bool_)
         state_batch = np.zeros((batch_size, self.board_width, self.board_width), dtype=np.int8)
@@ -1017,7 +994,7 @@ class AlphaZeroAgent:
 
         gamma_intermediate = F.relu(self.policy_net.score_head.scale_fc1(v_pooled))
         gamma = self.policy_net.score_head.scale_fc2(gamma_intermediate)
-        score_scaling_penalty = 0.0005 * (gamma**2).mean()
+        score_scaling_penalty = 0.0005 * (gamma * gamma).mean()
         # Assert all loss components are numerical (not NaN)
 
         assert not torch.isnan(policy_loss_own), "policy_loss_own is NaN"
